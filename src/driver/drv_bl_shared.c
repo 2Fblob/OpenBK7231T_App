@@ -207,7 +207,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 			hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
 			hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
 			hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);	
-			current_hour_consumption = net_matrix[q];
+			current_hour_consumption = calculate_net_energy;
 			}
 		else
 			{
