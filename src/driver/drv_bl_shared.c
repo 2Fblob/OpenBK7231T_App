@@ -752,7 +752,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					{
 					dump_load_relay = 1;
 					time_on += dump_load_hysteresis;	// Increase the timer.	
-					CMD_ExecuteCommand("SendGet http://192.168.5.4/cm?cmnd=Power%20off", 0);
+					CMD_ExecuteCommand("SendGet http://192.168.5.4/cm?cmnd=Power%20on", 0);
 					}
 				/*else if ((check_hour >= bypass_on_time) && (check_hour < bypass_off_time) && (time_on < min_daily_time_on))
 					{
