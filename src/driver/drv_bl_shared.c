@@ -234,7 +234,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	hprintf255(request, "Consumption: %iW, Export: %iW (Metering) <br>", total_consumption, total_export);
 	hprintf255(request, "Consumption: %iW, Export: %iW (Net Metering)  <br>", total_net_consumption, total_net_export);
 	// This gives me an estimate based on what I am producing now.
-	estimated_production_hour = ((current_hour_consumption*60)/check_time);
+	estimated_production_hour = ((current_hour_consumption*60)*(60/check_time));
 	hprintf255(request, "Debug: %iW, %iW, %iW <br>", estimated_production_hour, current_hour_consumption, check_time);
 	hprintf255(request, "Estimated energy this hour: %iW <br>", estimated_production_hour);
 	/*if (estimated_production_hour>max_export)
