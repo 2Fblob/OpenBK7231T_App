@@ -5,7 +5,7 @@ static int export_matrix[24] = {0};
 static int net_matrix[24] = {0};
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
-//static int estimated_production_hour = 0;
+float estimated_production_hour = 0; 
 static int mtqq_total_net_export = 0;
 static int estimated_energy_start = 0;
 
@@ -198,7 +198,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	int total_consumption = 0;
 	int total_export = 0;
 	int current_hour_consumption = 0;
-	float estimated_production_hour = 0; 
+	
 		
 	for (int q=0; q<=check_hour; q++)
 		{
