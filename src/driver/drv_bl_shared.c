@@ -7,7 +7,7 @@ static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int estimated_production_hour = 0;
 static int mtqq_total_net_export = 0;
-static byte estimated_energy_start = 0;
+static int estimated_energy_start = 0;
 
 #include "drv_bl_shared.h"
 
@@ -231,7 +231,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	if (net_energy<0) {total_net_export -= net_energy;}
 	else {total_net_consumption += net_energy;}
 	// Calculate hourly rate
-	if (current_hour_consumption = 0)
+	if (current_hour_consumption == 0)
 		{
 		estimated_energy_start = check_time;
 		}
