@@ -240,7 +240,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	if (((check_time-estimated_energy_start)>0)&&(!(last_run_calc==check_time)))
 	{
 	last_run_calc=check_time;
-	estimated_production_hour = ((current_hour_consumption*60)/(check_time-estimated_energy_start-1));
+	estimated_production_hour = ((current_hour_consumption*60)/(check_time-estimated_energy_start));
 	}
 	// Calculate hourly rate	
 	poststr(request, "</tr></table><br>");
