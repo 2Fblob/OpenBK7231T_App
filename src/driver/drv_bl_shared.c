@@ -8,6 +8,7 @@ static int old_real_consumption = 0;
 float estimated_production_hour = 0; 
 static int mtqq_total_net_export = 0;
 static int estimated_energy_start = 0;
+static int last_run_calc = 0;
 
 #include "drv_bl_shared.h"
 
@@ -236,9 +237,10 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		{
 		estimated_energy_start = check_time;
 		}
-	if ((check_time-estimated_energy_start)>1)
+	if (((check_time-estimated_energy_start)>0)&&(!(last_run_calc==check_time)))
 	{
-	estimated_production_hour = ((current_hour_consumption*60)/(check_time+estimated_energy_start));
+	last_run_calc=check_time;
+	estimated_production_hour = ((current_hour_consumption*60)/(check_time-estimated_energy_start-1));
 	}
 	// Calculate hourly rate	
 	poststr(request, "</tr></table><br>");
