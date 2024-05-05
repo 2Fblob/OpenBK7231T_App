@@ -6,6 +6,7 @@ static int net_matrix[24] = {0};
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int estimated_production_hour = 0;
+static int mtqq_total_net_export = 0;
 
 #include "drv_bl_shared.h"
 
@@ -26,8 +27,6 @@ static int estimated_production_hour = 0;
 int stat_updatesSkipped = 0;
 int stat_updatesSent = 0;
 
-
-static byte first_run = 0;
 static byte savetoflash = 0;
 static byte min_reset = 0;
 static byte hour_reset = 0;
