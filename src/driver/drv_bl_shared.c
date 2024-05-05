@@ -43,7 +43,7 @@ static byte old_time = 0;
 //int min_production = -50;	// The minimun instantaneous solar production that will trigger the dump load.
 #define dump_load_on 15		// The ammount of 'excess' energy stored over the period. Above this, the dump load will be turned on.
 #define dump_load_off 1		// The minimun 'excess' energy stored over the period. Below this, the dump load will be turned off.
-#define max_export 3600
+#define max_export -3300
 
 // These variables are used to program the bypass load, for example turn it on late afternoon if there was no sun for the day
 //#define bypass_timer_reset 23	// Just so it doesn't accidentally reset when the device is rebooted (0)...
@@ -743,7 +743,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 		
 				// Are we exporting enough? If so, turn the relay on
 				//if (((int)net_energy>(int)dump_load_on))
-				if (estimated_production_hour>max_export)
+				if (estimated_production_hour<max_export)
 					{
 					dump_load_relay = 1;
 					time_on += dump_load_hysteresis;	// Increase the timer.	
@@ -753,7 +753,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					{
 					dump_load_relay = 2;
 					}*/
-				else if (estimated_production_hour>max_export)
+				else /*if (estimated_production_hour>max_export)*/
 				//else if (((int)net_energy<(int)dump_load_off))
 					{
 					// If none of the exemptions applies, we turn the diversion load off.
