@@ -196,6 +196,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	int total_net_export = 0;
 	int total_consumption = 0;
 	int total_export = 0;
+	int current_hour_consumption = 0;
+		
 	for (int q=0; q<=check_hour; q++)
 		{
 		if (q == check_hour)
@@ -204,7 +206,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 			hprintf255(request, "<tr><td> <b> %i:00 </td> ", q);
 			hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
 			hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
-			hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);			
+			hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);	
+			current_hour_consumption = net_matrix[q];
 			}
 		else
 			{
@@ -212,6 +215,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 			hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]);
 			hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]);
 			hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);	
+			
 			}
 		// Summ  all the data on the table to summarize below.
 		// Real Grid Consumption / Export
@@ -230,8 +234,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	hprintf255(request, "Consumption: %iW, Export: %iW (Metering) <br>", total_consumption, total_export);
 	hprintf255(request, "Consumption: %iW, Export: %iW (Net Metering)  <br>", total_net_consumption, total_net_export);
 	// This gives me an estimate based on what I am producing now.
-	estimated_production_hour = ((net_matrix[check_hour]*60)/check_time_power);
-	hprintf255(request, "Estimated energy this hour: %iW, %iW, %iW <br>", estimated_production_hour, net_matrix[check_hour], check_time_power );
+	estimated_production_hour = ((current_hour_consumption*60)/check_time);
+	hprintf255(request, "Debug: %iW, %iW, %iW <br>", estimated_production_hour, current_hour_consumption, check_time);
+	hprintf255(request, "Estimated energy this hour: %iW <br>", estimated_production_hour);
 	/*if (estimated_production_hour>max_export)
 	{
 		
