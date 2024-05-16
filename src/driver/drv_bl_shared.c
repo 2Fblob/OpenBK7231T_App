@@ -687,7 +687,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			
 			// This turns the bypass load off if we are using a lot of power
 			//if (((sensors[OBK_POWER].lastReading) > max_power_bypass_off) && (!(dump_load_relay == 4)))
-			if (((sensors[OBK_POWER].lastReading) > max_power_bypass_off) && (!(dump_load_relay == 4)))
+			/*if (((sensors[OBK_POWER].lastReading) > max_power_bypass_off) && (!(dump_load_relay == 4)))
 			{
 				// Make sure we don't run it twice on the same minute
 				if (!(check_time == check_time_power))
@@ -696,12 +696,12 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					lastsync = 0;
 					//hour_reset = 0;
 					dump_load_relay = 4;
-					CMD_ExecuteCommand("SendGet http://192.168.5.4/cm?cmnd=Power%20off", 0);
+					//cmdCMD_ExecuteCommand("SendGet http://192.168.5.4/cm?cmnd=Power%20off", 0);
 					check_time_power = check_time;
 					check_hour_power = check_hour;
 				}
 				
-			}
+			}*/
 
 	// Add to the table ---------------------------------------------------------------------------------
 			
@@ -754,6 +754,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// In this case, we turn the load off and wait for the next cycle for a new update.
 
 			//The relay is updated ever x numer of minutes as defined on 'dump_load_hysteresis'
+			
 			if (lastsync >= dump_load_hysteresis)
 			{
 				// save the last time the loop was run
@@ -761,11 +762,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 		
 				// Are we exporting enough? If so, turn the relay on
 				//if (((int)net_energy>(int)dump_load_on))
-				if (estimated_production_hour<max_export)
+				if (estimated_production_hour>max_export)
 					{
 					dump_load_relay = 1;
 					time_on += dump_load_hysteresis;	// Increase the timer.	
-					CMD_ExecuteCommand("SendGet http://192.168.5.4/cm?cmnd=Power%20on", 0);
+					CMD_ExecuteCommand("SendGet http://192.168.5.20/cm?cmnd=Power%20on", 0);
 					}
 				/*else if ((check_hour >= bypass_on_time) && (check_hour < bypass_off_time) && (time_on < min_daily_time_on))
 					{
