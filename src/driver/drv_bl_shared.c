@@ -83,14 +83,14 @@ struct {
 	int noChangeFrame; // how much update frames has passed without sending MQTT update of read values?
 } sensors[OBK__NUM_SENSORS] = { 
 	//.hass_dev_class, 	.units,		.name_friendly,			.name_mqtt,		 .hass_uniq_id_suffix, .rounding_decimals, .changeSendThreshold		
-	{{"voltage",		"V",		"Voltage",			"voltage",			"0",		},  	1,			0.1,		},	// OBK_VOLTAGE
+	{{"voltage",		"V",		"Voltage",			"voltage",			"0",		},  	0,			1,		},	// OBK_VOLTAGE
 	{{"current",		"A",		"Current",			"current",			"1",		},	2,			0.01,		},	// OBK_CURRENT
-	{{"power",		"W",		"Power",			"power",			"2",		},	1,			5,		},	// OBK_POWER
-	{{"apparent_power",	"VA",		"Apparent Power",		"power_apparent",		"9",		},	1,			5,		},	// OBK_POWER_APPARENT
-	{{"reactive_power",	"var",		"Reactive Power",		"power_reactive",		"10",		},	1,			5,		},	// OBK_POWER_REACTIVE
-	{{"power_factor",	"",		"Power Factor",			"power_factor",			"11",		},	2,			0.05,		},	// OBK_POWER_FACTOR
-	{{"energy",		UNIT_WH,	"Total Consumption",		"energycounter",		"3",		},	3,			0.1,		},	// OBK_CONSUMPTION_TOTAL
-	{{"energy",		UNIT_WH,	"Total Generation",		"energycounter_generation",	"14",		},	3,			0.1,		},	// OBK_GENERATION_TOTAL	
+	{{"power",		"W",		"Power",			"power",			"2",		},	0,			10,		},	// OBK_POWER
+	{{"apparent_power",	"VA",		"Apparent Power",		"power_apparent",		"9",		},	0,			10,		},	// OBK_POWER_APPARENT
+	{{"reactive_power",	"var",		"Reactive Power",		"power_reactive",		"10",		},	0,			10,		},	// OBK_POWER_REACTIVE
+	{{"power_factor",	"",		"Power Factor",			"power_factor",			"11",		},	1,			0.1,		},	// OBK_POWER_FACTOR
+	{{"energy",		UNIT_WH,	"Total Consumption",		"energycounter",		"3",		},	2,			0.1,		},	// OBK_CONSUMPTION_TOTAL
+	{{"energy",		UNIT_WH,	"Total Generation",		"energycounter_generation",	"14",		},	2,			0.1,		},	// OBK_GENERATION_TOTAL	
 	{{"energy",		UNIT_WH,	"Energy Last Hour",		"energycounter_last_hour",	"4",		},	2,			0.1,		},	// OBK_CONSUMPTION_LAST_HOUR
 	//{{"",			"",		"Consumption Stats",		"consumption_stats",		"5",		},	0,			0,		},	// OBK_CONSUMPTION_STATS
 	{{"energy",		UNIT_WH,	"Energy Today",			"energycounter_today",		"7",		},	2,			0.1,		},	// OBK_CONSUMPTION_TODAY
