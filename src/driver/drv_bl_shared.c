@@ -773,13 +773,13 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				if ((int)net_energy>5)
 				{
 					// Turn off Charger(s) - We are consuming
-					CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20off", 0);v
-					delay_s 2;
+					CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20off", 0);
+					delay_s 5;
 					CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20off", 0);
-					delay_s 2;
+					delay_s 5;
 					// Turn on Battery Inverter to supply load
 					CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
-					delay_s 2;
+					//delay_s 5;
 					dump_load_relay = 4;
 				}
 				
