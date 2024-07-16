@@ -311,6 +311,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 			else if (dump_load_relay == 3){poststr(request," Solar Power - Fast Charging <br></font>");}
 			else if (dump_load_relay == 4){poststr(request," AC Grid & Battery Storage <br></font>");}
 			else if (dump_load_relay == 5){poststr(request," System idle. Check equipment <br></font>");}
+				else if (dump_load_relay == 6){poststr(request," turn off ps1 <br></font>");}
+					else if (dump_load_relay == 7){poststr(request," turn off ps2 <br></font>");}
+						else if (dump_load_relay == 8){poststr(request," turn on inverter <br></font>");}
 				
 			else {poststr(request," OFF - Temporary bypass (High AC load or other Fault) <br></font>");}
 			//----------------------
@@ -778,14 +781,17 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					if (cmd_ctrl == 1)
 					{
 						CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20off", 0);
+						dump_load_relay = 6;
 					}
 					else if (cmd_ctrl == 2)
 					{
 						CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20off", 0);
+						dump_load_relay = 7;
 					}
 					else if (cmd_ctrl == 3)
 					{
 						CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
+						dump_load_relay = 8;
 					}
 					else
 					{
