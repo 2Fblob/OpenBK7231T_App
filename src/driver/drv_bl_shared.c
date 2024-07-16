@@ -774,14 +774,14 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				{
 					// Turn off Charger(s) - We are consuming
 					CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20off", 0);
-					int delay = 10000; 
+					int delay = 60000; 
   					while ( delay > 0 ){delay--;}
 					CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20off", 0);
-					delay = 10000; 
+					delay = 60000; 
   					while ( delay > 0 ){delay--;}
 					// Turn on Battery Inverter to supply load
 					CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
-					delay = 10000; 
+					delay = 60000; 
   					while ( delay > 0 ){delay--;}
 					dump_load_relay = 4;
 				}
