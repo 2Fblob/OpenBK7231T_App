@@ -309,6 +309,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 			else if (dump_load_relay == 2){poststr(request," Solar Power - Charging <br></font>");}
 			else if (dump_load_relay == 3){poststr(request," Solar Power - Fast Charging <br></font>");}
 			else if (dump_load_relay == 4){poststr(request," AC Grid & Battery Storage <br></font>");}
+			else if (dump_load_relay == 5){poststr(request," System idle. Check equipment <br></font>");}
+				
 			else {poststr(request," OFF - Temporary bypass (High AC load or other Fault) <br></font>");}
 			//----------------------
 		hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
@@ -767,32 +769,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				
 				//------------------------------------------------------------------------------
 
-				
-				// Are we Exporting?
-				if ((int)net_energy<-50)
-				{
-					// Turn Off Battery Inverter
-					CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20off", 0);
-					dump_load_relay = 1;
-				}
-				// Are we exporting above 200W?				
-				else if ((int)net_energy<-200)
-				{
-					// Turn on Battery Charger
-					CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20on", 0);
-					dump_load_relay = 2;
-					
-				}
-				// Are we exporting above 600W?
-				else if ((int)net_energy<-600)
-				{
-					// Turn on second Battery Charger
-					CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20on", 0);
-					dump_load_relay = 3;
-				}
-					
-				// Are we consuming more than 200W?
-				else if ((int)net_energy>50)
+				// Are we consuming?
+				if ((int)net_energy>50)
 				{
 					// Turn off Charger(s) - We are consuming
 					CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20off", 0);
@@ -800,8 +778,41 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					// Turn on Battery Inverter to supply load
 					CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
 					dump_load_relay = 4;
-					
 				}
+				
+				// Are we Exporting?
+				else
+				{
+					// Are we exporting above 600W?
+					if ((int)net_energy<-600)
+					{
+						// Turn on second Battery Charger
+						CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20on", 0);
+						dump_load_relay = 3;
+					}
+					// Are we exporting above 200W?				
+					else if ((int)net_energy<-200)
+					{
+						// Turn on Battery Charger
+						CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20on", 0);
+						dump_load_relay = 2;
+						
+					}
+					// Are we exporting above 50W?
+					else if ((int)net_energy<-50)
+					{
+						// Turn Off Battery Inverter
+						CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20off", 0);
+						dump_load_relay = 1;
+					}
+					else
+					{
+						// No consumption, System idle, or last status active
+						dump_load_relay = 5
+					}
+						
+				}
+				
 			}
 				
 			//-------------------------------------------------------------------------------------------------------------------------------------------------
