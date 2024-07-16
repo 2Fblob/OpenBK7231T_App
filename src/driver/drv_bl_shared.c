@@ -53,7 +53,7 @@ static byte old_time = 0;
 #define bypass_off_time 18
 #define min_daily_time_on 120	// Runs the diversion load up to this specified ammount of time, if there wasn't enough sun over the day.
 int time_on = 0;		// Variable to count how long the Bypass load ran during the day
-int dump_load_relay = 3;	// Variable to Indicate on the Webpage if the Bypass load is on
+int dump_load_relay = 0;	// Variable to Indicate on the Webpage if the Bypass load is on
 int lastsync = 0; 		// Variable to run the bypass relay loop. It's used to take note of the last time it run
 byte check_time = 0; 		// Variable for Minutes
 byte check_hour = 0;		// Variable for Hour	
@@ -304,9 +304,11 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request, "<font size=1>Diversion relay total on-time today was %d min.<br> Next sync in %d min. ", 
 				time_on, (dump_load_hysteresis-lastsync));
 			// Print Status of relay)
-			if (dump_load_relay == 1){poststr(request," ON - Solar Power <br></font>");}
-			else if (dump_load_relay == 2) {poststr(request," ON - Timer <br></font>");}
-			else if (dump_load_relay == 3) {poststr(request," OFF <br></font>");}
+			if (dump_load_relay == 0){poststr(request,"Data not available yet <br></font>");}
+			else if (dump_load_relay == 1){poststr(request," Solar Power <br></font>");}
+			else if (dump_load_relay == 2){poststr(request," Solar Power - Charging <br></font>");}
+			else if (dump_load_relay == 3){poststr(request," Solar Power - Fast Charging <br></font>");}
+			else if (dump_load_relay == 4){poststr(request," AC Grid & Battery Storage <br></font>");}
 			else {poststr(request," OFF - Temporary bypass (High AC load or other Fault) <br></font>");}
 			//----------------------
 		hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
@@ -762,22 +764,44 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 		
 				// Are we exporting enough? If so, turn the relay on
 				//if (((int)net_energy>(int)dump_load_on))
-				if (estimated_production_hour>max_export)
-					{
+				
+				//------------------------------------------------------------------------------
+
+				
+				// Are we Exporting?
+				if ((int)net_energy<-50)
+				{
+					// Turn Off Battery Inverter
+					CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20off", 0);
 					dump_load_relay = 1;
-					time_on += dump_load_hysteresis;	// Increase the timer.	
-					//CMD_ExecuteCommand("SendGet http://192.168.5.20/cm?cmnd=Power%20on", 0);
-					}
-				/*else if ((check_hour >= bypass_on_time) && (check_hour < bypass_off_time) && (time_on < min_daily_time_on))
-					{
+				}
+				// Are we exporting above 200W?				
+				else if ((int)net_energy<-200)
+				{
+					// Turn on Battery Charger
+					CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20on", 0);
 					dump_load_relay = 2;
-					}*/
-				else /*if (estimated_production_hour>max_export)*/
-				//else if (((int)net_energy<(int)dump_load_off))
-					{
-					// If none of the exemptions applies, we turn the diversion load off.
+					
+				}
+				// Are we exporting above 600W?
+				else if ((int)net_energy<-600)
+				{
+					// Turn on second Battery Charger
+					CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20on", 0);
 					dump_load_relay = 3;
-					}
+				}
+					
+				// Are we consuming more than 200W?
+				else if ((int)net_energy>50)
+				{
+					// Turn off Charger(s) - We are consuming
+					CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20off", 0);
+					CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20off", 0);
+					// Turn on Battery Inverter to supply load
+					CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
+					dump_load_relay = 4;
+					
+				}
 			}
 				
 			//-------------------------------------------------------------------------------------------------------------------------------------------------
