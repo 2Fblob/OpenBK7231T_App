@@ -808,7 +808,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					else
 					{
 						// No consumption, System idle, or last status active
-						dump_load_relay = 5
+						dump_load_relay = 5;
 					}
 						
 				}
