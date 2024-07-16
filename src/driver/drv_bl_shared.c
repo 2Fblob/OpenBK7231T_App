@@ -770,7 +770,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				//------------------------------------------------------------------------------
 
 				// Are we consuming?
-				if ((int)net_energy>50)
+				if ((int)net_energy>5)
 				{
 					// Turn off Charger(s) - We are consuming
 					CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20off", 0);
