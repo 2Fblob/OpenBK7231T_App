@@ -9,6 +9,7 @@ float estimated_production_hour = 0;
 static int mtqq_total_net_export = 0;
 static int estimated_energy_start = 0;
 static int last_run_calc = 0;
+int cmd_ctrl = 0;
 
 #include "drv_bl_shared.h"
 
@@ -41,7 +42,7 @@ static byte time_hour_reset = 0;
 static byte time_min_reset = 0;
 static byte old_time = 0;
 #define max_power_bypass_off -500
-#define dump_load_hysteresis 3	// This is shortest time the relay will turn on or off. Recommended 1/4 of the netmetering period. Never use less than 1min as this stresses the relay/load.
+#define dump_load_hysteresis 1	// This is shortest time the relay will turn on or off. Recommended 1/4 of the netmetering period. Never use less than 1min as this stresses the relay/load.
 //int min_production = -50;	// The minimun instantaneous solar production that will trigger the dump load.
 #define dump_load_on 15		// The ammount of 'excess' energy stored over the period. Above this, the dump load will be turned on.
 #define dump_load_off 1		// The minimun 'excess' energy stored over the period. Below this, the dump load will be turned off.
@@ -772,15 +773,24 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				// Are we consuming?
 				if ((int)net_energy>5)
 				{
-					// Turn off Charger(s) - We are consuming
-					CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20off", 0);
-					delay_s 5;
-					CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20off", 0);
-					delay_s 5;
-					// Turn on Battery Inverter to supply load
-					CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
-					//delay_s 5;
-					dump_load_relay = 4;
+
+					cmd_ctrl++;
+					if (cmd_ctrl == 1)
+					{
+						CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20off", 0);
+					}
+					else if (cmd_ctrl == 2)
+					{
+						CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20off", 0);
+					}
+					else if (cmd_ctrl == 3)
+					{
+						CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
+					}
+					else
+					{
+						cmd_ctrl = 0;
+					}
 				}
 				
 				// Are we Exporting?
