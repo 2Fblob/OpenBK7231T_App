@@ -774,7 +774,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				//------------------------------------------------------------------------------
 
 				// Are we consuming?
-				if ((int)net_energy>5)
+				if ((int)net_energy>10)
 				{
 
 					cmd_ctrl++;
@@ -807,8 +807,6 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					{
 						// Turn on second Battery Charger
 						CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20on", 0);
-						int delay = 10000; 
-  						while ( delay > 0 ){delay--;}
 						dump_load_relay = 3;
 					}
 					// Are we exporting above 200W?				
@@ -816,8 +814,6 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					{
 						// Turn on Battery Charger
 						CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20on", 0);
-						int delay = 10000; 
-  						while ( delay > 0 ){delay--;}
 						dump_load_relay = 2;
 						
 					}
@@ -826,8 +822,6 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					{
 						// Turn Off Battery Inverter
 						CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20off", 0);
-						int delay = 10000; 
-  						while ( delay > 0 ){delay--;}
 						dump_load_relay = 1;
 					}
 					else
