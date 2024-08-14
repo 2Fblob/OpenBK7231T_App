@@ -126,7 +126,7 @@ int changeDoNotSendMinFrames = 5;
 
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 {
-    int i;
+   // int i;
     const char *mode;
     struct tm *ltm;
 
@@ -303,8 +303,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		{
 		
 		// We print some stats, mainly for debugging
-		// hprintf255(request, "<font size=1>Diversion relay total on-time today was %d min.<br> Next sync in %d min. ", 
-				time_on, (dump_load_hysteresis-lastsync));
+		/* hprintf255(request, "<font size=1>Diversion relay total on-time today was %d min.<br> Next sync in %d min. ", 
+				time_on, (dump_load_hysteresis-lastsync));*/
 			// Print Status of relay)
 			if (dump_load_relay == 0){poststr(request,"Data not available yet <br></font>");}
 			else if (dump_load_relay == 1){poststr(request," Solar Power <br></font>");}
