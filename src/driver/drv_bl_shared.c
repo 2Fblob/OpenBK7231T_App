@@ -358,6 +358,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     }*/
     /********************************************************************************************************************/	
 }
+}
 
 void BL09XX_SaveEmeteringStatistics()
 {
