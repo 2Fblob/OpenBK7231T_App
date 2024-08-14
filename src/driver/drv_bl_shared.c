@@ -146,15 +146,16 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 
     poststr(request, "<hr><table style='width:100%'>");
 
-    if (!isnan(lastReadingFrequency)) {
+   // Frequency readout
+	/*
+	if (!isnan(lastReadingFrequency)) {
         poststr(request,
                 "<tr><td><b>Frequency</b></td><td style='text-align: right;'>");
         hprintf255(request, "%.2f</td><td>Hz</td>", lastReadingFrequency);
-    }
+    }*/
 
 	for (int i = (OBK__FIRST); i <= (OBK_CONSUMPTION__DAILY_LAST); i++) {
 		if (i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))){i++;}
-		//if (i == 7){i++;}
 		if (i <= OBK__NUM_MEASUREMENTS || NTP_IsTimeSynced()) {
 			poststr(request, "<tr><td><b>");
 			poststr(request, sensors[i].names.name_friendly);
@@ -247,9 +248,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	poststr(request, "</tr></table><br>");
 	poststr(request, "Totals: <br>");
 	hprintf255(request, "Consumption: %iW, Export: %iW (Metering) <br>", total_consumption, total_export);
-	hprintf255(request, "Consumption: %iW, Export: %iW (Net Metering - Hourly equivalent: %iW)  <br>", total_net_consumption, total_net_export, (int)estimated_production_hour);
+	hprintf255(request, "Consumption: %iW, Export: %iW (Net Metering) - Hourly equivalent: %iW  <br>", total_net_consumption, total_net_export, (int)estimated_production_hour);
 	// This gives me an estimate based on what I am producing now.
-	hprintf255(request, "Debug: Averaging Period: %imin. <br>", (check_time-estimated_energy_start));
+	//hprintf255(request, "Debug: Averaging Period: %imin. <br>", (check_time-estimated_energy_start));
 	//hprintf255(request, "Estimated energy this hour: %iW <br>", (int)estimated_production_hour);
 	/*if (estimated_production_hour>max_export)
 	{
@@ -270,18 +271,18 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	//------------------------------------------------------------------------------------------------------------------------------------------
 	}
 	// Some other stats...
-    	hprintf255(request, "<p><br><h5>Changes: %i sent, %i Skipped, %li Saved. <br> %s<hr></p>",
+    	/*hprintf255(request, "<p><br><h5>Changes: %i sent, %i Skipped, %li Saved. <br> %s<hr></p>",
                stat_updatesSent, stat_updatesSkipped, ConsumptionSaveCounter,
-               mode);
+               mode);*/
 
-	poststr(request, "<h5>Energy Clear Date: ");
+	/*poststr(request, "<h5>Energy Clear Date: ");
 	if (ConsumptionResetTime) {
 		ltm = gmtime(&ConsumptionResetTime);
 		hprintf255(request, "%04d-%02d-%02d %02d:%02d:%02d",
 					ltm->tm_year+1900, ltm->tm_mon+1, ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec);
 	} else {
 		poststr(request, "(not set)");
-	}
+	}*/
 	
 	/********************************************************************************************************************/
 	hprintf255(request, "<br>");
@@ -302,7 +303,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		{
 		
 		// We print some stats, mainly for debugging
-		hprintf255(request, "<font size=1>Diversion relay total on-time today was %d min.<br> Next sync in %d min. ", 
+		// hprintf255(request, "<font size=1>Diversion relay total on-time today was %d min.<br> Next sync in %d min. ", 
 				time_on, (dump_load_hysteresis-lastsync));
 			// Print Status of relay)
 			if (dump_load_relay == 0){poststr(request,"Data not available yet <br></font>");}
@@ -311,24 +312,26 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 			else if (dump_load_relay == 3){poststr(request," Solar Power - Fast Charging <br></font>");}
 			else if (dump_load_relay == 4){poststr(request," AC Grid & Battery Storage <br></font>");}
 			else if (dump_load_relay == 5){poststr(request," System idle. Check equipment <br></font>");}
-				else if (dump_load_relay == 6){poststr(request," turn off ps1 <br></font>");}
-					else if (dump_load_relay == 7){poststr(request," turn off ps2 <br></font>");}
-						else if (dump_load_relay == 8){poststr(request," turn on inverter <br></font>");}
+			else if (dump_load_relay == 6){poststr(request," turn off ps1 <br></font>");}
+			else if (dump_load_relay == 7){poststr(request," turn off ps2 <br></font>");}
+			else if (dump_load_relay == 8){poststr(request," turn on inverter <br></font>");}
+			else if (dump_load_relay == 9){poststr(request," Basement dehumidifier Off <br></font>");}
+			else if (dump_load_relay == 10){poststr(request," Basement dehumidifier On <br></font>");}
 				
 			else {poststr(request," OFF - Temporary bypass (High AC load or other Fault) <br></font>");}
 			//----------------------
-		hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
-		hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
+		//hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
+		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
 		// Print out periodic statistics and Total Generation at the bottom of the page.
 		hprintf255(request,"<h5>NetMetering (Last %d min out of %d): %.3f Wh</h5>", energyCounterMinutesIndex, energyCounterSampleCount, net_energy); //Net metering shown in Wh (Small value)    
 		}	
 	
 		/********************************************************************************************************************/
-	        hprintf255(request,"<h5>Consumption (during this period): ");
-	        hprintf255(request,"%1.*f Wh<br>", sensors[OBK_CONSUMPTION_LAST_HOUR].rounding_decimals, DRV_GetReading(OBK_CONSUMPTION_LAST_HOUR));
-	        hprintf255(request,"Sampling interval: %d sec<br>History length: ",energyCounterSampleInterval);
-	        hprintf255(request,"%d samples<br>History per samples:<br>",energyCounterSampleCount);
-	        if (energyCounterMinutes != NULL)
+	        //hprintf255(request,"<h5>Consumption (during this period): ");
+	        //hprintf255(request,"%1.*f Wh<br>", sensors[OBK_CONSUMPTION_LAST_HOUR].rounding_decimals, DRV_GetReading(OBK_CONSUMPTION_LAST_HOUR));
+	        //hprintf255(request,"Sampling interval: %d sec<br>History length: ",energyCounterSampleInterval);
+	        //hprintf255(request,"%d samples<br>History per samples:<br>",energyCounterSampleCount);
+	       /* if (energyCounterMinutes != NULL)
 	        {
 	            for(i=0; i<energyCounterSampleCount; i++)
 	            {
@@ -352,7 +355,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	    } 
     else {
         hprintf255(request,"<h5>Periodic Statistics disabled. Use startup command SetupEnergyStats to enable function.</h5>");
-    }
+    }*/
     /********************************************************************************************************************/	
 }
 
@@ -793,6 +796,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
 						dump_load_relay = 8;
 					}
+					else if (cmd_ctrl == 4)
+					{
+						CMD_ExecuteCommand("SendGet http://192.168.5.27/cm?cmnd=Power%20off", 0);
+						dump_load_relay = 9;
+					}
 					else
 					{
 						cmd_ctrl = 0;
@@ -802,6 +810,12 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				// Are we Exporting?
 				else
 				{
+					if ((int)net_energy<-1000)
+					{
+						// Turn on dehumidifier
+						CMD_ExecuteCommand("SendGet http://192.168.5.27/cm?cmnd=Power%20on", 0);
+						dump_load_relay = 10;
+					}
 					// Are we exporting above 600W?
 					if ((int)net_energy<-600)
 					{
@@ -817,8 +831,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						dump_load_relay = 2;
 						
 					}
-					// Are we exporting above 50W?
-					else if ((int)net_energy<-50)
+					// Are we exporting above 80W?
+					else if ((int)net_energy<-80)
 					{
 						// Turn Off Battery Inverter
 						CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20off", 0);
