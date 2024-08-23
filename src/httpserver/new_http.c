@@ -41,11 +41,11 @@ const char htmlBodyStart2[] =
 "</a></h1>";
 const char htmlBodyEnd[] = "</div></body></html>";
 
-//const char htmlFooterReturnToMainPage[] = "<a href=\"index\">MAIN page</a>";
-//const char htmlFooterRefreshLink[] = "<a href=\"index\">Refresh</a>";
-//const char htmlFooterReturnToCfgOrMainPage[] =
-//"<a //href="cfg\">Return to cfg</a> | "
-//"<a href=\"index\">MAIN page</a>";
+const char htmlFooterReturnToMainPage[] = "<a href=\"index\">MAIN page</a>";
+const char htmlFooterRefreshLink[] = "<a href=\"index\">Refresh</a>";
+const char htmlFooterReturnToCfgOrMainPage[] =
+"<a href=\"cfg\">Return to cfg</a> | "
+"<a href=\"index\">MAIN page</a>";
 
 /*const char htmlFooterInfo[] =
 "<a target=\"_blank\" "
@@ -268,7 +268,7 @@ void http_html_end(http_request_t* request) {
 
 	//poststr(request, " | ");
 	//poststr(request, htmlFooterInfo);
-	//poststr(request, "<br>");
+	poststr(request, "<br>");
 	//poststr(request, g_build_str);
 
 	hprintf255(request, "<br>Online for&nbsp;<span id=\"onlineFor\" data-initial=\"%i\">-</span>", g_secondsElapsed);
