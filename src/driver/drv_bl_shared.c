@@ -309,12 +309,12 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 			// Print Status of relay)
 			{poststr(request," Current system status is: <br></font>");}
 			if (dump_load_relay == 2){poststr(request," Charger_A active <br></font>");}
-			else if (dump_load_relay == 3){poststr(request," Charger_A and Charger_B active <br></font>");}
-			else if (dump_load_relay == 4){poststr(request," Grid & Battery Backup <br></font>");}
-			if (dump_load_relay == 10){poststr(request," Basement dehumidifier ON <br></font>");}
-			else if (dump_load_relay == 9){poststr(request," Basement dehumidifier OFF <br></font>");}
+			if (dump_load_relay == 3){poststr(request," Charger_A and Charger_B active <br></font>");}
+			if (dump_load_relay == 8){poststr(request," Grid & Battery Backup <br></font>");}
+			if (dump_load_relay == 11){poststr(request," Basement dehumidifier ON <br></font>");}
+			if (dump_load_relay == 9){poststr(request," Basement dehumidifier OFF <br></font>");}
 			if (dump_load_relay == 10){poststr(request," Dishwasher / Washing machine OFF <br></font>");}
-			else if (dump_load_relay == 12){poststr(request," Dishwasher / Washing machine ON <br></font>");}
+			if (dump_load_relay == 12){poststr(request," Dishwasher / Washing machine ON <br></font>");}
 			//----------------------
 		//hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
 		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
@@ -829,19 +829,19 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						dump_load_relay = 11;
 						}
 					}
-					// Are we exporting above 500W?
-					if ((int)net_energy<-500)
-					{
-						// Turn on Dishwasher
-						CMD_ExecuteCommand("SendGet http://192.168.5.26/cm?cmnd=Power%20on", 0);
-						dump_load_relay = 12;
-					}
 					// Are we exporting above 600W?
-					if ((int)net_energy<-600)
+					else if ((int)net_energy<-600)
 					{
 						// Turn on second Battery Charger
 						CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20on", 0);
 						dump_load_relay = 3;
+					}
+					//Are we exporting above 500W?
+					else if ((int)net_energy<-500)
+					{
+						// Turn on Dishwasher
+						CMD_ExecuteCommand("SendGet http://192.168.5.29/cm?cmnd=Power%20on", 0);
+						dump_load_relay = 12;
 					}
 					// Are we exporting above 200W?				
 					else if ((int)net_energy<-200)
