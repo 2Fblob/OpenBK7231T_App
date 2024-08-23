@@ -267,7 +267,7 @@ void http_html_end(http_request_t* request) {
 	unsigned char mac[32];
 
 	poststr(request, " | ");
-	poststr(request, htmlFooterInfo);
+	//poststr(request, htmlFooterInfo);
 	poststr(request, "<br>");
 	//poststr(request, g_build_str);
 
