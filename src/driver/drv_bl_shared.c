@@ -9,6 +9,10 @@ float estimated_production_hour = 0;
 static int mtqq_total_net_export = 0;
 static int estimated_energy_start = 0;
 static int last_run_calc = 0;
+// The number of devices the automation controls, based on power level 
+static int dump_load_relay_number = 5;
+// The array where we store the power state for each of these devices
+static int dump_load_relay[dump_load_relay_number]
 int cmd_ctrl = 0;
 
 #include "drv_bl_shared.h"
@@ -302,19 +306,33 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		// We need NTP enabled for this, as well as the statistics. They need to be manually configured because of duration and time zone.
 		if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
 		{
-		
+			// Update variables
+			poststr(request, "<table style='width:100%'>");
+			poststr(request, "<table style='text-align: center'></style>");
+			poststr(request, " <h2>System Satus</h2>");
+			poststr(request, "<table>");
+			// Table Format and headers
+			poststr(request, "<th>Device </th>");
+			poststr(request, "<th>Status </th></tr><hr>");
+			// End of update variables	
+
+			for (int q=0; q<=dump_load_relay_number; q++)
+				{
+				hprintf255(request, "<tr><td> %i </td></tr> ", (int)dump_load_relay[q]);
+				}
+			
 		// We print some stats, mainly for debugging
 		/* hprintf255(request, "<font size=1>Diversion relay total on-time today was %d min.<br> Next sync in %d min. ", 
 				time_on, (dump_load_hysteresis-lastsync));*/
 			// Print Status of relay)
-			{poststr(request," Current system status is: <br></font>");}
-			if (dump_load_relay == 2){poststr(request," Charger_A active <br></font>");}
+			/*{poststr(request," Current system status is: <br></font>");}
+			{poststr(request," Charger_A active <br></font>");}
 			if (dump_load_relay == 3){poststr(request," Charger_A and Charger_B active <br></font>");}
 			if (dump_load_relay == 8){poststr(request," Grid & Battery Backup <br></font>");}
 			if (dump_load_relay == 11){poststr(request," Basement dehumidifier ON <br></font>");}
 			if (dump_load_relay == 9){poststr(request," Basement dehumidifier OFF <br></font>");}
 			if (dump_load_relay == 10){poststr(request," Dishwasher / Washing machine OFF <br></font>");}
-			if (dump_load_relay == 12){poststr(request," Dishwasher / Washing machine ON <br></font>");}
+			if ( == 12){poststr(request," Dishwasher / Washing machine ON <br></font>");}*/
 			//----------------------
 		//hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
 		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
@@ -685,6 +703,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				//overpower_reset = 1;
 				old_time = check_time;
 				lastsync++;
+				//update_tables = 1;
 			}
 
 			//Make an animation to indicate bypass is on
@@ -775,101 +794,91 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// Since readings reset at the turn of the hour, we wait 15 minutes to average before runing any actions. The equipment remains on it's previous state for the hour before.
 			if (check_time>15)
 			{
-				// Are we consuming?
-				if ((int)net_energy>10)
-				{
-
-					cmd_ctrl++;
-					if (cmd_ctrl == 1)
-					{
-						
-						//Charger_A
-						CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20off", 0);
-						dump_load_relay = 6;
-					}
-					else if (cmd_ctrl == 2)
-					{
-						// Charger_B
-						CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20off", 0);
-						dump_load_relay = 7;
-					}
-					else if (cmd_ctrl == 3)
-					{
-						// Dehumidifier
-						CMD_ExecuteCommand("SendGet http://192.168.5.27/cm?cmnd=Power%20off", 0);
-						dump_load_relay = 9;
-					}
-					else if (cmd_ctrl == 4)
-					{
-						// Inverter (On)
-						CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
-						dump_load_relay = 8;
-					}
-					else if (cmd_ctrl == 5)
-					{
-						// Dishwasher
-						CMD_ExecuteCommand("SendGet http://192.168.5.29/cm?cmnd=Power%20off", 0);
-						dump_load_relay = 10;
-					}
-					else
-					{
-						cmd_ctrl = 0;
-					}
-				}
-				
-				// Are we Exporting?
-				else
-				{
+					// We Are exporting...
 					if ((int)net_energy<-1000)
 					{
-						// Turn on dehumidifier between 11AM and 3PM
-						if ((check_hour>10)&&(check_hour<15))
+						// Turn on dehumidifier between 10AM and 3PM
+						if ((check_hour>9)&&(check_hour<15))
 						{
 						CMD_ExecuteCommand("SendGet http://192.168.5.27/cm?cmnd=Power%20on", 0);
-						dump_load_relay = 11;
+						dump_load_relay[4] = 1;
+						}
+						else
+						{
+						CMD_ExecuteCommand("SendGet http://192.168.5.27/cm?cmnd=Power%20off", 0);
+						dump_load_relay[4] = 0;
 						}
 					}
 					// Are we exporting above 600W?
 					else if ((int)net_energy<-600)
 					{
-						// Turn on second Battery Charger
+						// Turn on second charger between 10AM and 3PM
+						if ((check_hour>9)&&(check_hour<15))
+						{
 						CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20on", 0);
-						dump_load_relay = 3;
+						dump_load_relay[3] = 1;
+						}
+						else
+						{
+						CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20off", 0);
+						dump_load_relay[3] = 0;
+						}
 					}
 					//Are we exporting above 500W?
 					else if ((int)net_energy<-500)
 					{
-						// Turn on Dishwasher
+						// Turn on dishwasher between 9AM and 6PM
+						if ((check_hour>8)&&(check_hour<18))
+						{
 						CMD_ExecuteCommand("SendGet http://192.168.5.29/cm?cmnd=Power%20on", 0);
-						dump_load_relay = 12;
+						dump_load_relay[2] = 1;
+						}
+						else
+						{
+						CMD_ExecuteCommand("SendGet http://192.168.5.29/cm?cmnd=Power%20off", 0);
+						dump_load_relay[2] = 0;
+						}
 					}
 					// Are we exporting above 200W?				
 					else if ((int)net_energy<-200)
 					{
-						// Turn on Battery Charger
+						// Turn on primary charger during solar hours
+						if ((check_hour>6)&&(check_hour<19))
+						{
 						CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20on", 0);
-						dump_load_relay = 2;
-						
+						dump_load_relay[1] = 1;
+						}
+						else
+						{
+						CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20off", 0);
+						dump_load_relay[1] = 0;
+						}
 					}
 					// Are we exporting above 70W?
 					else if ((int)net_energy<-70)
 					{
 						// Turn Off Battery Inverter
 						CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20off", 0);
-						dump_load_relay = 1;
+						dump_load_relay[0] = 0;
+					}
+					// We are consuming...
+					else if ((int)net_energy>10)
+					{
+						// let's turn the party off!
+						for (int q=1; q<=dump_load_relay_number; q++)
+						dump_load_relay[q] = 0;
+						// And get the inverter on
+						CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
+						dump_load_relay[0] = 1;
 					}
 					else
 					{
-						// No consumption, System idle, or last status active
-						dump_load_relay = 5;
+						// Anything between low values of export / import, remain in previous state
 					}
 						
-				}
 			}
-				// End of consumption / Export Loops
-				
-			}
-				
+				// End of consumption / Export Loops	
+			}			
 			//-------------------------------------------------------------------------------------------------------------------------------------------------
 			} // end of negative flag loop
 
