@@ -309,17 +309,17 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		/* hprintf255(request, "<font size=1>Diversion relay total on-time today was %d min.<br> Next sync in %d min. ", 
 				time_on, (dump_load_hysteresis-lastsync));*/
 		// Print Status of automation outputs)
-		poststr(request," Current system status is: <br></font>");
-		hprintf255(request,"<h5>Storage Inverter: %i</h5>", dump_load_relay[0]); 
-		hprintf255(request,"<h5>Storage Charger A: %i</h5>", dump_load_relay[1]); 
-		hprintf255(request,"<h5>Washer/Dishwasher: %i</h5>", dump_load_relay[2]); 
-		hprintf255(request,"<h5>Storage Charger B: %i</h5>", dump_load_relay[3]); 
-		hprintf255(request,"<h5>Basement Dehumidifier: %i</h5><br>", dump_load_relay[4]); 
+		poststr(request," <hr> <h5>Current system status is: </h5><br></font>");
+		hprintf255(request,"Storage Inverter: %i<br>", dump_load_relay[0]); 
+		hprintf255(request,"Storage Charger A: %i<br>", dump_load_relay[1]); 
+		hprintf255(request,"Washer/Dishwasher: %i<br>", dump_load_relay[2]); 
+		hprintf255(request,"Storage Charger B: %i<br>", dump_load_relay[3]); 
+		hprintf255(request,"Basement Dehumidifier: %i<br>", dump_load_relay[4]); 
 		//----------------------
 		//hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
 		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
 		// Print out periodic statistics and Total Generation at the bottom of the page.
-		hprintf255(request,"<h5>NetMetering (Last %d min out of %d): %.3f Wh</h5>", energyCounterMinutesIndex, energyCounterSampleCount, net_energy); //Net metering shown in Wh (Small value)    
+		hprintf255(request,"<h5>NetMetering (Last %d min out of %d): %.3f Wh</h5><hr>", energyCounterMinutesIndex, energyCounterSampleCount, net_energy); //Net metering shown in Wh (Small value)    
 		}	
 	
 		/********************************************************************************************************************/
