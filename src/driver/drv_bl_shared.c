@@ -688,10 +688,10 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 
 			//Make an animation to indicate bypass is on
-			if (dump_load_relay == 4)
-			{
+			//if (dump_load_relay == 4)
+			//{
 				// In case we want to do something here. Not currently implemented.
-			}
+			//}
 			
 			// This turns the bypass load off if we are using a lot of power
 			//if (((sensors[OBK_POWER].lastReading) > max_power_bypass_off) && (!(dump_load_relay == 4)))
