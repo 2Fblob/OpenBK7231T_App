@@ -856,8 +856,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						cmd_ctrl = 0;
 						if (dump_load_relay[0])
 							{
-							hprintf255(request,"Washer/Dishwasher: %i<br>", dump_load_relay[2]); 
-							CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20", dump_load_relay[0]);
+							//hprintf255(request,"Washer/Dishwasher: %i<br>", dump_load_relay[2]); 
+							CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20%i", dump_load_relay[0]);
 							}
 						//else
 							//{
