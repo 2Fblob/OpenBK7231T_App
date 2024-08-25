@@ -865,7 +865,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					else if ((int)net_energy>10)
 					{
 						// let's turn the party off!
-						for (int q=1; q<=dump_load_relay_number; q++)
+						for (int q=0; q<dump_load_relay_number; q++)
 						dump_load_relay[q] = 0;
 						// And get the inverter on
 						CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
