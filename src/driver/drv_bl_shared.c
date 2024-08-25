@@ -838,7 +838,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					if ((int)net_energy>10)
 					{
 						// let's turn the party off!
-						for (int q=0; q<(dump_load_relay_number-1)r; q++)
+						for (int q=0; q<(dump_load_relay_number-1); q++)
 							{
 							dump_load_relay[q] = 0;
 							}
