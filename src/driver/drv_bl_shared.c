@@ -838,8 +838,10 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					if ((int)net_energy>10)
 					{
 						// let's turn the party off!
-						for (int q=0; q<dump_load_relay_number; q++)
-						dump_load_relay[q] = 0;
+						for (int q=0; q<(dump_load_relay_number-1)r; q++)
+							{
+							dump_load_relay[q] = 0;
+							}
 						// And get the inverter on
 						dump_load_relay[0] = 1;
 					}
@@ -850,7 +852,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// Now the calculations are done, let's update the outputs
 				// Because we can only send one request at a time, we run a circular loop to go through all the devices, one at a time.
 				
-				if (cmd_ctrl>dump_load_relay_number)
+				if (cmd_ctrl==dump_load_relay_number)
 					{
 						// The inverter is first. Based on the variable status we turn it on or off.
 						cmd_ctrl = 0;
