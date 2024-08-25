@@ -58,7 +58,7 @@ static byte old_time = 0;
 #define bypass_off_time 18
 #define min_daily_time_on 120	// Runs the diversion load up to this specified ammount of time, if there wasn't enough sun over the day.
 int time_on = 0;		// Variable to count how long the Bypass load ran during the day
-int dump_load_relay = 0;	// Variable to Indicate on the Webpage if the Bypass load is on
+//int dump_load_relay = 0;	// Variable to Indicate on the Webpage if the Bypass load is on
 int lastsync = 0; 		// Variable to run the bypass relay loop. It's used to take note of the last time it run
 byte check_time = 0; 		// Variable for Minutes
 byte check_hour = 0;		// Variable for Hour	
