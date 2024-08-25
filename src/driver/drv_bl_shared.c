@@ -311,7 +311,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		/* hprintf255(request, "<font size=1>Diversion relay total on-time today was %d min.<br> Next sync in %d min. ", 
 				time_on, (dump_load_hysteresis-lastsync));*/
 		// Print Status of automation outputs)
-		poststr(request," <hr> <h5>Current system status: </h5></font>");
+		poststr(request," <hr> <h4>Current system status: </h4></font>");
 		hprintf255(request,"Storage Inverter:    	 %i<br>", dump_load_relay[0]); 
 		hprintf255(request,"Storage Charger A:   	 %i<br>", dump_load_relay[1]); 
 		hprintf255(request,"Storage Charger B:    	 %i<br>", dump_load_relay[3]); 
@@ -821,7 +821,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					if ((int)net_energy<-200)
 					{
 						// Turn on primary charger during solar hours
-						if ((check_hour>6)&&(check_hour<19))
+						if ((check_hour>8)&&(check_hour<19))
 						{
 						dump_load_relay[1] = 1;
 						}
@@ -839,18 +839,13 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					// We are consuming...
 					if ((int)net_energy>10)
 					{
-						// let's turn the party off!
-						for (int q=0; q<(dump_load_relay_number-1); q++)
-							{
-							dump_load_relay[q] = 0;
-							}
-						// And get the inverter on
 						dump_load_relay[0] = 1;
+						dump_load_relay[1] = 0;
+						dump_load_relay[2] = 0;
+						dump_load_relay[3] = 0;
+						dump_load_relay[4] = 0;	
 					}
-					else
-					{
-						// Anything between low values of export / import, remain in previous state
-					}
+				
 			// Now the calculations are done, let's update the outputs
 				// Because we can only send one request at a time, we run a circular loop to go through all the devices, one at a time.
 				
@@ -860,10 +855,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						cmd_ctrl = 0;
 						if (dump_load_relay[0])
 							{
-							//sprintf(buffer, "SendGet http://192.168.5.23/cm?cmnd=Power%20%d",dump_load_relay[0]);
-							//sprintf(buffer, buffer2, %20);
-							//snprintf(datetime,sizeof(datetime), "%04i-%02i-%02iT%02i:%02i+%02i:%02i",
-							//CMD_ExecuteCommand(buffer, 0);	
+							// We may need to tidy this up...
 							CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
 							}
 						else
