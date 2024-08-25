@@ -859,7 +859,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						cmd_ctrl = 0;
 						//if (dump_load_relay[0])
 							{
-							sprintf(buffer, "SendGet http://192.168.5.23/cm?cmnd=Power%20%d",dump_load_relay[0]));
+							sprintf(buffer, "SendGet http://192.168.5.23/cm?cmnd=Power%20%d",dump_load_relay[0]);
 							//snprintf(datetime,sizeof(datetime), "%04i-%02i-%02iT%02i:%02i+%02i:%02i",
 							CMD_ExecuteCommand(buffer, 0);	
 							}
