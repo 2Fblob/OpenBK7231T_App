@@ -12,7 +12,7 @@ static int last_run_calc = 0;
 // The number of devices the automation controls, based on power level 
 static int dump_load_relay_number = 5;
 // The array where we store the power state for each of these devices
-static int dump_load_relay[dump_load_relay_number]
+static int dump_load_relay[dump_load_relay_number] = {0};
 int cmd_ctrl = 0;
 
 #include "drv_bl_shared.h"
