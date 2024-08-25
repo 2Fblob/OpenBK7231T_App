@@ -34,6 +34,7 @@ int cmd_ctrl = dump_load_relay_number;
 int stat_updatesSkipped = 0;
 int stat_updatesSent = 0;
 char buffer[50];
+char ip[5];
 
 static byte savetoflash = 0;
 static byte min_reset = 0;
@@ -830,7 +831,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						}
 					}
 					// Are we exporting above 70W?
-					if ((int)net_energy<-70)
+					if ((int)net_energy<-60)
 					{
 						// Turn Off Battery Inverter
 						dump_load_relay[0] = 0;
@@ -857,16 +858,18 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					{
 						// The inverter is first. Based on the variable status we turn it on or off.
 						cmd_ctrl = 0;
-						//if (dump_load_relay[0])
+						if (dump_load_relay[0])
 							{
-							sprintf(buffer, "SendGet http://192.168.5.23/cm?cmnd=Power%20%d",dump_load_relay[0]);
+							//sprintf(buffer, "SendGet http://192.168.5.23/cm?cmnd=Power%20%d",dump_load_relay[0]);
+							//sprintf(buffer, buffer2, %20);
 							//snprintf(datetime,sizeof(datetime), "%04i-%02i-%02iT%02i:%02i+%02i:%02i",
-							CMD_ExecuteCommand(buffer, 0);	
+							//CMD_ExecuteCommand(buffer, 0);	
+							CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
 							}
-						//else
-							//{
-							//CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20off", 0);
-							//}
+						else
+							{
+							CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20off", 0);
+							}
 						
 					}
 				else
