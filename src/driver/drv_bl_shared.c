@@ -33,6 +33,7 @@ int cmd_ctrl = dump_load_relay_number;
 #include <time.h>
 int stat_updatesSkipped = 0;
 int stat_updatesSent = 0;
+char buffer[50];
 
 static byte savetoflash = 0;
 static byte min_reset = 0;
@@ -858,8 +859,9 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						cmd_ctrl = 0;
 						//if (dump_load_relay[0])
 							{
-							//hprintf255(request,"Washer/Dishwasher: %i<br>", dump_load_relay[2]); 
-							CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20%i", dump_load_relay[0]);
+							sprintf(buffer, "SendGet http://192.168.5.23/cm?cmnd=Power%20%d",dump_load_relay[0]));
+							//snprintf(datetime,sizeof(datetime), "%04i-%02i-%02iT%02i:%02i+%02i:%02i",
+							CMD_ExecuteCommand(buffer, 0);	
 							}
 						//else
 							//{
