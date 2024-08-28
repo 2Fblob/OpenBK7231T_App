@@ -775,66 +775,76 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				
 				//------------------------------------------------------------------------------
 			// Since readings reset at the turn of the hour, we wait 15 minutes to average before runing any actions. The equipment remains on it's previous state for the hour before.
-			if (check_time>15)
+			if (check_time>14)
 			{	
 				
-					// We Are exporting...
-					if ((int)net_energy<-1000)
-					{
-						// Turn on dehumidifier between 10AM and 3PM
-						if ((check_hour>9)&&(check_hour<15))
-						{
-						dump_load_relay[4] = 1;
-						}
-						else
-						{
-						dump_load_relay[4] = 0;
-						}
-					}
-					// Are we exporting above 600W?
-					if ((int)net_energy<-600)
-					{
-						// Turn on second charger between 10AM and 3PM
-						if ((check_hour>9)&&(check_hour<15))
-						{
-						dump_load_relay[3] = 1;
-						}
-						else
-						{
-						dump_load_relay[3] = 0;
-						}
-					}
-					//Are we exporting above 500W?
-					if ((int)net_energy<-500)
-					{
-						// Turn on dishwasher between 9AM and 6PM
-						if ((check_hour>8)&&(check_hour<18))
-						{
-						dump_load_relay[2] = 1;
-						}
-						else
-						{
-						dump_load_relay[2] = 0;
-						}
-					}
-					// Are we exporting above 200W?				
+					// We use the estimated production. Whenever we 'stored' above 200W' This is a prediction of hourly consumption
+					// based on actual usage. At the 15 minute mark, it should be fairly accurate.		
 					if ((int)net_energy<-200)
 					{
 						// Turn on primary charger during solar hours
-						if ((check_hour>8)&&(check_hour<19))
+						if ((int)estimated_production_hour<-250)
 						{
-						dump_load_relay[1] = 1;
+							if ((check_hour>8)&&(check_hour<19))
+							{
+							dump_load_relay[1] = 1;
+							}
+							else
+							{
+							dump_load_relay[1] = 0;
+							}
 						}
-						else
+						// We make sure we have about 200W buffer (otherwise we wait for the energy to go negative to turn stuff off)
+						// if so, we can run the remaining stuff. The buffer between -60 and -200 is unfefined. Nothing happens here
+						if ((int)estimated_production_hour<-1500)
 						{
-						dump_load_relay[1] = 0;
+							// Turn on dehumidifier between 10AM and 3PM
+							if ((check_hour>9)&&(check_hour<15))
+							{
+							dump_load_relay[4] = 1;
+							}
+							else
+							{
+							dump_load_relay[4] = 0;
+							}
 						}
+						// Are we exporting above 600W?
+						if ((int)estimated_production_hour<-800)
+						{
+							// Turn on second charger between 10AM and 3PM
+							if ((check_hour>9)&&(check_hour<15))
+							{
+							dump_load_relay[3] = 1;
+							}
+							else
+							{
+							dump_load_relay[3] = 0;
+							}
+						}
+						//Are we exporting above 500W?
+						if ((int)estimated_production_hour<-600)
+						{
+							// Turn on dishwasher between 9AM and 6PM
+							if ((check_hour>9)&&(check_hour<18))
+							{
+							dump_load_relay[2] = 1;
+							}
+							else
+							{
+							dump_load_relay[2] = 0;
+							}
+						}
+					//
 					}
 					// Are we exporting above 70W?
 					if ((int)net_energy<-60)
 					{
 						// Turn Off Battery Inverter
 						dump_load_relay[0] = 0;
+						// Turn off heavy loads before running the next cycle
+						dump_load_relay[4] = 0;		// Dehumidifier
+						dump_load_relay[3] = 0;		// Charger_B
+						
 					}
 					// We are consuming...
 					if ((int)net_energy>10)
