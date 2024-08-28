@@ -777,9 +777,14 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// Since readings reset at the turn of the hour, we wait 15 minutes to average before runing any actions. The equipment remains on it's previous state for the hour before.
 			if (check_time>14)
 			{	
+					
+				//Export larger than 100W
+				if ((int)net_energy<-100)
+				{
+					//
 					// Turn on primary charger during solar hours (8AM to 6PM) when estimated export > 400W
 					// This will turn off automatically if we reach a stored energy level under 60W
-					if ((int)estimated_production_hour<-400)
+					if ((int)estimated_production_hour<-250)
 					{
 						if ((check_hour>8)&&(check_hour<19))
 						{
@@ -792,7 +797,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					//{
 					// Turn on dehumidifier between 10AM and 3PM When estimated export > 1000W
 					// Turn it off if estimated export is < 500W
-					if (((check_hour>9)&&(check_hour<15))&&((int)estimated_production_hour<-1000))
+					if ((check_hour>9)&&(check_hour<15)&&((int)estimated_production_hour<-1000))
 					{
 					dump_load_relay[4] = 1;
 					}
@@ -811,7 +816,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					//{
 					// Turn on dishwasher between 9AM and 6PM, When estimated export > 800W
 					// Turn it off if estimated export is < 100W
-					if (((check_hour>9)&&(check_hour<18))&&((int)estimated_production_hour<-800))
+					if ((check_hour>9)&&(check_hour<18)&&((int)estimated_production_hour<-700))
 					{
 					dump_load_relay[2] = 1;
 					}
@@ -829,7 +834,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					//{
 					// Turn on second charger between 10AM and 3PM When estimated export > 600W
 					// Turn it off if estimated export is < 200W
-					if (((check_hour>9)&&(check_hour<15))&&((int)estimated_production_hour<-600))
+					if ((check_hour>9)&&(check_hour<15)&&((int)estimated_production_hour<-600))
 					{
 					dump_load_relay[3] = 1;
 					}
@@ -844,26 +849,32 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					}
 					//}
 					
-					// Are we exporting above 70W?
-					if ((int)net_energy<-50)
+					// end
+				}
+				// Are we exporting above 70W?
+				else 
+				{
+					if ((int)net_energy>-50)
 					{
 						// Turn Off Battery Inverter
 						dump_load_relay[0] = 0;
 						// Turn off heavy loads before running the next cycle
-						//dump_load_relay[4] = 0;		// Dehumidifier
-						//dump_load_relay[3] = 0;		// Charger_B
+						dump_load_relay[4] = 0;		// Dehumidifier
+						dump_load_relay[3] = 0;		// Charger_B
 						dump_load_relay[1] = 0;		// Charger_A
 					}
-					// We are consuming...
-					if ((int)net_energy>0)
+					else if ((int)net_energy>0) //We are consuming
 					{
-						// Same as before, but now Dishwasher goes off and inverter comes on
-						dump_load_relay[0] = 1;
-						dump_load_relay[1] = 0;
-						//dump_load_relay[2] = 0;
-						//dump_load_relay[3] = 0;
-						//dump_load_relay[4] = 0;	
-					}
+					// Same as before, but now Dishwasher goes off and inverter comes on
+					dump_load_relay[0] = 1;
+					dump_load_relay[1] = 0;
+					dump_load_relay[2] = 0;
+					dump_load_relay[3] = 0;
+					dump_load_relay[4] = 0;	
+					}			
+				}
+				
+				
 				
 			// Now the calculations are done, let's update the outputs
 				// Because we can only send one request at a time, we run a circular loop to go through all the devices, one at a time.
