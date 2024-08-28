@@ -777,65 +777,71 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// Since readings reset at the turn of the hour, we wait 15 minutes to average before runing any actions. The equipment remains on it's previous state for the hour before.
 			if (check_time>14)
 			{	
-				
-					// We use the estimated production. Whenever we 'stored' above 200W' This is a prediction of hourly consumption
-					// based on actual usage. At the 15 minute mark, it should be fairly accurate.		
-					if ((int)net_energy<-200)
+					// Turn on primary charger during solar hours (8AM to 6PM) when estimated export > 400W
+					// This will turn off automatically if we reach a stored energy level under 60W
+					if ((int)estimated_production_hour<-400)
 					{
-						// Turn on primary charger during solar hours
-						if ((int)estimated_production_hour<-250)
+						if ((check_hour>8)&&(check_hour<19))
 						{
-							if ((check_hour>8)&&(check_hour<19))
-							{
-							dump_load_relay[1] = 1;
-							}
-							else
-							{
-							dump_load_relay[1] = 0;
-							}
+						dump_load_relay[1] = 1;
 						}
-						// We make sure we have about 200W buffer (otherwise we wait for the energy to go negative to turn stuff off)
-						// if so, we can run the remaining stuff. The buffer between -60 and -200 is unfefined. Nothing happens here
-						if ((int)estimated_production_hour<-1500)
-						{
-							// Turn on dehumidifier between 10AM and 3PM
-							if ((check_hour>9)&&(check_hour<15))
-							{
-							dump_load_relay[4] = 1;
-							}
-							else
-							{
-							dump_load_relay[4] = 0;
-							}
-						}
-						// Are we exporting above 600W?
-						if ((int)estimated_production_hour<-800)
-						{
-							// Turn on second charger between 10AM and 3PM
-							if ((check_hour>9)&&(check_hour<15))
-							{
-							dump_load_relay[3] = 1;
-							}
-							else
-							{
-							dump_load_relay[3] = 0;
-							}
-						}
-						//Are we exporting above 500W?
-						if ((int)estimated_production_hour<-600)
-						{
-							// Turn on dishwasher between 9AM and 6PM
-							if ((check_hour>9)&&(check_hour<18))
-							{
-							dump_load_relay[2] = 1;
-							}
-							else
-							{
-							dump_load_relay[2] = 0;
-							}
-						}
-					//
 					}
+					// We make sure we have about 200W buffer (otherwise we wait for the energy to go negative to turn stuff off)
+					// if so, we can run the remaining stuff. The buffer between -60 and -200 is unfefined. Nothing happens here
+					//if ((int)estimated_production_hour<-500)
+					//{
+						// Turn on dehumidifier between 10AM and 3PM When estimated export > 1300W
+						// Turn it off if estimated export is < 500W
+						if (((check_hour>9)&&(check_hour<15))&&((int)estimated_production_hour<-1300))
+						{
+						dump_load_relay[4] = 1;
+						}
+						else if ((int)estimated_production_hour<-500)
+						{
+							// Between -1300 and -500 do nothing
+						}
+						else
+						{
+						dump_load_relay[4] = 0;
+						}
+					//}
+					//Are we exporting above 800W?
+					//if ((int)estimated_production_hour<-100)
+					//{
+						// Turn on dishwasher between 9AM and 6PM, When estimated export > 800W
+						// Turn it off if estimated export is < 100W
+						if (((check_hour>9)&&(check_hour<18))&&((int)estimated_production_hour<-800))
+						{
+						dump_load_relay[2] = 1;
+						}
+						else if ((int)estimated_production_hour<-100)
+						{
+							// Between -800 and -100 do nothing
+						}
+						else
+						{
+						dump_load_relay[2] = 0;
+						}
+					//}
+					// Are we exporting above 600W?
+					//if ((int)estimated_production_hour<-600)
+					//{
+						// Turn on second charger between 10AM and 3PM When estimated export > 600W
+						// Turn it off if estimated export is < 200W
+						if (((check_hour>9)&&(check_hour<15))&&((int)estimated_production_hour<-600))
+						{
+						dump_load_relay[3] = 1;
+						}
+						else if ((int)estimated_production_hour<-200)
+						{
+							// Between -600 and -200 do nothing
+						}
+						else
+						{
+						dump_load_relay[3] = 0;
+						}
+					//}
+					
 					// Are we exporting above 70W?
 					if ((int)net_energy<-60)
 					{
@@ -847,7 +853,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						
 					}
 					// We are consuming...
-					if ((int)net_energy>10)
+					if ((int)net_energy<-10)
 					{
 						dump_load_relay[0] = 1;
 						dump_load_relay[1] = 0;
