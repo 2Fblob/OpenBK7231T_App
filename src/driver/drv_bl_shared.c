@@ -843,7 +843,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					//}
 					
 					// Are we exporting above 70W?
-					if ((int)net_energy<-60)
+					if ((int)net_energy<-50)
 					{
 						// Turn Off Battery Inverter
 						dump_load_relay[0] = 0;
