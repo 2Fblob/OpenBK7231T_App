@@ -790,56 +790,56 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					// if so, we can run the remaining stuff. The buffer between -60 and -200 is unfefined. Nothing happens here
 					//if ((int)estimated_production_hour<-500)
 					//{
-						// Turn on dehumidifier between 10AM and 3PM When estimated export > 1300W
-						// Turn it off if estimated export is < 500W
-						if (((check_hour>9)&&(check_hour<15))&&((int)estimated_production_hour<-1300))
-						{
-						dump_load_relay[4] = 1;
-						}
-						else if ((int)estimated_production_hour<-300)
-						{
-							// Between -1300 and -500 do nothing
-						}
-						else
-						{
-						dump_load_relay[4] = 0;
-						}
+					// Turn on dehumidifier between 10AM and 3PM When estimated export > 1300W
+					// Turn it off if estimated export is < 500W
+					if (((check_hour>9)&&(check_hour<15))&&((int)estimated_production_hour<-1300))
+					{
+					dump_load_relay[4] = 1;
+					}
+					else if ((int)estimated_production_hour<-300)
+					{
+						// Between -1300 and -500 do nothing
+					}
+					else
+					{
+					dump_load_relay[4] = 0;
+					}
 					//}
 					//Are we exporting above 800W?
 					//if ((int)estimated_production_hour<-100)
 					//{
-						// Turn on dishwasher between 9AM and 6PM, When estimated export > 800W
-						// Turn it off if estimated export is < 100W
-						if (((check_hour>9)&&(check_hour<18))&&((int)estimated_production_hour<-800))
-						{
-						dump_load_relay[2] = 1;
-						}
-						else if ((int)estimated_production_hour<-100)
-						{
-							// Between -800 and -100 do nothing
-						}
-						else
-						{
-						dump_load_relay[2] = 0;
-						}
+					// Turn on dishwasher between 9AM and 6PM, When estimated export > 800W
+					// Turn it off if estimated export is < 100W
+					if (((check_hour>9)&&(check_hour<18))&&((int)estimated_production_hour<-800))
+					{
+					dump_load_relay[2] = 1;
+					}
+					else if ((int)estimated_production_hour<-100)
+					{
+						// Between -800 and -100 do nothing
+					}
+					else
+					{
+					dump_load_relay[2] = 0;
+					}
 					//}
 					// Are we exporting above 600W?
 					//if ((int)estimated_production_hour<-600)
 					//{
-						// Turn on second charger between 10AM and 3PM When estimated export > 600W
-						// Turn it off if estimated export is < 200W
-						if (((check_hour>9)&&(check_hour<15))&&((int)estimated_production_hour<-600))
-						{
-						dump_load_relay[3] = 1;
-						}
-						else if ((int)estimated_production_hour<-200)
-						{
-							// Between -600 and -200 do nothing
-						}
-						else
-						{
-						dump_load_relay[3] = 0;
-						}
+					// Turn on second charger between 10AM and 3PM When estimated export > 600W
+					// Turn it off if estimated export is < 200W
+					if (((check_hour>9)&&(check_hour<15))&&((int)estimated_production_hour<-600))
+					{
+					dump_load_relay[3] = 1;
+					}
+					else if ((int)estimated_production_hour<-200)
+					{
+						// Between -600 and -200 do nothing
+					}
+					else
+					{
+					dump_load_relay[3] = 0;
+					}
 					//}
 					
 					// Are we exporting above 70W?
@@ -850,11 +850,13 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						// Turn off heavy loads before running the next cycle
 						dump_load_relay[4] = 0;		// Dehumidifier
 						dump_load_relay[3] = 0;		// Charger_B
+						dump_load_relay[1] = 0;		// Charger_A
 						
 					}
 					// We are consuming...
 					if ((int)net_energy>0)
 					{
+						// Same as before, but now Dishwasher goes off and inverter comes on
 						dump_load_relay[0] = 1;
 						dump_load_relay[1] = 0;
 						dump_load_relay[2] = 0;
