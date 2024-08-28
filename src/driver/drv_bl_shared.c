@@ -790,19 +790,20 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					// if so, we can run the remaining stuff. The buffer between -60 and -200 is unfefined. Nothing happens here
 					//if ((int)estimated_production_hour<-500)
 					//{
-					// Turn on dehumidifier between 10AM and 3PM When estimated export > 1300W
+					// Turn on dehumidifier between 10AM and 3PM When estimated export > 1000W
 					// Turn it off if estimated export is < 500W
-					if (((check_hour>9)&&(check_hour<15))&&((int)estimated_production_hour<-1300))
+					if (((check_hour>9)&&(check_hour<15))&&((int)estimated_production_hour<-1000))
 					{
 					dump_load_relay[4] = 1;
 					}
-					else if ((int)estimated_production_hour<-300)
+					else if ((int)estimated_production_hour>-300)
 					{
+						dump_load_relay[4] = 0;
 						// Between -1300 and -500 do nothing
 					}
 					else
 					{
-					dump_load_relay[4] = 0;
+					// Between -1000 and -300 do nothing
 					}
 					//}
 					//Are we exporting above 800W?
@@ -814,13 +815,13 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					{
 					dump_load_relay[2] = 1;
 					}
-					else if ((int)estimated_production_hour<-100)
+					else if ((int)estimated_production_hour>-100)
 					{
-						// Between -800 and -100 do nothing
+						dump_load_relay[2] = 0;
 					}
 					else
 					{
-					dump_load_relay[2] = 0;
+					// Between -800 and -100 do nothing
 					}
 					//}
 					// Are we exporting above 600W?
@@ -832,13 +833,14 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					{
 					dump_load_relay[3] = 1;
 					}
-					else if ((int)estimated_production_hour<-200)
+					else if ((int)estimated_production_hour>-200)
 					{
 						// Between -600 and -200 do nothing
+						dump_load_relay[3] = 0;
 					}
 					else
 					{
-					dump_load_relay[3] = 0;
+					// Between -600 and -200 do nothing
 					}
 					//}
 					
@@ -848,10 +850,9 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						// Turn Off Battery Inverter
 						dump_load_relay[0] = 0;
 						// Turn off heavy loads before running the next cycle
-						dump_load_relay[4] = 0;		// Dehumidifier
-						dump_load_relay[3] = 0;		// Charger_B
+						//dump_load_relay[4] = 0;		// Dehumidifier
+						//dump_load_relay[3] = 0;		// Charger_B
 						dump_load_relay[1] = 0;		// Charger_A
-						
 					}
 					// We are consuming...
 					if ((int)net_energy>0)
@@ -859,9 +860,9 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						// Same as before, but now Dishwasher goes off and inverter comes on
 						dump_load_relay[0] = 1;
 						dump_load_relay[1] = 0;
-						dump_load_relay[2] = 0;
-						dump_load_relay[3] = 0;
-						dump_load_relay[4] = 0;	
+						//dump_load_relay[2] = 0;
+						//dump_load_relay[3] = 0;
+						//dump_load_relay[4] = 0;	
 					}
 				
 			// Now the calculations are done, let's update the outputs
