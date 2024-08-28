@@ -796,7 +796,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						{
 						dump_load_relay[4] = 1;
 						}
-						else if ((int)estimated_production_hour<-500)
+						else if ((int)estimated_production_hour<-300)
 						{
 							// Between -1300 and -500 do nothing
 						}
@@ -853,7 +853,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						
 					}
 					// We are consuming...
-					if ((int)net_energy<-10)
+					if ((int)net_energy>0)
 					{
 						dump_load_relay[0] = 1;
 						dump_load_relay[1] = 0;
