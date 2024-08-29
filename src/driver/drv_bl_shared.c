@@ -325,10 +325,10 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 				time_on, (dump_load_hysteresis-lastsync));*/
 		// Print Status of automation outputs)
 		poststr(request," <hr> <h4>Current system status: </h4></font>");
-		hprintf255(request,"<font size=2>Storage Inverter......... %i<br></font>", dump_load_relay[0]); 
-		hprintf255(request,"<font size=2>Storage Charger A........ %i<br></font>", dump_load_relay[1]); 
-		hprintf255(request,"<font size=2>Storage Charger B........ %i<br></font>", dump_load_relay[3]); 
-		hprintf255(request,"<font size=2>Washer/Dishwasher........ %i<br></font>", dump_load_relay[2]); 
+		hprintf255(request,"<font size=2>Storage Inverter............. %i<br></font>", dump_load_relay[0]); 
+		hprintf255(request,"<font size=2>Storage Charger A.......... %i<br></font>", dump_load_relay[1]); 
+		hprintf255(request,"<font size=2>Storage Charger B.......... %i<br></font>", dump_load_relay[3]); 
+		hprintf255(request,"<font size=2>Washer/Dishwasher......... %i<br></font>", dump_load_relay[2]); 
 		hprintf255(request,"<font size=2>Basement Dehumidifier.... %i<br></font>", dump_load_relay[4]); 
 		//----------------------
 		//hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
