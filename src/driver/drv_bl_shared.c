@@ -17,7 +17,7 @@ int estimated_energy_hour = 0;
 int import_buffer = 0;
 int export_buffer = 0;
 // used for hourly averages time checking
-check_time_estimate = 59;
+int check_time_estimate = 59;
 // The number of devices the automation controls, based on power level 
 #define dump_load_relay_number 5
 // The array where we store the power state for each of these devices
