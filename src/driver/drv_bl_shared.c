@@ -834,7 +834,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
  				const char *ip_middle = "/cm?cmnd=Power%20";
 				//const char *ip_end = ", 0";
 				sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]/*, ip_end*/);
-				CMD_ExecuteCommand(output_command, 0);
+				CMD_ExecuteCommand("output_command", 0);
 
 			   
 		            output_index++;
