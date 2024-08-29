@@ -328,7 +328,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Storage Inverter............. <b>%i</b><br></font>", dump_load_relay[0]); 
 		hprintf255(request,"<font size=2>- Storage Charger A.......... <b>%i</b><br></font>", dump_load_relay[1]); 
 		hprintf255(request,"<font size=2>- Storage Charger B.......... <b>%i</b><br></font>", dump_load_relay[3]); 
-		hprintf255(request,"<font size=2>- Washer/Dishwasher......... %i<br></font>", dump_load_relay[2]); 
+		hprintf255(request,"<font size=2>- Washer/Dishwasher......... <b>%i</b><br></font>", dump_load_relay[2]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier.... <b>%i</b><br></font>", dump_load_relay[4]); 
 		//----------------------
 		//hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
