@@ -9,10 +9,15 @@ float estimated_production_hour = 0;
 static int mtqq_total_net_export = 0;
 static int estimated_energy_start = 0;
 static int last_run_calc = 0;
+int current_minute = 0;
+int last_minute = 0;
+int output_index = 0;
 // The number of devices the automation controls, based on power level 
 #define dump_load_relay_number 5
 // The array where we store the power state for each of these devices
 static int dump_load_relay[dump_load_relay_number] = {0};
+// The array where we store the ip address of these devices 
+static int dump_load_relay_ip[5] = {23, 22, 29, 24, 27};
 int cmd_ctrl = dump_load_relay_number;
 
 #include "drv_bl_shared.h"
@@ -765,23 +770,15 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 
 			//The relay is updated ever x numer of minutes as defined on 'dump_load_hysteresis'
 			
-			if (lastsync >= dump_load_hysteresis)
-			{
-								
-				// save the last time the loop was run
-				lastsync = 0;
-
-				
-				// Are we exporting enough? If so, turn the relay on
-				//if (((int)net_energy>(int)dump_load_on))
-				
-				//------------------------------------------------------------------------------
+			
+			// Here we update the variables based on our energyu value
+			//------------------------------------------------------------------------------
 			// Since readings reset at the turn of the hour, we wait 15 minutes to average before runing any actions. The equipment remains on it's previous state for the hour before.
-			if (check_time>14)
-			{		
+			//if (check_time>14)
+			//{		
 			
 			// **Storage Inverter Control**
-			if (net_energy > 0) {
+			if (net_energy > 10) {
 			    dump_load_relay[0] = 1; // Turn on storage inverter
 			} else if (net_energy < -50) {
 			    dump_load_relay[0] = 0; // Turn off storage inverter
@@ -822,12 +819,35 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			} else {
 			    dump_load_relay[4] = (net_energy > -400) ? 0 : dump_load_relay[4]; // Outside hours or net_energy condition
 			}
+
+			// Now we do an update of the outputs once a minute
+		        current_minute = NTP_GetMinute();
+
+        		if (current_minute > 14 && current_minute != last_minute) {
+		            last_minute = current_minute;
+
+				char output_command[40] = "";
+				const char *ip_start = "SendGet http://192.168.5.";
+ 				const char *ip_middle = "/cm?cmnd=Power%20";
+				const char *ip_end = ", 0";
+				sprintf(output_command, "%s%s%s%s", ip_start, dump_load_relay_ip[index], ip_middle, dump_load_relay[index], ip_end);
+				CMD_ExecuteCommand("output_command", 0);
+
+			    //do something 
+		            dump_load_relay[index];
+		            index++;
+		
+		            if (index >= dump_load_relay_number) {
+		                index = 0; // Reset index after reading all positions
+		            }
+			}
+
 				
 				
 			// Now the calculations are done, let's update the outputs
 				// Because we can only send one request at a time, we run a circular loop to go through all the devices, one at a time.
 				
-				if (cmd_ctrl==dump_load_relay_number)
+				/*if (cmd_ctrl==dump_load_relay_number)
 					{
 						// The inverter is first. Based on the variable status we turn it on or off.
 						cmd_ctrl = 0;
@@ -889,12 +909,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 								CMD_ExecuteCommand("SendGet http://192.168.5.27/cm?cmnd=Power%20off", 0);
 								}
 							}
-						}
+						}*/
 			//--------------------------------------------------------------
 		
-			}
-				// End of consumption / Export Loops	
-			}			
+			//}
+			// End of consumption / Export Loops			
 			//-------------------------------------------------------------------------------------------------------------------------------------------------
 			} // end of negative flag loop
 
