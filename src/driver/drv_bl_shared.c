@@ -266,7 +266,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	}
 	// Calculate hourly rate	
 	check_time_estimate = (60 - NTP_GetMinute());
-	(int)estimated_energy_hour = ((int)net_energy+((((int)sensors[OBK_POWER].lastReading)*(int)check_time_estimate)/60));
+	estimated_energy_hour = ((int)net_energy+((((int)sensors[OBK_POWER].lastReading)*(int)check_time_estimate)/60));
 	poststr(request, "</tr></table><br>");
 	poststr(request, "Totals: <br>");
 	hprintf255(request, "Consumption: %iW, Export: %iW (Metering) <br>", total_consumption, total_export);
