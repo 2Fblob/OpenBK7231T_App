@@ -260,7 +260,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	{
 	last_run_calc=check_time;
 
-	check_time_estimate = (60 - NTP_GetMinute());
+	
 	// Calculate Import / Export
 	//export_buffer = netmetering;
 	import_buffer = 0;
@@ -271,6 +271,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	//estimated_energy_hour = ((current_hour_consumption*60)/(check_time-estimated_energy_start));
 	}
 	// Calculate hourly rate	
+	check_time_estimate = (60 - NTP_GetMinute());
 	poststr(request, "</tr></table><br>");
 	poststr(request, "Totals: <br>");
 	hprintf255(request, "Consumption: %iW, Export: %iW (Metering) <br>", total_consumption, total_export);
