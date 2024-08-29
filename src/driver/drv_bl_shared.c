@@ -265,7 +265,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	//export_buffer = netmetering;
 	import_buffer = 0;
 	//estimated_energy_hour = export_buffer+(check_time_estimate*((sensors[OBK_POWER].lastReading)/60))	
-	estimated_energy_hour = ((current_hour_consumption*60)/(check_time-estimated_energy_start));
+	//estimated_energy_hour = (((int)(sensors[OBK_POWER].lastReading)*60)/(check_time-estimated_energy_start));
+	estimated_energy_hour =  (net_energy+(((int)(sensors[OBK_POWER].lastReading)*check_time_estimate)/60));
 	}
 	//estimated_energy_hour = ((current_hour_consumption*60)/(check_time-estimated_energy_start));
 	}
