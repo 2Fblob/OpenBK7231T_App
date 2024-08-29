@@ -5,13 +5,19 @@ static int export_matrix[24] = {0};
 static int net_matrix[24] = {0};
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
-float estimated_production_hour = 0; 
+//float estimated_production_hour = 0; 
 static int mtqq_total_net_export = 0;
 static int estimated_energy_start = 0;
 static int last_run_calc = 0;
 int current_minute = 0;
 int last_minute = 0;
 int output_index = 0;
+//int estimated_energy_hour = 0;
+// used to calculate look ahead figures for the hour
+int import_buffer = 0;
+int export_buffer = 0;
+// used for hourly averages time checking
+check_time_estimate = 59;
 // The number of devices the automation controls, based on power level 
 #define dump_load_relay_number 5
 // The array where we store the power state for each of these devices
@@ -253,14 +259,22 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	if (((check_time-estimated_energy_start)>0)&&(!(last_run_calc==check_time)))
 	{
 	last_run_calc=check_time;
-	estimated_production_hour = ((current_hour_consumption*60)/(check_time-estimated_energy_start));
+
+	check_time_estimate = (60 - NTP_GetMinute());
+	// Calculate Import / Export
+	export_buffer = netmetering;
+	import_buffer = 0;
+	//estimated_energy_hour = export_buffer+(check_time_estimate*((sensors[OBK_POWER].lastReading)/60))	
+	estimated_energy_hour = ((current_hour_consumption*60)/(check_time-estimated_energy_start));
+	}
+	//estimated_energy_hour = ((current_hour_consumption*60)/(check_time-estimated_energy_start));
 	}
 	// Calculate hourly rate	
 	poststr(request, "</tr></table><br>");
 	poststr(request, "Totals: <br>");
 	hprintf255(request, "Consumption: %iW, Export: %iW (Metering) <br>", total_consumption, total_export);
 	hprintf255(request, "Consumption: %iW, Export: %iW (Net Metering) <br>", total_net_consumption, total_net_export);
-	hprintf255(request, "Average Hourly equivalent: %iW <br>", (int)estimated_production_hour);
+	hprintf255(request, "Estimated Hourly Export/Consumption: %iW <br>", (int)estimated_energy_hour);
 	// This gives me an estimate based on what I am producing now.
 	//hprintf255(request, "Debug: Averaging Period: %imin. <br>", (check_time-estimated_energy_start));
 	//hprintf255(request, "Estimated energy this hour: %iW <br>", (int)estimated_production_hour);
@@ -786,7 +800,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			
 			// **Primary Charger Control**
 			if (check_hour >= 9 && check_hour < 17) {
-			    if (net_energy < -150 && estimated_production_hour < -250) {
+			    if (net_energy < -150 && estimated_energy_hour < -250) {
 			        dump_load_relay[1] = 1; // Set primary charger to 1
 			    } else {
 			        dump_load_relay[1] = 0; // Set primary charger to 0
@@ -797,7 +811,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			
 			// **Dishwasher Control**
 			if (check_hour >= 9 && check_hour < 17) {
-			    if (estimated_production_hour < -500) {
+			    if (estimated_energy_hour < -500) {
 			        dump_load_relay[2] = 1; // Set dishwasher to 1
 			    } else {
 			        dump_load_relay[2] = 0; // Set dishwasher to 0
@@ -808,14 +822,14 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 
 			// **Secondary Charger Control**
 			if (check_hour >= 11 && check_hour <= 15) {
-			    dump_load_relay[3] = (estimated_production_hour < -500) ? 1 : 0; // Set secondary charger
+			    dump_load_relay[3] = (estimated_energy_hour < -500) ? 1 : 0; // Set secondary charger
 			} else {
 			    dump_load_relay[3] = (net_energy > -200) ? 0 : dump_load_relay[3]; // Outside hours or net_energy condition
 			}
 
 			// **Basement dehumidifier control**
 			if (check_hour >= 11 && check_hour <= 15) {
-			    dump_load_relay[4] = (estimated_production_hour < -600) ? 1 : 0; // Set basement dehumidifier
+			    dump_load_relay[4] = (estimated_energy_hour < -600) ? 1 : 0; // Set basement dehumidifier
 			} else {
 			    dump_load_relay[4] = (net_energy > -400) ? 0 : dump_load_relay[4]; // Outside hours or net_energy condition
 			}
@@ -823,98 +837,22 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// Now we do an update of the outputs once a minute
 		        current_minute = NTP_GetMinute();
 
-        		if (current_minute > 14 && current_minute != last_minute) {
-		            last_minute = current_minute;
-
-				 
-			//do something 
-		         //dump_load_relay[output_index];
-				char output_command[40] = "";
-				const char *ip_start = "SendGet http://192.168.5.";
- 				const char *ip_middle = "/cm?cmnd=Power%20";
-				//const char *ip_end = ", 0";
-				sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]/*, ip_end*/);
-				CMD_ExecuteCommand("output_command", 0);
-
-			   
+        		if (current_minute > 14 && current_minute != last_minute) 
+			{
+		        last_minute = current_minute;
+			char output_command[40] = "";
+			const char *ip_start = "SendGet http://192.168.5.";
+ 			const char *ip_middle = "/cm?cmnd=Power%20";
+			sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
+			CMD_ExecuteCommand(output_command, 0);
+			// Increase the index
 		            output_index++;
 		
-		            if (output_index >= dump_load_relay_number) {
-		                output_index = 0; // Reset index after reading all positions
+		            // Reset index after reading all positions
+			    if (output_index >= dump_load_relay_number) {
+		                output_index = 0; 
 		            }
 			}
-
-				
-				
-			// Now the calculations are done, let's update the outputs
-				// Because we can only send one request at a time, we run a circular loop to go through all the devices, one at a time.
-				
-				/*if (cmd_ctrl==dump_load_relay_number)
-					{
-						// The inverter is first. Based on the variable status we turn it on or off.
-						cmd_ctrl = 0;
-						if (dump_load_relay[0])
-							{
-							// We may need to tidy this up...
-							CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20on", 0);
-							}
-						else
-							{
-							CMD_ExecuteCommand("SendGet http://192.168.5.23/cm?cmnd=Power%20off", 0);
-							}
-						
-					}
-				else
-					{
-						cmd_ctrl++;
-						if (cmd_ctrl == 1)
-						{
-							if(dump_load_relay[1])
-								{
-								CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20on", 0);
-								}
-							else
-								{
-								CMD_ExecuteCommand("SendGet http://192.168.5.22/cm?cmnd=Power%20off", 0);
-								}
-						}
-						else if (cmd_ctrl == 2)
-							{
-							if(dump_load_relay[2])
-								{
-								CMD_ExecuteCommand("SendGet http://192.168.5.29/cm?cmnd=Power%20on", 0);
-								}
-							else
-								{
-								CMD_ExecuteCommand("SendGet http://192.168.5.29/cm?cmnd=Power%20off", 0);
-								}
-							}
-						else if (cmd_ctrl == 3)
-							{
-							if(dump_load_relay[3])
-								{
-								CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20on", 0);
-								}
-							else
-								{
-								CMD_ExecuteCommand("SendGet http://192.168.5.24/cm?cmnd=Power%20off", 0);
-								}
-							}
-						else if (cmd_ctrl == 4)
-							{
-							if(dump_load_relay[4])
-								{
-								CMD_ExecuteCommand("SendGet http://192.168.5.27/cm?cmnd=Power%20on", 0);
-								}
-							else
-								{
-								CMD_ExecuteCommand("SendGet http://192.168.5.27/cm?cmnd=Power%20off", 0);
-								}
-							}
-						}*/
-			//--------------------------------------------------------------
-		
-			//}
 			// End of consumption / Export Loops			
 			//-------------------------------------------------------------------------------------------------------------------------------------------------
 			} // end of negative flag loop
