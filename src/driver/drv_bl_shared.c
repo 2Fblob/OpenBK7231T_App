@@ -788,7 +788,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 			
 			// **Primary Charger Control**
-			if (Check_hour >= 9 && Check_hour < 17) {
+			if (check_hour >= 9 && check_hour < 17) {
 			    if (net_energy < -150 && estimated_production_hour < -250) {
 			        dump_load_relay[1] = 1; // Set primary charger to 1
 			    } else {
@@ -799,7 +799,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 			
 			// **Dishwasher Control**
-			if (Check_hour >= 9 && Check_hour < 17) {
+			if (check_hour >= 9 && check_hour < 17) {
 			    if (estimated_production_hour < -500) {
 			        dump_load_relay[2] = 1; // Set dishwasher to 1
 			    } else {
@@ -810,14 +810,14 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 
 			// **Secondary Charger Control**
-			if (Check_hour >= 11 && Check_hour <= 15) {
+			if (check_hour >= 11 && check_hour <= 15) {
 			    dump_load_relay[3] = (estimated_production_hour < -500) ? 1 : 0; // Set secondary charger
 			} else {
 			    dump_load_relay[3] = (net_energy > -200) ? 0 : dump_load_relay[3]; // Outside hours or net_energy condition
 			}
 
 			// **Basement dehumidifier control**
-			if (Check_hour >= 11 && Check_hour <= 15) {
+			if (check_hour >= 11 && check_hour <= 15) {
 			    dump_load_relay[4] = (estimated_production_hour < -600) ? 1 : 0; // Set basement dehumidifier
 			} else {
 			    dump_load_relay[4] = (net_energy > -400) ? 0 : dump_load_relay[4]; // Outside hours or net_energy condition
