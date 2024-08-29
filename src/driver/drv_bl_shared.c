@@ -791,7 +791,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    dump_load_relay[0] = 0; // Storage inverter OFF
 			}
 
-			if (check_time>14) && (net_energy <-200)
+			if ((check_time>14)&&(net_energy<-200))
 			{				
 			// ** Primary charger control **
 			if ((Check_hour >= 9 && Check_hour < 17) && (net_energy <= -200) && (estimated_energy_hour <= -500)) {
