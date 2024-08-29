@@ -275,7 +275,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	poststr(request, "Totals: <br>");
 	hprintf255(request, "Consumption: %iW, Export: %iW (Metering) <br>", total_consumption, total_export);
 	hprintf255(request, "Consumption: %iW, Export: %iW (Net Metering) <br>", total_net_consumption, total_net_export);
-	hprintf255(request, "Estimated Hourly Export/Consumption: %iW <br>", (int)net_energy, ((int)sensors[OBK_POWER].lastReading),(int)check_time_estimate, (int)estimated_energy_hour);
+	hprintf255(request, "Estimated Hourly Export/Consumption: %iW %iW %iW %iW <br>", (int)net_energy, ((int)sensors[OBK_POWER].lastReading),(int)check_time_estimate, (int)estimated_energy_hour);
 	// This gives me an estimate based on what I am producing now.
 	//hprintf255(request, "Debug: Averaging Period: %imin. <br>", (check_time-estimated_energy_start));
 	//hprintf255(request, "Estimated energy this hour: %iW <br>", (int)estimated_production_hour);
