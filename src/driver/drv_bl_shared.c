@@ -826,19 +826,21 @@ void BL_ProcessUpdate(float voltage, float current, float power,
         		if (current_minute > 14 && current_minute != last_minute) {
 		            last_minute = current_minute;
 
+				 
+			//do something 
+		         dump_load_relay[output_index];
 				char output_command[40] = "";
 				const char *ip_start = "SendGet http://192.168.5.";
  				const char *ip_middle = "/cm?cmnd=Power%20";
 				const char *ip_end = ", 0";
-				sprintf(output_command, "%s%s%s%s", ip_start, dump_load_relay_ip[index], ip_middle, dump_load_relay[index], ip_end);
+				sprintf(output_command, "%s%s%s%s", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index], ip_end);
 				CMD_ExecuteCommand("output_command", 0);
 
-			    //do something 
-		            dump_load_relay[index];
-		            index++;
+			   
+		            output_index++;
 		
-		            if (index >= dump_load_relay_number) {
-		                index = 0; // Reset index after reading all positions
+		            if (output_index >= dump_load_relay_number) {
+		                output_index = 0; // Reset index after reading all positions
 		            }
 			}
 
