@@ -12,7 +12,7 @@ static int last_run_calc = 0;
 int current_minute = 0;
 int last_minute = 0;
 int output_index = 0;
-//int estimated_energy_hour = 0;
+int estimated_energy_hour = 0;
 // used to calculate look ahead figures for the hour
 int import_buffer = 0;
 int export_buffer = 0;
@@ -247,7 +247,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		if (net_matrix[q]<0)	{total_net_export -= net_matrix[q];}
 		else	{total_net_consumption += net_matrix[q];}
 		// -----------------------------------------------------
-		}
+		//} commented?
 	// Add the values for this metering period (not yet saved)
 	if (net_energy<0) {total_net_export -= net_energy;}
 	else {total_net_consumption += net_energy;}
@@ -262,7 +262,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 
 	check_time_estimate = (60 - NTP_GetMinute());
 	// Calculate Import / Export
-	export_buffer = netmetering;
+	//export_buffer = netmetering;
 	import_buffer = 0;
 	//estimated_energy_hour = export_buffer+(check_time_estimate*((sensors[OBK_POWER].lastReading)/60))	
 	estimated_energy_hour = ((current_hour_consumption*60)/(check_time-estimated_energy_start));
