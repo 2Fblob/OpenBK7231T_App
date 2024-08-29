@@ -244,8 +244,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		total_consumption += consumption_matrix[q];
 		total_export += export_matrix[q];	
 		// Calculated Net Values
-		if (net_matrix[q]<0)	{total_net_export -= net_matrix[q];}
-		else	{total_net_consumption += net_matrix[q];}
+		
+		if (net_matrix[q]<0)	{total_net_export = 0; total_net_export -= net_matrix[q];}
+		else	{total_net_consumption = 0; total_net_consumption += net_matrix[q];}
 		// -----------------------------------------------------
 		//} commented?
 	// Add the values for this metering period (not yet saved)
@@ -272,13 +273,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	hprintf255(request, "Consumption: %iW, Export: %iW (Metering) <br>", total_consumption, total_export);
 	hprintf255(request, "Consumption: %iW, Export: %iW (Net Metering) <br>", total_net_consumption, total_net_export);
 	hprintf255(request, "Hourly Estimation: %iW <br>", (int)estimated_energy_hour);
-	// This gives me an estimate based on what I am producing now.
-	//hprintf255(request, "Debug: Averaging Period: %imin. <br>", (check_time-estimated_energy_start));
-	//hprintf255(request, "Estimated energy this hour: %iW <br>", (int)estimated_production_hour);
-	/*if (estimated_production_hour>max_export)
-	{
-		
-	}*/
+	
 	//--------------------------------------------------------------------------------------------------
 		mtqq_total_net_export = net_matrix[check_hour];
 	//--------------------------------------------------------------------------------------------------
