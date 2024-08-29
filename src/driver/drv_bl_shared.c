@@ -271,9 +271,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	estimated_energy_hour = ((int)net_energy+((((int)sensors[OBK_POWER].lastReading)*(int)check_time_estimate)/60));
 	poststr(request, "</tr></table><br>");
 	poststr(request, "<h4>Totals:</h4>");
-	hprintf255(request, "<font size=2>- Consumption: %iW, Export: %iW (Metering) <br></font>", total_consumption, total_export);
-	hprintf255(request, "<font size=2>- Consumption: %iW, Export: %iW (Net Metering) <br></font>", total_net_consumption, total_net_export);
-	hprintf255(request, "<font size=2>- Hourly Estimation: %iW <br></font>", (int)estimated_energy_hour);
+	hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Metering) <br></font>", total_consumption, total_export);
+	hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Net Metering) <br></font>", total_net_consumption, total_net_export);
+	hprintf255(request, "<font size=2>- Hour Estimation: <b>%iW</b> <br></font>", (int)estimated_energy_hour);
 	
 	//--------------------------------------------------------------------------------------------------
 		mtqq_total_net_export = net_matrix[check_hour];
@@ -325,11 +325,11 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 				time_on, (dump_load_hysteresis-lastsync));*/
 		// Print Status of automation outputs)
 		poststr(request," <hr> <h4>Current system status: </h4></font>");
-		hprintf255(request,"<font size=2>Storage Inverter............. %i<br></font>", dump_load_relay[0]); 
-		hprintf255(request,"<font size=2>Storage Charger A.......... %i<br></font>", dump_load_relay[1]); 
-		hprintf255(request,"<font size=2>Storage Charger B.......... %i<br></font>", dump_load_relay[3]); 
-		hprintf255(request,"<font size=2>Washer/Dishwasher......... %i<br></font>", dump_load_relay[2]); 
-		hprintf255(request,"<font size=2>Basement Dehumidifier.... %i<br></font>", dump_load_relay[4]); 
+		hprintf255(request,"<font size=2>- Storage Inverter............. <b>%i</b><br></font>", dump_load_relay[0]); 
+		hprintf255(request,"<font size=2>- Storage Charger A.......... <b>%i</b><br></font>", dump_load_relay[1]); 
+		hprintf255(request,"<font size=2>- Storage Charger B.......... <b>%i</b><br></font>", dump_load_relay[3]); 
+		hprintf255(request,"<font size=2>- Washer/Dishwasher......... %i<br></font>", dump_load_relay[2]); 
+		hprintf255(request,"<font size=2>- Basement Dehumidifier.... <b>%i</b><br></font>", dump_load_relay[4]); 
 		//----------------------
 		//hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
 		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
