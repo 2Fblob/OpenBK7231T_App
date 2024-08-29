@@ -270,9 +270,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	estimated_energy_hour = ((int)net_energy+((((int)sensors[OBK_POWER].lastReading)*(int)check_time_estimate)/60));
 	poststr(request, "</tr></table><br>");
 	poststr(request, "Totals: <br>");
-	hprintf255(request, "Consumption: %iW, Export: %iW (Metering) <br>", total_consumption, total_export);
-	hprintf255(request, "Consumption: %iW, Export: %iW (Net Metering) <br>", total_net_consumption, total_net_export);
-	hprintf255(request, "Hourly Estimation: %iW <br>", (int)estimated_energy_hour);
+	hprintf255(request, "<font size=1>- Consumption: %iW, Export: %iW (Metering) <br></font>", total_consumption, total_export);
+	hprintf255(request, "<font size=1>- Consumption: %iW, Export: %iW (Net Metering) <br></font>", total_net_consumption, total_net_export);
+	hprintf255(request, "<font size=1>- Hourly Estimation: %iW <br></font>", (int)estimated_energy_hour);
 	
 	//--------------------------------------------------------------------------------------------------
 		mtqq_total_net_export = net_matrix[check_hour];
