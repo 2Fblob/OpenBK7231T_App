@@ -219,7 +219,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	int total_export = 0;
 	int current_hour_consumption = 0;
 	
-		
+	if (NTP_IsTimeSynced())
+	{
 	for (int q=0; q<=check_hour; q++)
 		{
 		if (q == check_hour)
@@ -303,13 +304,14 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	}*/
 	
 	/********************************************************************************************************************/
-	hprintf255(request, "<br>");
+	/*hprintf255(request, "<br>");
 	if(DRV_IsRunning("NTP")==false) {
 		hprintf255(request,"NTP driver is not started, daily energy stats disbled.");
 	} else if (!NTP_IsTimeSynced()) {
 		hprintf255(request,"Daily energy stats awaiting NTP driver to sync real time...");
 	}
-	hprintf255(request, "</h5>");
+	hprintf255(request, "</h5>");*/
+	}
 	/********************************************************************************************************************/
     	if (energyCounterStatsEnable == true)
 	{	
