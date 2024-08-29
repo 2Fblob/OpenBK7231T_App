@@ -767,120 +767,61 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			
 			if (lastsync >= dump_load_hysteresis)
 			{
+								
 				// save the last time the loop was run
 				lastsync = 0;
-		
+
+				
 				// Are we exporting enough? If so, turn the relay on
 				//if (((int)net_energy>(int)dump_load_on))
 				
 				//------------------------------------------------------------------------------
 			// Since readings reset at the turn of the hour, we wait 15 minutes to average before runing any actions. The equipment remains on it's previous state for the hour before.
 			if (check_time>14)
-			{	//if (value >= -50 && value <= 0) {
-					
-				if ((int)net_energy>0)
-				{
-					// Same as before, but now Dishwasher goes off and inverter comes on
-					dump_load_relay[0] = 1;
-					dump_load_relay[1] = 0;
-					dump_load_relay[2] = 0;
-					dump_load_relay[3] = 0;
-					dump_load_relay[4] = 0;	
-				}			
-				//Export larger than 50W but snaller than 100W
-                                //    if (value >= -100 && value <= -50) {  				
-                                else if (((int)net_energy>-99)&&((int)net_energy<-50))
-					{
-						// Turn Off Battery Inverter
-						dump_load_relay[0] = 0;
-						// Turn off heavy loads before running the next cycle
-						dump_load_relay[4] = 0;		// Dehumidifier
-						dump_load_relay[3] = 0;		// Charger_B
-						dump_load_relay[1] = 0;		// Charger_A
-					}
-				else // Anything below -100
-				{
-					//
-					// Turn on primary charger during solar hours (8AM to 6PM) when estimated export > 400W
-					// This will turn off automatically if we reach a stored energy level under 60W
-					if ((int)estimated_production_hour<-250)
-					{
-						if ((check_hour>8)&&(check_hour<19))
-						{
-						dump_load_relay[1] = 1;
-						}
-					}
+			{		
+			
+			// **Storage Inverter Control**
+			if (net_energy > 0) {
+			    dump_load_relay[0] = 1; // Turn on storage inverter
+			} else if (net_energy < -50) {
+			    dump_load_relay[0] = 0; // Turn off storage inverter
+			}
+			
+			// **Primary Charger Control**
+			if (Check_hour >= 9 && Check_hour < 17) {
+			    if (net_energy < -150 && estimated_production_hour < -250) {
+			        dump_load_relay[1] = 1; // Set primary charger to 1
+			    } else {
+			        dump_load_relay[1] = 0; // Set primary charger to 0
+			    }
+			} else {
+			    dump_load_relay[1] = 0; // Set primary charger to 0 outside of hours
+			}
+			
+			// **Dishwasher Control**
+			if (Check_hour >= 9 && Check_hour < 17) {
+			    if (estimated_production_hour < -500) {
+			        dump_load_relay[2] = 1; // Set dishwasher to 1
+			    } else {
+			        dump_load_relay[2] = 0; // Set dishwasher to 0
+			    }
+			} else if (net_energy >= -100) {
+			    dump_load_relay[2] = 0; // Set dishwasher to 0 outside of hours or if net_energy is not lower than -100
+			}
 
-					if ((check_hour >= 8 && check_hour <= 19) && (estimated_production_hour < -250)) 
-					{
-                                        dump_load_relay[1] = 1;
-                                        } 
-					else if (net_energy > -50 || !(check_hour >= 8 && check_hour <= 19)) 
-					{
-                                        dump_load_relay[1] = 0;
-					}
-					// We make sure we have about 200W buffer (otherwise we wait for the energy to go negative to turn stuff off)
-					// if so, we can run the remaining stuff. The buffer between -60 and -200 is unfefined. Nothing happens here
-					//if ((int)estimated_production_hour<-500)
-					//{
-					
-					// Turn on dehumidifier between 10AM and 3PM When estimated export > 1000W and off if export less than 300W
-					/*dump_load_relay[4] as 1 if check_hour value is between 10 and 17, inclusive and variable (int)estimated_production_hour is greater than -1000. dump_load_relay[4] 
-                                        should be set to zero if (int)estimated_production_hour drops below -300 or if check_hour is outside the values above.*/
-                                        dump_load_relay[4] = (check_hour >= 10 && check_hour <= 15 && estimated_production_hour > -1000) ? 1 : ((estimated_production_hour < -300 || check_hour < 10 || check_hour > 15) ? 0 : dump_load_relay[4]);
-					
-					// Turn on dishwasher between 9AM and 6PM, When estimated export > 800W
-					// Turn it off if estimated export is < 100W
-					if ((check_hour>9)&&(check_hour<18)&&((int)estimated_production_hour<-700))
-					{
-					dump_load_relay[2] = 1;
-					}
-					else if ((int)estimated_production_hour>-100)
-					{
-						dump_load_relay[2] = 0;
-					}
-					else
-					{
-					// Between -800 and -100 do nothing
-					}
-					//}
-					// Are we exporting above 600W?
-					//if ((int)estimated_production_hour<-600)
-					//{
-					// Turn on second charger between 10AM and 3PM When estimated export > 600W
-					// Turn it off if estimated export is < 200W
-					if ((check_hour>9)&&(check_hour<15)&&((int)estimated_production_hour<-600))
-					{
-					dump_load_relay[3] = 1;
-					}
-					else if ((int)estimated_production_hour>-200)
-					{
-						// Between -600 and -200 do nothing
-						dump_load_relay[3] = 0;
-					}
-					else
-					{
-					// Between -600 and -200 do nothing
-					}
-					//}
-					
-					// end
-				}
-				// Are we exporting above 70W?
-				else 
-				{
-					if 
-					else if ((int)net_energy>0) //We are consuming
-					{
-					// Same as before, but now Dishwasher goes off and inverter comes on
-					dump_load_relay[0] = 1;
-					dump_load_relay[1] = 0;
-					dump_load_relay[2] = 0;
-					dump_load_relay[3] = 0;
-					dump_load_relay[4] = 0;	
-					}			
-				}
-				
+			// **Secondary Charger Control**
+			if (Check_hour >= 11 && Check_hour <= 15) {
+			    dump_load_relay[3] = (estimated_production_hour < -500) ? 1 : 0; // Set secondary charger
+			} else {
+			    dump_load_relay[3] = (net_energy > -200) ? 0 : dump_load_relay[3]; // Outside hours or net_energy condition
+			}
+
+			// **Basement dehumidifier control**
+			if (Check_hour >= 11 && Check_hour <= 15) {
+			    dump_load_relay[4] = (estimated_production_hour < -600) ? 1 : 0; // Set basement dehumidifier
+			} else {
+			    dump_load_relay[4] = (net_energy > -400) ? 0 : dump_load_relay[4]; // Outside hours or net_energy condition
+			}
 				
 				
 			// Now the calculations are done, let's update the outputs
