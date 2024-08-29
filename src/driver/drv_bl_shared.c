@@ -269,10 +269,10 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	check_time_estimate = (60 - NTP_GetMinute());
 	estimated_energy_hour = ((int)net_energy+((((int)sensors[OBK_POWER].lastReading)*(int)check_time_estimate)/60));
 	poststr(request, "</tr></table><br>");
-	poststr(request, "Totals: <br>");
-	hprintf255(request, "<font size=1>- Consumption: %iW, Export: %iW (Metering) <br></font>", total_consumption, total_export);
-	hprintf255(request, "<font size=1>- Consumption: %iW, Export: %iW (Net Metering) <br></font>", total_net_consumption, total_net_export);
-	hprintf255(request, "<font size=1>- Hourly Estimation: %iW <br></font>", (int)estimated_energy_hour);
+	poststr(request, "<h4>Totals:</h4><br>");
+	hprintf255(request, "<font size=2>- Consumption: %iW, Export: %iW (Metering) <br></font>", total_consumption, total_export);
+	hprintf255(request, "<font size=2>- Consumption: %iW, Export: %iW (Net Metering) <br></font>", total_net_consumption, total_net_export);
+	hprintf255(request, "<font size=2>- Hourly Estimation: %iW <br></font>", (int)estimated_energy_hour);
 	
 	//--------------------------------------------------------------------------------------------------
 		mtqq_total_net_export = net_matrix[check_hour];
@@ -323,11 +323,11 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 				time_on, (dump_load_hysteresis-lastsync));*/
 		// Print Status of automation outputs)
 		poststr(request," <hr> <h4>Current system status: </h4></font>");
-		hprintf255(request,"Storage Inverter:    	 %i<br>", dump_load_relay[0]); 
-		hprintf255(request,"Storage Charger A:   	 %i<br>", dump_load_relay[1]); 
-		hprintf255(request,"Storage Charger B:    	 %i<br>", dump_load_relay[3]); 
-		hprintf255(request,"Washer/Dishwasher:    	 %i<br>", dump_load_relay[2]); 
-		hprintf255(request,"Basement Dehumidifier:	 %i<br>", dump_load_relay[4]); 
+		hprintf255(request,"<font size=2>Storage Inverter:_______ %i<br></font>", dump_load_relay[0]); 
+		hprintf255(request,"<font size=2>Storage Charger A:______ %i<br></font>", dump_load_relay[1]); 
+		hprintf255(request,"<font size=2>Storage Charger B:______ %i<br></font>", dump_load_relay[3]); 
+		hprintf255(request,"<font size=2>Washer/Dishwasher:______ %i<br></font>", dump_load_relay[2]); 
+		hprintf255(request,"<font size=2>Basement Dehumidifier:__ %i<br></font>", dump_load_relay[4]); 
 		//----------------------
 		//hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
 		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
@@ -779,57 +779,53 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			
 			// Here we update the variables based on our energyu value
 			//------------------------------------------------------------------------------
-			// Since readings reset at the turn of the hour, we wait 15 minutes to average before runing any actions. The equipment remains on it's previous state for the hour before.
-			//if (check_time>14)
-			//{		
+			// Since readings reset at the turn of the hour, we wait 15 minutes or untill we have 'stored > 200W) to average before runing any actions. 
+			// The equipment remains on it's previous state for the hour before.
+				
+			// Define the conditions for each relay based on the given variables
 			
-			// **Storage Inverter Control**
+			// ** Storage inverter control **
 			if (net_energy > 10) {
-			    dump_load_relay[0] = 1; // Turn on storage inverter
-			} else if (net_energy < -50) {
-			    dump_load_relay[0] = 0; // Turn off storage inverter
-			}
-			
-			// **Primary Charger Control**
-			if (check_hour >= 9 && check_hour < 17) {
-			    if (net_energy < -150 && estimated_energy_hour < -250) {
-			        dump_load_relay[1] = 1; // Set primary charger to 1
-			    } else {
-			        dump_load_relay[1] = 0; // Set primary charger to 0
-			    }
-			} else {
-			    dump_load_relay[1] = 0; // Set primary charger to 0 outside of hours
-			}
-			
-			// **Dishwasher Control**
-			if (check_hour >= 9 && check_hour < 17) {
-			    if (estimated_energy_hour < -500) {
-			        dump_load_relay[2] = 1; // Set dishwasher to 1
-			    } else {
-			        dump_load_relay[2] = 0; // Set dishwasher to 0
-			    }
-			} else if (net_energy >= -100) {
-			    dump_load_relay[2] = 0; // Set dishwasher to 0 outside of hours or if net_energy is not lower than -100
+			    dump_load_relay[0] = 1; // Storage inverter ON
+			} else if (net_energy <= -50) {
+			    dump_load_relay[0] = 0; // Storage inverter OFF
 			}
 
-			// **Secondary Charger Control**
-			if (check_hour >= 11 && check_hour <= 15) {
-			    dump_load_relay[3] = (estimated_energy_hour < -500) ? 1 : 0; // Set secondary charger
+			if (check_time>14) && (net_energy <-200)
+			{				
+			// ** Primary charger control **
+			if ((Check_hour >= 9 && Check_hour < 17) && (net_energy <= -200) && (estimated_energy_hour <= -500)) {
+			    dump_load_relay[1] = 1; // Primary charger ON
 			} else {
-			    dump_load_relay[3] = (net_energy > -200) ? 0 : dump_load_relay[3]; // Outside hours or net_energy condition
+			    dump_load_relay[1] = 0; // Primary charger OFF
+			}
+			
+			// ** Dishwasher control **
+			if ((Check_hour >= 9 && Check_hour < 17) && (net_energy <= -300) && (estimated_energy_hour <= -800)) {
+			    dump_load_relay[2] = 1; // Dishwasher ON
+			} else {
+			    dump_load_relay[2] = 0; // Dishwasher OFF
+			}
+			
+			// ** Secondary charger control **
+			if ((Check_hour >= 11 && Check_hour < 15) && (net_energy <= -400) && (estimated_energy_hour <= -1000)) {
+			    dump_load_relay[3] = 1; // Secondary charger ON
+			} else {
+			    dump_load_relay[3] = 0; // Secondary charger OFF
 			}
 
-			// **Basement dehumidifier control**
-			if (check_hour >= 11 && check_hour <= 15) {
-			    dump_load_relay[4] = (estimated_energy_hour < -600) ? 1 : 0; // Set basement dehumidifier
+			// ** Basement dehumidifier control **
+			if (Check_hour >= 11 && Check_hour < 15 && net_energy <= -400 && estimated_energy_hour <= -1000) {
+			    dump_load_relay[4] = 1; // Basement dehumidifier ON
 			} else {
-			    dump_load_relay[4] = (net_energy > -400) ? 0 : dump_load_relay[4]; // Outside hours or net_energy condition
+			    dump_load_relay[4] = (Check_hour < 11 || Check_hour >= 15 || net_energy > -60) ? 0 : dump_load_relay[4];
+			}
 			}
 
 			// Now we do an update of the outputs once a minute
 		        current_minute = NTP_GetMinute();
 
-        		if (current_minute > 14 && current_minute != last_minute) 
+        		if (/*current_minute > 14 && */current_minute != last_minute) 
 			{
 		        last_minute = current_minute;
 			char output_command[40] = "";
@@ -845,6 +841,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 		                output_index = 0; 
 		            }
 			}
+			//}
 			// End of consumption / Export Loops			
 			//-------------------------------------------------------------------------------------------------------------------------------------------------
 			} // end of negative flag loop
