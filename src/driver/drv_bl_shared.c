@@ -803,47 +803,42 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    dump_load_relay[0] = 0; // Storage inverter OFF
 			}
 
-			if ((check_time>14)&&(net_energy<-200))
+			if (check_time>14)
 			{				
 			// ** Primary charger control **
-			if ((check_hour >= 9 && check_hour < 17) && (net_energy <= -200) && (estimated_energy_hour <= -500)) {
-			    dump_load_relay[1] = 1; // Primary charger ON
-			} else if ((check_hour < 9 || check_hour >= 17) || (net_energy >= -10)) {
-			    dump_load_relay[1] = 0; // Primary charger OFF
+			if (net_energy <= -200) {
+			    if (estimated_energy_hour <= -400 && check_hour >= 9 && check_hour <= 17) {
+			        dump_load_relay[1] = 1;
+			    }
+			} else if (check_hour < 9 || check_hour > 17 || net_energy > -50) {
+			    dump_load_relay[1] = 0;
 			}
 			
-			/*// ** Dishwasher control **
-			if ((check_hour >= 9 && check_hour < 17) && (net_energy <= -300) && (estimated_energy_hour <= -800)) {
-			    dump_load_relay[2] = 1; // Dishwasher ON
-			} else {
-			    dump_load_relay[2] = 0; // Dishwasher OFF
-			}*/
-				// ** Dishwasher control **
-			if ((check_hour >= 9 && check_hour < 17) && 
-			    (net_energy <= -400) && 
-			    (estimated_energy_hour <= -500)) {
-			    dump_load_relay[2] = 1; // Dishwasher ON
-			} else if ((check_hour < 9 || check_hour >= 17) || (net_energy >= -50)) {
-			    dump_load_relay[2] = 0; // Dishwasher OFF
+			// ** Dishwasher control **
+			if (net_energy <= -200) {
+			    if (estimated_energy_hour <= -600 && check_hour >= 9 && check_hour <= 17) {
+			        dump_load_relay[2] = 1;
+			    }
+			} else if (check_hour < 9 || check_hour > 17 || net_energy > -100) {
+			    dump_load_relay[2] = 0;
 			}
-						
+				
 			// ** Secondary charger control **
-			if ((check_hour >= 11 && check_hour < 15) && 
-			    (net_energy <= -400) && 
-			    (estimated_energy_hour <= -500)) {
-			    dump_load_relay[3] = 1; // Secondary charger ON
-			} else if ((check_hour < 11 || check_hour >= 15) || (net_energy >= -100)) {
-			    dump_load_relay[3] = 0; // Secondary charger OFF
-			} else {
-			    // Keep the previous state if none of the conditions are met
-			    dump_load_relay[3] = dump_load_relay[3]; 
+			if (net_energy <= -300) {
+			    if (estimated_energy_hour <= -600 && check_hour >= 9 && check_hour <= 17) {
+			        dump_load_relay[3] = 1;
+			    }
+			} else if (check_hour < 9 || check_hour > 17 || net_energy > -150) {
+			    dump_load_relay[3] = 0;
 			}
 				
 			// ** Basement dehumidifier control **
-			if (check_hour >= 11 && check_hour < 15 && net_energy <= -400 && estimated_energy_hour <= -800) {
-			    dump_load_relay[4] = 1; // Basement dehumidifier ON
-			} else {
-			    dump_load_relay[4] = (check_hour < 11 || check_hour >= 15 || net_energy >-200) ? 0 : dump_load_relay[4];
+			if (net_energy <= -400) {
+			    if (estimated_energy_hour <= -700 && check_hour >= 9 && check_hour <= 17) {
+			        dump_load_relay[4] = 1;
+			    }
+			} else if (check_hour < 9 || check_hour > 17 || net_energy > -200) {
+			    dump_load_relay[4] = 0;
 			}
 			}
 
