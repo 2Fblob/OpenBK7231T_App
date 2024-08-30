@@ -693,11 +693,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 				hour_reset = 1;
 				// This refreshes the outputs once an hour, just in case
-				last_dump_load_value[0] = 2;
-				last_dump_load_value[1] = 2;
-				last_dump_load_value[2] = 2;
-				last_dump_load_value[3] = 2;
-				last_dump_load_value[4] = 2;
+				//last_dump_load_value[0] = 2;
+				//last_dump_load_value[1] = 2;
+				//last_dump_load_value[2] = 2;
+				//last_dump_load_value[3] = 2;
+				//last_dump_load_value[4] = 2;
 				old_hour = check_hour;
 				// This resets the time the bypass relay was on throughout the day, before sunset.
 				if (check_hour < 5) {time_on = 0;}
@@ -850,10 +850,10 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// Now we do an update of the outputs once a minute
 		        current_minute = NTP_GetMinute();
 
-        		/*if current_minute != last_minute) 
+        		if current_minute != last_minute) 
 			{
 		        last_minute = current_minute;
-			char output_command[40] = "";
+			char output_command[50] = "";
 			const char *ip_start = "SendGet http://192.168.5.";
  			const char *ip_middle = "/cm?cmnd=Power%20";
 			sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
@@ -868,9 +868,9 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    if (output_index >= dump_load_relay_number) {
 		                output_index = 0; 
 		            }
-			}*/
+			}
 			//----------------------------
-			if (current_minute != last_minute) 
+			/*if (current_minute != last_minute) 
 			{
 			    last_minute = current_minute;
 			
@@ -896,7 +896,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			            output_index = 0; 
 			        }
 			    }
-			}
+			}*/
 			//----------------------------
 			//}
 			// End of consumption / Export Loops			
