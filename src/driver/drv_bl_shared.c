@@ -5,6 +5,8 @@ static int export_matrix[24] = {0};
 static int net_matrix[24] = {0};
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
+// variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
+int solar_available = 0;
 //float estimated_production_hour = 0; 
 static int mtqq_total_net_export = 0;
 static int estimated_energy_start = 0;
@@ -334,6 +336,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Storage Charger B: <b>%76i</b><br></font>", dump_load_relay[3]); 
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%76i</b><br></font>", dump_load_relay[2]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%76i</b><br></font>", dump_load_relay[4]); 
+		hprintf255(request,"<font size=2>- Solar available: <b>%76i</b><br></font>", solar_available); 
 		//----------------------
 		//hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
 		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
@@ -795,13 +798,39 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// The equipment remains on it's previous state for the hour before.
 				
 			// Define the conditions for each relay based on the given variables
-			
+
+			/*
 			// ** Storage inverter control **
 			if (net_energy > 10) {
 			    dump_load_relay[0] = 1; // Storage inverter ON
 			} else if (net_energy <= -50) {
 			    dump_load_relay[0] = 0; // Storage inverter OFF
+			}*/
+			// new
+			// ** Storage inverter control **
+			
+			if (net_energy < -100) {
+			    solar_available = 1; // Set flag when net_energy is <-100
+			} else if (net_energy > 10) {
+			    solar_available = 0; // Reset flag when net_energy >10
 			}
+			
+			if (solar_available == 0) {
+			    if (net_energy < -30 && net_energy > -50) {
+			        dump_load_relay[0] = 1; // Storage inverter ON
+			    } else {
+			        dump_load_relay[0] = 0; // Storage inverter OFF
+			    }
+			} else if (solar_available == 1) {
+			    if (net_energy < 10 && net_energy > -50) {
+			        dump_load_relay[0] = 1; // Storage inverter ON
+			    } else {
+			        dump_load_relay[0] = 0; // Storage inverter OFF
+			    }
+			} else {
+			    dump_load_relay[0] = 0; // Outside the ranges, inverter OFF
+			}
+			// end new
 
 			if (check_time>14)
 			{				
@@ -869,7 +898,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 			    last_minute = current_minute;
 			
-			    // Check if dump_load_relay[output_index] has changed
+			  /*  // Check if dump_load_relay[output_index] has changed
 			    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
 			    {
 			        // Update the last known value
@@ -889,7 +918,27 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			        // Reset index after reading all positions
 			        if (output_index >= dump_load_relay_number) {
 			            output_index = 0; 
-			        }
+			        }*/
+			//new ---------------------------------------------------------------------
+				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
+				{
+				    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
+				    {
+				        // Update the last known value
+				        last_dump_load_value[output_index] = dump_load_relay[output_index];
+				
+				        char output_command[50] = "";
+				        const char *ip_start = "SendGet http://192.168.5.";
+				        const char *ip_middle = "/cm?cmnd=Power%20";
+				        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
+				        
+				        CMD_ExecuteCommand(output_command, 0);
+				        
+				        // Exit the loop after executing the command
+				        break;
+				    }
+				}
+			//end of new ------------------------------------------------------------
 			}
 			//----------------------------
 			//}
