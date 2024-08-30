@@ -809,26 +809,26 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// new
 			// ** Storage inverter control **
 			
+			// ** Storage inverter control **
+
 			if (net_energy < -100) {
-			    solar_available = 1; // Set flag when net_energy is <-100
+			    solar_available = 1; // Set solar_available flag
 			} else if (net_energy > 10) {
-			    solar_available = 0; // Reset flag when net_energy >10
+			    solar_available = 0; // Reset solar_available flag
 			}
 			
 			if (solar_available == 0) {
-			    if (net_energy < -30 && net_energy > -50) {
+			    if (net_energy > -30) {
 			        dump_load_relay[0] = 1; // Storage inverter ON
-			    } else {
+			    } else if (net_energy <= -50) {
 			        dump_load_relay[0] = 0; // Storage inverter OFF
 			    }
 			} else if (solar_available == 1) {
-			    if (net_energy < 10 && net_energy > -50) {
+			    if (net_energy > 10) {
 			        dump_load_relay[0] = 1; // Storage inverter ON
-			    } else {
+			    } else if (net_energy <= -50) {
 			        dump_load_relay[0] = 0; // Storage inverter OFF
 			    }
-			} else {
-			    dump_load_relay[0] = 0; // Outside the ranges, inverter OFF
 			}
 			// end new
 
