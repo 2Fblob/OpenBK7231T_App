@@ -693,11 +693,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 				hour_reset = 1;
 				// This refreshes the outputs once an hour, just in case
-				//last_dump_load_value[0] = 2;
-				//last_dump_load_value[1] = 2;
-				//last_dump_load_value[2] = 2;
-				//last_dump_load_value[3] = 2;
-				//last_dump_load_value[4] = 2;
+				last_dump_load_value[0] = 2;
+				last_dump_load_value[1] = 2;
+				last_dump_load_value[2] = 2;
+				last_dump_load_value[3] = 2;
+				last_dump_load_value[4] = 2;
 				old_hour = check_hour;
 				// This resets the time the bypass relay was on throughout the day, before sunset.
 				if (check_hour < 5) {time_on = 0;}
@@ -843,14 +843,14 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			if (check_hour >= 11 && check_hour < 15 && net_energy <= -400 && estimated_energy_hour <= -800) {
 			    dump_load_relay[4] = 1; // Basement dehumidifier ON
 			} else {
-			    dump_load_relay[4] = (check_hour < 11 || check_hour >= 15 || net_energy > -200) ? 0 : dump_load_relay[4];
+			    dump_load_relay[4] = (check_hour < 11 || check_hour >= 15 || net_energy <-200) ? 0 : dump_load_relay[4];
 			}
 			}
 
 			// Now we do an update of the outputs once a minute
 		        current_minute = NTP_GetMinute();
 
-        		if (current_minute != last_minute) 
+        		/*if (current_minute != last_minute) 
 			{
 		        last_minute = current_minute;
 			char output_command[50] = "";
@@ -868,9 +868,9 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    if (output_index >= dump_load_relay_number) {
 		                output_index = 0; 
 		            }
-			}
+			}*/
 			//----------------------------
-			/*if (current_minute != last_minute) 
+			if (current_minute != last_minute) 
 			{
 			    last_minute = current_minute;
 			
@@ -896,7 +896,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			            output_index = 0; 
 			        }
 			    }
-			}*/
+			}
 			//----------------------------
 			//}
 			// End of consumption / Export Loops			
