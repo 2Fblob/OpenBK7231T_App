@@ -20,6 +20,10 @@ int export_buffer = 0;
 int check_time_estimate = 59;
 // The number of devices the automation controls, based on power level 
 #define dump_load_relay_number 5
+
+// This stores the former relay states, so multiple commands are not issued
+int last_dump_load_value[dump_load_relay_number]={2, 2, 2, 2, 2}
+
 // The array where we store the power state for each of these devices
 static int dump_load_relay[dump_load_relay_number] = {0};
 // The array where we store the ip address of these devices 
@@ -688,6 +692,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			if (!(check_hour == old_hour))
 			{
 				hour_reset = 1;
+				// This refreshes the outputs once an hour, just in case
+				last_dump_load_value[dump_load_relay_number]={2, 2, 2, 2, 2}
 				old_hour = check_hour;
 				// This resets the time the bypass relay was on throughout the day, before sunset.
 				if (check_hour < 5) {time_on = 0;}
@@ -798,7 +804,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// ** Primary charger control **
 			if ((check_hour >= 9 && check_hour < 17) && (net_energy <= -200) && (estimated_energy_hour <= -500)) {
 			    dump_load_relay[1] = 1; // Primary charger ON
-			} else if ((check_hour < 9 || check_hour >= 17) || (net_energy <= -50)) {
+			} else if ((check_hour < 9 || check_hour >= 17) || (net_energy >= -50)) {
 			    dump_load_relay[1] = 0; // Primary charger OFF
 			}
 			
@@ -810,19 +816,19 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}*/
 				// ** Dishwasher control **
 			if ((check_hour >= 9 && check_hour < 17) && 
-			    (net_energy <= -300) && 
-			    (estimated_energy_hour <= -800)) {
+			    (net_energy <= -400) && 
+			    (estimated_energy_hour <= -500)) {
 			    dump_load_relay[2] = 1; // Dishwasher ON
-			} else if ((check_hour < 9 || check_hour >= 17) || (net_energy <= -80)) {
+			} else if ((check_hour < 9 || check_hour >= 17) || (net_energy >= -80)) {
 			    dump_load_relay[2] = 0; // Dishwasher OFF
 			}
 						
 			// ** Secondary charger control **
 			if ((check_hour >= 11 && check_hour < 15) && 
 			    (net_energy <= -400) && 
-			    (estimated_energy_hour <= -1000)) {
+			    (estimated_energy_hour <= -600)) {
 			    dump_load_relay[3] = 1; // Secondary charger ON
-			} else if ((check_hour < 11 || check_hour >= 15) || (net_energy <= 120)) {
+			} else if ((check_hour < 11 || check_hour >= 15) || (net_energy >= -120)) {
 			    dump_load_relay[3] = 0; // Secondary charger OFF
 			} else {
 			    // Keep the previous state if none of the conditions are met
@@ -830,7 +836,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 				
 			// ** Basement dehumidifier control **
-			if (check_hour >= 11 && check_hour < 15 && net_energy <= -400 && estimated_energy_hour <= -1000) {
+			if (check_hour >= 11 && check_hour < 15 && net_energy <= -400 && estimated_energy_hour <= -900) {
 			    dump_load_relay[4] = 1; // Basement dehumidifier ON
 			} else {
 			    dump_load_relay[4] = (check_hour < 11 || check_hour >= 15 || net_energy > -200) ? 0 : dump_load_relay[4];
@@ -840,7 +846,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// Now we do an update of the outputs once a minute
 		        current_minute = NTP_GetMinute();
 
-        		if (/*current_minute > 14 && */current_minute != last_minute) 
+        		/*if current_minute != last_minute) 
 			{
 		        last_minute = current_minute;
 			char output_command[40] = "";
@@ -858,7 +864,36 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    if (output_index >= dump_load_relay_number) {
 		                output_index = 0; 
 		            }
+			}*/
+			//----------------------------
+			if (current_minute != last_minute) 
+			{
+			    last_minute = current_minute;
+			
+			    // Check if dump_load_relay[output_index] has changed
+			    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
+			    {
+			        // Update the last known value
+			        last_dump_load_value[output_index] = dump_load_relay[output_index];
+			
+			        char output_command[40] = "";
+			        const char *ip_start = "SendGet http://192.168.5.";
+			        const char *ip_middle = "/cm?cmnd=Power%20";
+			        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
+			        
+			        CMD_ExecuteCommand(output_command, 0);
+			        delay(250);
+			
+			        // Increase the index
+			        output_index++;
+			
+			        // Reset index after reading all positions
+			        if (output_index >= dump_load_relay_number) {
+			            output_index = 0; 
+			        }
+			    }
 			}
+			//----------------------------
 			//}
 			// End of consumption / Export Loops			
 			//-------------------------------------------------------------------------------------------------------------------------------------------------
