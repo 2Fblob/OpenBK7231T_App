@@ -875,7 +875,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			        // Update the last known value
 			        last_dump_load_value[output_index] = dump_load_relay[output_index];
 			
-			        char output_command[40] = "";
+			        char output_command[50] = "";
 			        const char *ip_start = "SendGet http://192.168.5.";
 			        const char *ip_middle = "/cm?cmnd=Power%20";
 			        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
