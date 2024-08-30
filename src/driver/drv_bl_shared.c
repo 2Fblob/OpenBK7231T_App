@@ -693,7 +693,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 				hour_reset = 1;
 				// This refreshes the outputs once an hour, just in case
-				last_dump_load_value[dump_load_relay_number]={2, 2, 2, 2, 2}
+				last_dump_load_value[dump_load_relay_number] = {2, 2, 2, 2, 2};
 				old_hour = check_hour;
 				// This resets the time the bypass relay was on throughout the day, before sunset.
 				if (check_hour < 5) {time_on = 0;}
