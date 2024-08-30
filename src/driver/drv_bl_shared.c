@@ -835,7 +835,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
  			const char *ip_middle = "/cm?cmnd=Power%20";
 			sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
 			CMD_ExecuteCommand(output_command, 0);
-			delay(1500);
+			delay(250);
 			//CMD_ExecuteCommand(delay_s 5);
 			//delay_s 5;
 			// Increase the index
