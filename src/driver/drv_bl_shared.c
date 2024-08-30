@@ -22,7 +22,7 @@ int check_time_estimate = 59;
 #define dump_load_relay_number 5
 
 // This stores the former relay states, so multiple commands are not issued
-int last_dump_load_value[dump_load_relay_number]={2, 2, 2, 2, 2}
+int last_dump_load_value[dump_load_relay_number] = {2, 2, 2, 2, 2};
 
 // The array where we store the power state for each of these devices
 static int dump_load_relay[dump_load_relay_number] = {0};
