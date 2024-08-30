@@ -850,7 +850,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// Now we do an update of the outputs once a minute
 		        current_minute = NTP_GetMinute();
 
-        		if current_minute != last_minute) 
+        		if (current_minute != last_minute) 
 			{
 		        last_minute = current_minute;
 			char output_command[50] = "";
