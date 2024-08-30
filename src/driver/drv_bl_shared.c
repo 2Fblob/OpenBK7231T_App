@@ -48,8 +48,8 @@ int cmd_ctrl = dump_load_relay_number;
 #include <time.h>
 int stat_updatesSkipped = 0;
 int stat_updatesSent = 0;
-char buffer[50];
-char ip[5];
+//char buffer[50];
+char ip[3];
 
 static byte savetoflash = 0;
 static byte min_reset = 0;
