@@ -798,7 +798,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// ** Primary charger control **
 			if ((check_hour >= 9 && check_hour < 17) && (net_energy <= -200) && (estimated_energy_hour <= -500)) {
 			    dump_load_relay[1] = 1; // Primary charger ON
-			} else if ((check_hour < 9 || check_hour >= 17) || (net_energy <= -200)) {
+			} else if ((check_hour < 9 || check_hour >= 17) || (net_energy <= -50)) {
 			    dump_load_relay[1] = 0; // Primary charger OFF
 			}
 			
@@ -813,7 +813,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    (net_energy <= -300) && 
 			    (estimated_energy_hour <= -800)) {
 			    dump_load_relay[2] = 1; // Dishwasher ON
-			} else if ((check_hour < 9 || check_hour >= 17) || (net_energy <= -200)) {
+			} else if ((check_hour < 9 || check_hour >= 17) || (net_energy <= -80)) {
 			    dump_load_relay[2] = 0; // Dishwasher OFF
 			}
 						
@@ -822,7 +822,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    (net_energy <= -400) && 
 			    (estimated_energy_hour <= -1000)) {
 			    dump_load_relay[3] = 1; // Secondary charger ON
-			} else if ((check_hour < 11 || check_hour >= 15) || (net_energy <= -200)) {
+			} else if ((check_hour < 11 || check_hour >= 15) || (net_energy <= 120)) {
 			    dump_load_relay[3] = 0; // Secondary charger OFF
 			} else {
 			    // Keep the previous state if none of the conditions are met
@@ -833,7 +833,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			if (check_hour >= 11 && check_hour < 15 && net_energy <= -400 && estimated_energy_hour <= -1000) {
 			    dump_load_relay[4] = 1; // Basement dehumidifier ON
 			} else {
-			    dump_load_relay[4] = (check_hour < 11 || check_hour >= 15 || net_energy > -400) ? 0 : dump_load_relay[4];
+			    dump_load_relay[4] = (check_hour < 11 || check_hour >= 15 || net_energy > -200) ? 0 : dump_load_relay[4];
 			}
 			}
 
