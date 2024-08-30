@@ -843,7 +843,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			if (check_hour >= 11 && check_hour < 15 && net_energy <= -400 && estimated_energy_hour <= -800) {
 			    dump_load_relay[4] = 1; // Basement dehumidifier ON
 			} else {
-			    dump_load_relay[4] = (check_hour < 11 || check_hour >= 15 || net_energy <-200) ? 0 : dump_load_relay[4];
+			    dump_load_relay[4] = (check_hour < 11 || check_hour >= 15 || net_energy >-200) ? 0 : dump_load_relay[4];
 			}
 			}
 
