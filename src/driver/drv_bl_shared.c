@@ -886,16 +886,15 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
 			        
 			        CMD_ExecuteCommand(output_command, 0);
-			        //delay(250);
-			
-			        // Increase the index
+			        //delay(250)
+			    }
+				// Increase the index
 			        output_index++;
 			
 			        // Reset index after reading all positions
 			        if (output_index >= dump_load_relay_number) {
 			            output_index = 0; 
 			        }
-			    }
 			}
 			//----------------------------
 			//}
