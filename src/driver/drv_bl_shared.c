@@ -28,7 +28,7 @@ int last_dump_load_value[dump_load_relay_number] = {2, 2, 2, 2, 2};
 
 // The array where we store the power state for each of these devices
 static int dump_load_relay[dump_load_relay_number] = {0};
-static int (dump_load_relay_timer[dump_load_relay_number] = {0};
+static int dump_load_relay_timer[dump_load_relay_number] = {0};
 // The array where we store the ip address of these devices 
 static int dump_load_relay_ip[5] = {23, 22, 29, 24, 27};
 int cmd_ctrl = dump_load_relay_number;
