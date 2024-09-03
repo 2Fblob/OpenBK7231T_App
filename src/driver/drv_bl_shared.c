@@ -28,6 +28,7 @@ int last_dump_load_value[dump_load_relay_number] = {2, 2, 2, 2, 2};
 
 // The array where we store the power state for each of these devices
 static int dump_load_relay[dump_load_relay_number] = {0};
+static int (dump_load_relay_timer[dump_load_relay_number] = {0};
 // The array where we store the ip address of these devices 
 static int dump_load_relay_ip[5] = {23, 22, 29, 24, 27};
 int cmd_ctrl = dump_load_relay_number;
@@ -331,12 +332,12 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 				time_on, (dump_load_hysteresis-lastsync));*/
 		// Print Status of automation outputs)
 		poststr(request," <hr> <h4>Current system status: </h4></font>");
-		hprintf255(request,"<font size=2>- Storage Inverter: <b>%76i</b><br></font>", dump_load_relay[0]); 
-		hprintf255(request,"<font size=2>- Storage Charger A: <b>%76i</b><br></font>", dump_load_relay[1]); 
-		hprintf255(request,"<font size=2>- Storage Charger B: <b>%76i</b><br></font>", dump_load_relay[3]); 
-		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%76i</b><br></font>", dump_load_relay[2]); 
-		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%76i</b><br></font>", dump_load_relay[4]); 
-		hprintf255(request,"<font size=2>- Solar available: <b>%76i</b><br></font>", solar_available); 
+		hprintf255(request,"<font size=2>- Storage Inverter: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[0], dump_load_relay_timer[0]); 
+		hprintf255(request,"<font size=2>- Storage Charger A: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[1], dump_load_relay_timer[1]); 
+		hprintf255(request,"<font size=2>- Storage Charger B: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[3], dump_load_relay_timer[2]); 
+		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
+		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
+		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
 		//----------------------
 		//hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
 		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
@@ -833,8 +834,9 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// end new
 
 //((((estimated_energy_hour*60)/check_time))
-			if (check_time>14)||(check_time==20)||(check_time==25)||(check_time==30)||(check_time==30)||(check_time==35)||(check_time==40)||(check_time==45)||(check_time==50)||check_time==55)
-			{				
+			if (check_time>14)||(check_time==20)||(check_time==25)||(check_time==30)||(check_time==30)||(check_time==35)||(check_time==40)||(check_time==45)||(check_time==50)||(check_time==55)
+			{	
+				//(last_time = check_time)
 			
 			// ** Dishwasher control **
 			if ((((net_energy*60)/check_time)) <= -800) {
@@ -865,7 +867,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				
 			// ** Basement dehumidifier control **
 			if ((((net_energy*60)/check_time)) <= -1200)  {
-			    if (/*estimated_energy_hour <= -1200*/ && check_hour >= 9 && check_hour <= 17) {
+			    if (/*estimated_energy_hour <= -1200 &&*/ check_hour >= 9 && check_hour <= 17) {
 			        dump_load_relay[4] = 1;
 			    }
 			} else if (check_hour < 9 || check_hour > 17 || (((net_energy*60)/check_time)) > -200 || check_time <30) {
@@ -921,6 +923,23 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			        if (output_index >= dump_load_relay_number) {
 			            output_index = 0; 
 			        }*/
+
+				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
+				{
+				    if (dump_load_relay_timer[output_index] == 1) 
+				    {
+				        dump_load_relay_timer[output_index]++;
+				    }
+				// At midnight, reset
+				if ((NTP_GetMinute() == 0) && (NTP_GetMinute() == 0))
+					{
+					dump_load_relay_timer[0] = 0;
+					dump_load_relay_timer[1] = 0;
+					dump_load_relay_timer[2] = 0;
+					dump_load_relay_timer[3] = 0;
+					dump_load_relay_timer[4] = 0;
+					}
+				}
 			//new ---------------------------------------------------------------------
 				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
 				{
