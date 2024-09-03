@@ -906,7 +906,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				{
 				
 				// At midnight, reset
-				if ((NTP_GetMinute() == 0) && (NTP_GetMinute() == 0))
+				if ((NTP_GetHour() == 0) && (NTP_GetMinute() == 0))
 					{
 					dump_load_relay_timer[output_index] = 0;
 					}
