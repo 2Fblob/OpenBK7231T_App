@@ -834,7 +834,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// end new
 
 //((((estimated_energy_hour*60)/check_time))
-			if (check_time>14)||(check_time==20)||(check_time==25)||(check_time==30)||(check_time==30)||(check_time==35)||(check_time==40)||(check_time==45)||(check_time==50)||(check_time==55)
+			if ((check_time>14)&&((check_time==20)||(check_time==25)||(check_time==30)||(check_time==35)||(check_time==40)||(check_time==45)||(check_time==50)||(check_time==55)))
 			{	
 				//(last_time = check_time)
 			
@@ -864,7 +864,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			} else if (check_hour < 9 || check_hour > 17 || (((net_energy*60)/check_time)) > -150) {
 			    dump_load_relay[3] = 0;
 			}
-				
+			}
+			
 			// ** Basement dehumidifier control **
 			if ((((net_energy*60)/check_time)) <= -1200)  {
 			    if (/*estimated_energy_hour <= -1200 &&*/ check_hour >= 9 && check_hour <= 17) {
@@ -872,7 +873,6 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    }
 			} else if (check_hour < 9 || check_hour > 17 || (((net_energy*60)/check_time)) > -200 || check_time <30) {
 			    dump_load_relay[4] = 0;
-			}
 			}
 
 			// Now we do an update of the outputs once a minute
