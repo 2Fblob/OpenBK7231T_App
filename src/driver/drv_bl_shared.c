@@ -926,19 +926,23 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 
 				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
 				{
-				    if (dump_load_relay[output_index] == 1) 
-				    {
-				        dump_load_relay_timer[output_index]++;
-				    }
+				
 				// At midnight, reset
 				if ((NTP_GetMinute() == 0) && (NTP_GetMinute() == 0))
 					{
-					dump_load_relay_timer[0] = 0;
-					dump_load_relay_timer[1] = 0;
-					dump_load_relay_timer[2] = 0;
-					dump_load_relay_timer[3] = 0;
-					dump_load_relay_timer[4] = 0;
+					dump_load_relay_timer[output_index] = 0;
+				//	dump_load_relay_timer[1] = 0;
+				//	dump_load_relay_timer[2] = 0;
+				//	dump_load_relay_timer[3] = 0;
+				//	dump_load_relay_timer[4] = 0;
 					}
+				else
+				{
+				 if (dump_load_relay[output_index] == 1) 
+				    {
+				        dump_load_relay_timer[output_index]++;
+				    }
+				}
 				}
 			//new ---------------------------------------------------------------------
 				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
