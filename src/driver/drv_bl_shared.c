@@ -839,7 +839,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				//(last_time = check_time)
 			
 			// ** Dishwasher control **
-			if if (net_energy * (60 / (60 - check_time)) <= -800) {
+			if (net_energy * (60 / (60 - check_time)) <= -800) {
 			    if (/*estimated_energy_hour <= -600 && */check_hour >= 9 && check_hour <= 17) {
 			        dump_load_relay[2] = 1;
 			    }
@@ -848,7 +848,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 				
 			// ** Primary charger control **
-			if if (net_energy * (60 / (60 - check_time)) <= -500) {
+			if (net_energy * (60 / (60 - check_time)) <= -500) {
 			    if (/*estimated_energy_hour <= -400 && */check_hour >= 9 && check_hour <= 17) {
 			        dump_load_relay[1] = 1;
 			    }
@@ -857,7 +857,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 				
 			// ** Secondary charger control **
-			if if (net_energy * (60 / (60 - check_time)) <= -1000){
+			if (net_energy * (60 / (60 - check_time)) <= -1000){
 			    if (/*estimated_energy_hour <= -800 &&*/ check_hour >= 9 && check_hour <= 17) {
 			        dump_load_relay[3] = 1;
 			    }
@@ -867,7 +867,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 			
 			// ** Basement dehumidifier control **
-			if if (net_energy * (60 / (60 - check_time)) <= -1200){
+			if (net_energy * (60 / (60 - check_time)) <= -1200){
 			    if (/*estimated_energy_hour <= -1200 &&*/ check_hour >= 9 && check_hour <= 17) {
 			        dump_load_relay[4] = 1;
 			    }
@@ -902,28 +902,6 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 			    last_minute = current_minute;
 			
-			  /*  // Check if dump_load_relay[output_index] has changed
-			    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
-			    {
-			        // Update the last known value
-			        last_dump_load_value[output_index] = dump_load_relay[output_index];
-			
-			        char output_command[50] = "";
-			        const char *ip_start = "SendGet http://192.168.5.";
-			        const char *ip_middle = "/cm?cmnd=Power%20";
-			        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
-			        
-			        CMD_ExecuteCommand(output_command, 0);
-			        //delay(250)
-			    }
-				// Increase the index
-			        output_index++;
-			
-			        // Reset index after reading all positions
-			        if (output_index >= dump_load_relay_number) {
-			            output_index = 0; 
-			        }*/
-
 				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
 				{
 				
@@ -931,10 +909,6 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				if ((NTP_GetMinute() == 0) && (NTP_GetMinute() == 0))
 					{
 					dump_load_relay_timer[output_index] = 0;
-				//	dump_load_relay_timer[1] = 0;
-				//	dump_load_relay_timer[2] = 0;
-				//	dump_load_relay_timer[3] = 0;
-				//	dump_load_relay_timer[4] = 0;
 					}
 				else
 				{
