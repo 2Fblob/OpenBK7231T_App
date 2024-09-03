@@ -926,7 +926,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 
 				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
 				{
-				    if (dump_load_relay_timer[output_index] == 1) 
+				    if (dump_load_relay[output_index] == 1) 
 				    {
 				        dump_load_relay_timer[output_index]++;
 				    }
