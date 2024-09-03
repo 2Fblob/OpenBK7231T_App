@@ -839,7 +839,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				//(last_time = check_time)
 			
 			// ** Dishwasher control **
-			if (net_energy <= ((-800*60)/check_time) {
+			if (net_energy <= ((-800*60)/check_time)) {
 			    if (/*estimated_energy_hour <= -600 && */check_hour >= 9 && check_hour <= 17) {
 			        dump_load_relay[2] = 1;
 			    }
