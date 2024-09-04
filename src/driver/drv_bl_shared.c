@@ -839,7 +839,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				//(last_time = check_time)
 			
 			// ** Dishwasher control **
-			if (net_energy * (60 / (60 - check_time)) <= -800) {
+			if (net_energy * (60 / (check_time)) <= -800) {
 			    if (/*estimated_energy_hour <= -600 && */check_hour >= 10 && check_hour <= 17) {
 			        dump_load_relay[2] = 1;
 			    }
@@ -848,30 +848,30 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 				
 			// ** Primary charger control **
-			if (net_energy * (60 / (60 - check_time)) <= -400) {
+			if (net_energy * (60 / ( check_time)) <= -400) {
 			    if (/*estimated_energy_hour <= -400 && */check_hour >= 9 && check_hour <= 17) {
 			        dump_load_relay[1] = 1;
 			    }
-			} if (check_hour < 9 || check_hour > 17 || (net_energy * (60 / (60 - check_time)) >= -50)) {
+			} if (check_hour < 9 || check_hour > 17 || (net_energy * (60 / (check_time)) >= -50)) {
 			    dump_load_relay[1] = 0;
 			}
 				
 			// ** Secondary charger control **
-			if (net_energy * (60 / (60 - check_time)) <= -450){
+			if (net_energy * (60 / (check_time)) <= -450){
 			    if (/*estimated_energy_hour <= -400 &&*/ check_hour >= 10 && check_hour <= 15) {
 			        dump_load_relay[3] = 1;
 			    }
-			} else if (check_hour < 10 || check_hour > 15 || (net_energy * (60 / (60 - check_time)) >= -100)) {
+			} else if (check_hour < 10 || check_hour > 15 || (net_energy * (60 / (check_time)) >= -100)) {
 			    dump_load_relay[3] = 0;
 			}
 			}
 			
 			// ** Basement dehumidifier control **
-			if ((net_energy * (60 / (60 - check_time)) <= -900)&&(!(check_time == 59))){
+			if ((net_energy * (60 / (check_time)) <= -900)&&(!(check_time == 59))){
 			    if (/*estimated_energy_hour <= -1200 &&*/ check_hour >= 9 && check_hour <= 16) {
 			        dump_load_relay[4] = 1;
 			    }
-			} else if (check_hour < 9 || check_hour > 16 || (net_energy * (60 / (60 - check_time)) >= -250) || check_time <20 || check_time == 59) {
+			} else if (check_hour < 9 || check_hour > 16 || (net_energy * (60 / (check_time)) >= -250) || check_time <20 || check_time == 59) {
 			    dump_load_relay[4] = 0;
 			}
 
