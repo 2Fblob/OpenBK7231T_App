@@ -839,7 +839,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				//(last_time = check_time)
 			
 			// ** Dishwasher control **
-			if net_energy * (60 / (60 - check_time)) <= -800) {
+			if (net_energy * (60 / (60 - check_time)) <= -800) {
 			    if (/*estimated_energy_hour <= -600 && */check_hour >= 9 && check_hour <= 17) {
 			        dump_load_relay[2] = 1;
 			    }
@@ -857,7 +857,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 				
 			// ** Secondary charger control **
-			if (net_energy * (60 / (60 - check_time)) <= -800){
+			if (net_energy * (60 / (60 - check_time)) <= -450){
 			    if (/*estimated_energy_hour <= -400 &&*/ check_hour >= 9 && check_hour <= 17) {
 			        dump_load_relay[3] = 1;
 			    }
@@ -867,11 +867,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 			
 			// ** Basement dehumidifier control **
-			if (net_energy * (60 / (60 - check_time)) <= -1000){
+			if (net_energy * (60 / (60 - check_time)) <= -900){
 			    if (/*estimated_energy_hour <= -1200 &&*/ check_hour >= 9 && check_hour <= 17) {
 			        dump_load_relay[4] = 1;
 			    }
-			} else if (check_hour < 9 || check_hour > 17 || (net_energy * (60 / (60 - check_time)) >= -200) || check_time <20 || check_time == 59) {
+			} else if (check_hour < 9 || check_hour > 17 || (net_energy * (60 / (60 - check_time)) >= -250) || check_time <20 || check_time == 59) {
 			    dump_load_relay[4] = 0;
 			}
 
