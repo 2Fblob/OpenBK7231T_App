@@ -834,7 +834,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// end new
 
 //((((estimated_energy_hour*60)/check_time))
-			if (check_time==15)||(check_time==20)||(check_time==25)||(check_time==30)||(check_time==35)||(check_time==40)||(check_time==45)||(check_time==50)||(check_time==55)))
+			if ((check_time==15)||(check_time==20)||(check_time==25)||(check_time==30)||(check_time==35)||(check_time==40)||(check_time==45)||(check_time==50)||(check_time==55))
 			{	
 				//(last_time = check_time)
 			
