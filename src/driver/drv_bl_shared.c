@@ -843,7 +843,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    if (/*estimated_energy_hour <= -600 && */check_hour >= 10 && check_hour <= 17) {
 			        dump_load_relay[2] = 1;
 			    }
-			} if (check_hour < 10 || check_hour > 17 || (net_energy > 0)) {
+			} else if (check_hour < 10 || check_hour > 17 || (net_energy > 0)) {
 			    dump_load_relay[2] = 0;
 			}
 				
@@ -861,7 +861,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    if (/*estimated_energy_hour <= -400 &&*/ check_hour >= 10 && check_hour <= 15) {
 			        dump_load_relay[3] = 1;
 			    }
-			} if (check_hour < 10 || check_hour > 15 || (net_energy * (60 / (60 - check_time)) >= -100)) {
+			} else if (check_hour < 10 || check_hour > 15 || (net_energy * (60 / (60 - check_time)) >= -100)) {
 			    dump_load_relay[3] = 0;
 			}
 			}
@@ -871,7 +871,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    if (/*estimated_energy_hour <= -1200 &&*/ check_hour >= 9 && check_hour <= 16) {
 			        dump_load_relay[4] = 1;
 			    }
-			} if (check_hour < 9 || check_hour > 16 || (net_energy * (60 / (60 - check_time)) >= -250) || check_time <20 || check_time == 59) {
+			} else if (check_hour < 9 || check_hour > 16 || (net_energy * (60 / (60 - check_time)) >= -250) || check_time <20 || check_time == 59) {
 			    dump_load_relay[4] = 0;
 			}
 
