@@ -867,12 +867,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			
 			
 			/** Basement dehumidifier control **/
-			if ((check_time >= 20 && check_time <= 58) && net_energy_equivament <= -900) && (check_hour >= 9 && check_hour <= 16)) {
+			if ((check_time >= 20 && check_time <= 58 && net_energy_equipment <= -900) && (check_hour >= 9 && check_hour <= 16)) {
 			    dump_load_relay[4] = 1; // Turn on dehumidifier
-			} else if (check_time == 59 || net_energy_equivament >= -300) {
+			} else if (check_time == 59 || net_energy_equipment >= -300) {
 			    dump_load_relay[4] = 0; // Turn off dehumidifier
 			}
-
 			// Now we do an update of the outputs once a minute
 		        current_minute = NTP_GetMinute();
 
