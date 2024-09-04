@@ -835,70 +835,44 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    }
 			}
 			// end new
-
-			// New logic to estimate energy
-			if (NTPGetminute() <= 30)
-			{
-				net_energy_equivalent = ((float)net_energy*(60/NTPGetminute()));
-			}
-			else 
-			{
-				net_energy_equivalent = net_energy*2;
-			}
-
-			// **Dishwasher**
-			dump_load_relay[2] = (net_energy_equivalent <= -1000 && check_hour >= 10 && check_hour <= 17) ? 1 : 
-			                     ((check_hour < 10 || check_hour > 17 || net_energy > 0) ? 0 : dump_load_relay[2]);
-			
-			// **Primary Charger**
-			dump_load_relay[1] = (net_energy_equivalent <= -400 && check_hour >= 9 && check_hour <= 17) ? 1 : 
-			                     ((check_hour < 9 || check_hour > 17 || net_energy_equivalent >= -100) ? 0 : dump_load_relay[1]);
-			
-			// **Secondary Charger**
-			dump_load_relay[3] = (net_energy_equivalent <= -800 && check_hour >= 10 && check_hour <= 15) ? 1 : 
-			                     ((check_hour < 10 || check_hour > 15 || net_energy_equivalent >= -200) ? 0 : dump_load_relay[3]);
-			
-			// **Check Time Condition**
-			if (check_time >= 15 && check_time <= 55 && (check_time % 5 == 0)) {
-			    dump_load_relay[2] = (net_energy_equivalent <= -1000) ? dump_load_relay[2] : dump_load_relay[2];
-			    dump_load_relay[1] = (net_energy_equivalent <= -400) ? dump_load_relay[1] : dump_load_relay[1];
-			    dump_load_relay[3] = (net_energy_equivalent <= -800) ? dump_load_relay[3] : dump_load_relay[3];
-			}
-			
-			
-			/** Basement dehumidifier control **/
-			if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -100) && (check_hour >= 9 && check_hour <= 16)) {
-			    dump_load_relay[4] = 1; // Turn on dehumidifier
-			} else if (check_time == 59 || net_energy_equivalent >= -300) {
-			    dump_load_relay[4] = 0; // Turn off dehumidifier
-			}
-			
-			// Now we do an update of the outputs once a minute
-		        current_minute = NTP_GetMinute();
-
-        		/*if (current_minute != last_minute) 
-			{
-		        last_minute = current_minute;
-			char output_command[50] = "";
-			const char *ip_start = "SendGet http://192.168.5.";
- 			const char *ip_middle = "/cm?cmnd=Power%20";
-			sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
-			CMD_ExecuteCommand(output_command, 0);
-			delay(250);
-			//CMD_ExecuteCommand(delay_s 5);
-			//delay_s 5;
-			// Increase the index
-		            output_index++;
-		
-		            // Reset index after reading all positions
-			    if (output_index >= dump_load_relay_number) {
-		                output_index = 0; 
-		            }
-			}*/
+			current_minute = NTP_GetMinute();
 			//----------------------------
 			if (current_minute != last_minute) 
 			{
-			    last_minute = current_minute;
+				// Reset
+				last_minute = current_minute;
+				// **Check Time Condition**
+				if (check_time >= 15 && check_time <= 55 && (check_time % 5 == 0))
+				// New logic to estimate energy
+				if (NTPGetminute() <= 30)
+				{
+					net_energy_equivalent = ((float)(net_energy*(60/NTPGetminute())));
+				}
+				else 
+				{
+					net_energy_equivalent = net_energy*2;
+				}
+			
+				// **Dishwasher**
+				dump_load_relay[2] = (net_energy_equivalent <= -1000 && check_hour >= 10 && check_hour <= 17) ? 1 : 
+				                     ((check_hour < 10 || check_hour > 17 || net_energy > 0) ? 0 : dump_load_relay[2]);
+				
+				// **Primary Charger**
+				dump_load_relay[1] = (net_energy_equivalent <= -400 && check_hour >= 9 && check_hour <= 17) ? 1 : 
+				                     ((check_hour < 9 || check_hour > 17 || net_energy_equivalent >= -100) ? 0 : dump_load_relay[1]);
+				
+				// **Secondary Charger**
+				dump_load_relay[3] = (net_energy_equivalent <= -800 && check_hour >= 10 && check_hour <= 15) ? 1 : 
+				                     ((check_hour < 10 || check_hour > 15 || net_energy_equivalent >= -200) ? 0 : dump_load_relay[3]);			   
+			
+			
+				/** Basement dehumidifier control **/
+				if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -100) && (check_hour >= 9 && check_hour <= 16)) {
+				    dump_load_relay[4] = 1; // Turn on dehumidifier
+				} else if (check_time == 59 || net_energy_equivalent >= -300) {
+				    dump_load_relay[4] = 0; // Turn off dehumidifier
+				}
+				
 			
 				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
 				{
@@ -935,7 +909,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				        break;
 				    }
 				}
-			//end of new ------------------------------------------------------------
+			//end of execute once a minute ------------------------------------------------------------
 			}
 			//----------------------------
 			//}
