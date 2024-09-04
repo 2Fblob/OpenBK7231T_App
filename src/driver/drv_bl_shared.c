@@ -842,17 +842,17 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				// Reset
 				last_minute = current_minute;
 				// **Check Time Condition**
+				// New logic to estimate energy
+				if (NTP_GetMinute() <= 30)
+				{
+					net_energy_equivalent = ((float)(net_energy*(60/NTP_GetMinute())));					
+				}
+				else 
+				{
+					net_energy_equivalent = net_energy*2;
+				}
 				if (check_time >= 15 && check_time <= 55 && (check_time % 5 == 0))
 				{
-					// New logic to estimate energy
-					if (NTP_GetMinute() <= 30)
-					{
-						net_energy_equivalent = ((float)(net_energy*(60/NTP_GetMinute())));
-					}
-					else 
-					{
-						net_energy_equivalent = net_energy*2;
-					}
 				
 					// **Dishwasher**
 					dump_load_relay[2] = (net_energy_equivalent <= -1000 && check_hour >= 10 && check_hour <= 17) ? 1 : 
