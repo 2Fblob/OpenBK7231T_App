@@ -843,9 +843,9 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				last_minute = current_minute;
 				// **Check Time Condition**
 				// New logic to estimate energy
-				if (NTP_GetMinute() <= 30)
+				if (current_minute < 30)
 				{
-					net_energy_equivalent = ((float)(net_energy*(60/NTP_GetMinute())));					
+					net_energy_equivalent = ((float)(net_energy*(60/current_minute)));					
 				}
 				else 
 				{
