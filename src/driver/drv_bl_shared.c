@@ -848,7 +848,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 				
 			// ** Primary charger control **
-			if (net_energy * (60 / (60 - check_time)) <= -500) {
+			if (net_energy * (60 / (60 - check_time)) <= -400) {
 			    if (/*estimated_energy_hour <= -400 && */check_hour >= 9 && check_hour <= 17) {
 			        dump_load_relay[1] = 1;
 			    }
@@ -857,8 +857,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 				
 			// ** Secondary charger control **
-			if (net_energy * (60 / (60 - check_time)) <= -1000){
-			    if (/*estimated_energy_hour <= -800 &&*/ check_hour >= 9 && check_hour <= 17) {
+			if (net_energy * (60 / (60 - check_time)) <= -800){
+			    if (/*estimated_energy_hour <= -400 &&*/ check_hour >= 9 && check_hour <= 17) {
 			        dump_load_relay[3] = 1;
 			    }
 			} else if (check_hour < 9 || check_hour > 17 || (net_energy * (60 / (60 - check_time)) >= -100)) {
@@ -867,7 +867,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 			
 			// ** Basement dehumidifier control **
-			if (net_energy * (60 / (60 - check_time)) <= -1200){
+			if (net_energy * (60 / (60 - check_time)) <= -1000){
 			    if (/*estimated_energy_hour <= -1200 &&*/ check_hour >= 9 && check_hour <= 17) {
 			        dump_load_relay[4] = 1;
 			    }
