@@ -867,7 +867,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 			
 			// ** Basement dehumidifier control **
-			if (net_energy * (60 / (60 - check_time)) <= -900){
+			if ((net_energy * (60 / (60 - check_time)) <= -900)&&(!(check_time == 59))){
 			    if (/*estimated_energy_hour <= -1200 &&*/ check_hour >= 9 && check_hour <= 16) {
 			        dump_load_relay[4] = 1;
 			    }
