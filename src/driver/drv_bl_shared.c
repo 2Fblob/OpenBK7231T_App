@@ -866,52 +866,51 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					dump_load_relay[3] = (net_energy_equivalent <= -800 && check_hour >= 10 && check_hour <= 15) ? 1 : 
 					                     ((check_hour < 10 || check_hour > 15 || net_energy_equivalent >= -200) ? 0 : dump_load_relay[3]);			   
 				
-				
-					/** Basement dehumidifier control **/
-					if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -100) && (check_hour >= 9 && check_hour <= 16)) {
-					    dump_load_relay[4] = 1; // Turn on dehumidifier
-					} else if (check_time == 59 || net_energy_equivalent >= -300) {
-					    dump_load_relay[4] = 0; // Turn off dehumidifier
-					}
-					
-				
-					for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
-					{
-					
-					// At midnight, reset
-					if ((NTP_GetHour() == 0) && (NTP_GetMinute() == 0))
-						{
-						dump_load_relay_timer[output_index] = 0;
-						}
-					else
-					{
-					 if (dump_load_relay[output_index] == 1) 
-					    {
-					        dump_load_relay_timer[output_index]++;
-					    }
-					}
-					}
-				//new ---------------------------------------------------------------------
-					for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
-					{
-					    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
-					    {
-					        // Update the last known value
-					        last_dump_load_value[output_index] = dump_load_relay[output_index];
-					
-					        char output_command[50] = "";
-					        const char *ip_start = "SendGet http://192.168.5.";
-					        const char *ip_middle = "/cm?cmnd=Power%20";
-					        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
-					        
-					        CMD_ExecuteCommand(output_command, 0);
-					        
-					        // Exit the loop after executing the command
-					        break;
-					    }
-					}
-			//end of execute once a minute ------------------------------------------------------------
 				}
+				/** Basement dehumidifier control **/
+				if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -1000) && (check_hour >= 9 && check_hour <= 16)) {
+				    dump_load_relay[4] = 1; // Turn on dehumidifier
+				} else if (check_time == 59 || net_energy_equivalent >= -300) {
+				    dump_load_relay[4] = 0; // Turn off dehumidifier
+				}
+				
+				
+				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
+				{
+					
+				// At midnight, reset
+				if ((NTP_GetHour() == 0) && (NTP_GetMinute() == 0))
+					{
+					dump_load_relay_timer[output_index] = 0;
+					}
+				else
+				{
+				 if (dump_load_relay[output_index] == 1) 
+				    {
+				        dump_load_relay_timer[output_index]++;
+				    }
+				}
+				}
+				//new ---------------------------------------------------------------------
+				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
+				{
+				    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
+				    {
+				        // Update the last known value
+				        last_dump_load_value[output_index] = dump_load_relay[output_index];
+				
+				        char output_command[50] = "";
+				        const char *ip_start = "SendGet http://192.168.5.";
+				        const char *ip_middle = "/cm?cmnd=Power%20";
+				        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
+				        
+				        CMD_ExecuteCommand(output_command, 0);
+				        
+				        // Exit the loop after executing the command
+				        break;
+				    }
+				}
+			//end of execute once a minute ------------------------------------------------------------		
 			}
 			//----------------------------
 			//}
