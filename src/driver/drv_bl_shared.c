@@ -839,7 +839,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// New logic to estimate energy
 			if (check_time <= 30)
 			{
-				net_energy_equivalent = net_energy*(check_time/60);
+				net_energy_equivalent = ((float)net_energy*(60/check_time));
 			}
 			else 
 			{
@@ -847,31 +847,32 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 
 			// **Dishwasher**
-			dump_load_relay[2] = (net_energy_equivalent <= -800 && check_hour >= 10 && check_hour <= 17) ? 1 : 
+			dump_load_relay[2] = (net_energy_equivalent <= -1000 && check_hour >= 10 && check_hour <= 17) ? 1 : 
 			                     ((check_hour < 10 || check_hour > 17 || net_energy > 0) ? 0 : dump_load_relay[2]);
 			
 			// **Primary Charger**
 			dump_load_relay[1] = (net_energy_equivalent <= -400 && check_hour >= 9 && check_hour <= 17) ? 1 : 
-			                     ((check_hour < 9 || check_hour > 17 || net_energy_equivalent >= -50) ? 0 : dump_load_relay[1]);
+			                     ((check_hour < 9 || check_hour > 17 || net_energy_equivalent >= -100) ? 0 : dump_load_relay[1]);
 			
 			// **Secondary Charger**
-			dump_load_relay[3] = (net_energy_equivalent <= -450 && check_hour >= 10 && check_hour <= 15) ? 1 : 
-			                     ((check_hour < 10 || check_hour > 15 || net_energy_equivalent >= -100) ? 0 : dump_load_relay[3]);
+			dump_load_relay[3] = (net_energy_equivalent <= -800 && check_hour >= 10 && check_hour <= 15) ? 1 : 
+			                     ((check_hour < 10 || check_hour > 15 || net_energy_equivalent >= -200) ? 0 : dump_load_relay[3]);
 			
 			// **Check Time Condition**
 			if (check_time >= 15 && check_time <= 55 && (check_time % 5 == 0)) {
-			    dump_load_relay[2] = (net_energy_equivalent <= -800) ? dump_load_relay[2] : dump_load_relay[2];
+			    dump_load_relay[2] = (net_energy_equivalent <= -1000) ? dump_load_relay[2] : dump_load_relay[2];
 			    dump_load_relay[1] = (net_energy_equivalent <= -400) ? dump_load_relay[1] : dump_load_relay[1];
-			    dump_load_relay[3] = (net_energy_equivalent <= -450) ? dump_load_relay[3] : dump_load_relay[3];
+			    dump_load_relay[3] = (net_energy_equivalent <= -800) ? dump_load_relay[3] : dump_load_relay[3];
 			}
 			
 			
 			/** Basement dehumidifier control **/
-			if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -900) && (check_hour >= 9 && check_hour <= 16)) {
+			if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -100) && (check_hour >= 9 && check_hour <= 16)) {
 			    dump_load_relay[4] = 1; // Turn on dehumidifier
 			} else if (check_time == 59 || net_energy_equivalent >= -300) {
 			    dump_load_relay[4] = 0; // Turn off dehumidifier
 			}
+			
 			// Now we do an update of the outputs once a minute
 		        current_minute = NTP_GetMinute();
 
