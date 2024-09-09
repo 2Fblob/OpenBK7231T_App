@@ -870,14 +870,14 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				// It's ideal power source is unused energy as we approach the end of the hour.
 				if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -800) && (check_hour >= 9 && check_hour <= 16)) {
 				    dump_load_relay[4] = 1; // Turn on dehumidifier
-				} else if (check_time == 59 || net_energ >= -300) {
+				} else if (check_time == 59 || net_energy >= -300) {
 				    dump_load_relay[4] = 0; // Turn off dehumidifier
 				}
 
 				/** Dishwasher control **/
 				// We wait for an estimated 700W to be available and allow up to 300W from grid / battery to facilitate in poor weather
 				// This ensures it wont go off during hour changes and takes priority over other devices.
-				if (net_energy_equivalent <= -700) && (check_hour >= 9 && check_hour <= 18)) {
+				if ((net_energy_equivalent <= -700) && (check_hour >= 9 && check_hour <= 18)) {
 				    dump_load_relay[4] = 1; // Turn on dishwasher
 				} else if (net_energy >= 300) {
 				    dump_load_relay[4] = 0; // Turn off dishwasher. We allow up to 300W from grid / battery to facilitate in poor weather
