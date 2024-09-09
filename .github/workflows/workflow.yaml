@@ -65,7 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [OpenBK7231T, OpenBK7231N, OpenXR809, OpenBL602, OpenW800, OpenW600, OpenLN882H]
+        platform: [OpenBK7231N]
     steps:
       - name: Source checkout
         uses: actions/checkout@v2
@@ -117,7 +117,7 @@ jobs:
       - name: Source checkout
         uses: actions/checkout@v2
       - name: Fetch build assets
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: ${{ env.APP_NAME }}_${{ needs.refs.outputs.version }}
           path: output/${{ needs.refs.outputs.version }}
