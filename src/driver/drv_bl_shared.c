@@ -857,32 +857,31 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 												
 					// The chargers wait for the first 15 minutes for power to accumulate. During this time the previous state is maintained.
 					// **Primary Charger**
-					dump_load_relay[1] = (net_energy_equivalent <= -300 && check_hour >= 9 && check_hour <= 17) ? 1 : 
-					                     ((net_energy >= -100) ? 0 : dump_load_relay[1]);
+					dump_load_relay[1] = (net_energy_equivalent <= -400 && check_hour >= 9 && check_hour <= 17) ? 1 : 
+					                     ((net_energy >= -50) ? 0 : dump_load_relay[1]);
 					
 					// **Secondary Charger**
 					dump_load_relay[3] = (net_energy_equivalent <= -500 && check_hour >= 10 && check_hour <= 15) ? 1 : 
-					                     (( net_energy >= -150) ? 0 : dump_load_relay[3]);			   
-				
+					                     (( net_energy >= -100) ? 0 : dump_load_relay[3]);			   
+					
+					/** Basement dehumidifier control **/
+					// The dehumidifier turns on last at t = 20 minutes, to ensure the power stabilizes as the chargers and dishwasher operate.
+					// It's ideal power source is unused energy as we approach the end of the hour.
+					if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -800) && (check_hour >= 9 && check_hour <= 16)) {
+					    dump_load_relay[4] = 1; // Turn on dehumidifier
+					} else if (check_time == 59 || net_energy >= -150) {
+					    dump_load_relay[4] = 0; // Turn off dehumidifier
+					}
+	
+					/** Dishwasher control **/
+					// We wait for an estimated 700W to be available and allow up to 300W from grid / battery to facilitate in poor weather
+					// This ensures it wont go off during hour changes and takes priority over other devices.
+					if ((net_energy_equivalent <= -700) && (check_hour >= 9 && check_hour <= 18)) {
+					    dump_load_relay[4] = 1; // Turn on dishwasher
+					} else if (net_energy >= 300) {
+					    dump_load_relay[4] = 0; // Turn off dishwasher. We allow up to 300W from grid / battery to facilitate in poor weather
+					}
 				}
-				/** Basement dehumidifier control **/
-				// The dehumidifier turns on last at t = 20 minutes, to ensure the power stabilizes as the chargers and dishwasher operate.
-				// It's ideal power source is unused energy as we approach the end of the hour.
-				if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -800) && (check_hour >= 9 && check_hour <= 16)) {
-				    dump_load_relay[4] = 1; // Turn on dehumidifier
-				} else if (check_time == 59 || net_energy >= -300) {
-				    dump_load_relay[4] = 0; // Turn off dehumidifier
-				}
-
-				/** Dishwasher control **/
-				// We wait for an estimated 700W to be available and allow up to 300W from grid / battery to facilitate in poor weather
-				// This ensures it wont go off during hour changes and takes priority over other devices.
-				if ((net_energy_equivalent <= -700) && (check_hour >= 9 && check_hour <= 18)) {
-				    dump_load_relay[4] = 1; // Turn on dishwasher
-				} else if (net_energy >= 300) {
-				    dump_load_relay[4] = 0; // Turn off dishwasher. We allow up to 300W from grid / battery to facilitate in poor weather
-				}
-				
 				
 				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
 				{
