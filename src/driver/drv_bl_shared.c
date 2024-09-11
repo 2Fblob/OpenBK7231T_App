@@ -877,9 +877,9 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					// We wait for an estimated 700W to be available and allow up to 300W from grid / battery to facilitate in poor weather
 					// This ensures it wont go off during hour changes and takes priority over other devices.
 					if ((net_energy_equivalent <= -700) && (check_hour >= 9 && check_hour <= 18)) {
-					    dump_load_relay[4] = 1; // Turn on dishwasher
+					    dump_load_relay[2] = 1; // Turn on dishwasher
 					} else if (net_energy >= 300) {
-					    dump_load_relay[4] = 0; // Turn off dishwasher. We allow up to 300W from grid / battery to facilitate in poor weather
+					    dump_load_relay[2] = 0; // Turn off dishwasher. We allow up to 300W from grid / battery to facilitate in poor weather
 					}
 				}
 				
