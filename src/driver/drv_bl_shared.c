@@ -285,7 +285,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	hprintf255(request, "<font size=2>- Hour Estimation: <b>%iW</b> <br></font>", (int)estimated_energy_hour);
 	
 	//--------------------------------------------------------------------------------------------------
-		mtqq_total_net_export = net_matrix[check_hour];
+		//mtqq_total_net_export = net_matrix[check_hour];
 	//--------------------------------------------------------------------------------------------------
 		// Update status of the diversion relay on webpage		
 		//-------------------------------------------------------------------------------------------------------------------------------------------------
@@ -576,8 +576,7 @@ commandResult_t BL09XX_VCPPrecision(const void *context, const char *cmd, const 
 			case 2: // power
 				sensors[OBK_POWER].rounding_decimals = val;
 				sensors[OBK_POWER_APPARENT].rounding_decimals = val;
-				//sensors[OBK_POWER_REACTIVE].rounding_decimals = val;
-				sensors[OBK_POWER_REACTIVE].rounding_decimals = mtqq_total_net_export;
+				sensors[OBK_POWER_REACTIVE].rounding_decimals = val;
 				break;
 			case 3: // energy
 				for (int j = OBK_CONSUMPTION__DAILY_FIRST; j <= OBK_CONSUMPTION__DAILY_LAST; j++) {
