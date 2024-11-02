@@ -114,7 +114,7 @@ struct {
 	{{"power",		"W",		"Power",			"power",			"2",		},	0,			10,		},	// OBK_POWER
 	{{"apparent_power",	"VA",		"Apparent Power",		"power_apparent",		"9",		},	0,			10,		},	// OBK_POWER_APPARENT
 	//{{"reactive_power",	"var",		"Reactive Power",		"power_reactive",		"10",		},	0,			10,		},	// OBK_POWER_REACTIVE
-	{{"reactive_power",	"VAR",		"Reactive Power",		"power_reactive",		"10",		},	0,			1,		},	// OBK_POWER_REACTIVE
+	{{"reactive_power",	"Wh",		"Energy Balance",		"power_reactive",		"10",		},	0,			1,		},	// OBK_POWER_REACTIVE
 	{{"power_factor",	"",		"Power Factor",			"power_factor",			"11",		},	1,			0.1,		},	// OBK_POWER_FACTOR
 	{{"energy",		UNIT_WH,	"Total Consumption",		"energycounter",		"3",		},	2,			0.1,		},	// OBK_CONSUMPTION_TOTAL
 	{{"energy",		UNIT_WH,	"Total Generation",		"energycounter_generation",	"14",		},	2,			0.1,		},	// OBK_GENERATION_TOTAL	
