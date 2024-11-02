@@ -963,7 +963,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 										? 0
 										: sqrtf(powf(sensors[OBK_POWER_APPARENT].lastReading, 2) -
 												powf(sensors[OBK_POWER].lastReading, 2)));  */
-	sensors[OBK_POWER_REACTIVE].lastReading = net_energy;
+	sensors[OBK_POWER_REACTIVE].lastReading = ((int)net_energy);
 	
 	sensors[OBK_POWER_FACTOR].lastReading =
         (sensors[OBK_POWER_APPARENT].lastReading == 0 ? 1 : sensors[OBK_POWER].lastReading / sensors[OBK_POWER_APPARENT].lastReading);
