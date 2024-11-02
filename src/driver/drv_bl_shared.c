@@ -113,7 +113,8 @@ struct {
 	{{"current",		"A",		"Current",			"current",			"1",		},	2,			0.01,		},	// OBK_CURRENT
 	{{"power",		"W",		"Power",			"power",			"2",		},	0,			10,		},	// OBK_POWER
 	{{"apparent_power",	"VA",		"Apparent Power",		"power_apparent",		"9",		},	0,			10,		},	// OBK_POWER_APPARENT
-	{{"reactive_power",	"var",		"Reactive Power",		"power_reactive",		"10",		},	0,			10,		},	// OBK_POWER_REACTIVE
+	//{{"reactive_power",	"var",		"Reactive Power",		"power_reactive",		"10",		},	0,			10,		},	// OBK_POWER_REACTIVE
+	{{"Net Metering Balance","W",		"Net Metering Balance",		"Net Metering Balance",		"10",		},	0,			10,		},	// OBK_POWER_REACTIVE
 	{{"power_factor",	"",		"Power Factor",			"power_factor",			"11",		},	1,			0.1,		},	// OBK_POWER_FACTOR
 	{{"energy",		UNIT_WH,	"Total Consumption",		"energycounter",		"3",		},	2,			0.1,		},	// OBK_CONSUMPTION_TOTAL
 	{{"energy",		UNIT_WH,	"Total Generation",		"energycounter_generation",	"14",		},	2,			0.1,		},	// OBK_GENERATION_TOTAL	
@@ -824,13 +825,13 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			if (solar_available == 0) {
 			    if (net_energy > -30) {
 			        dump_load_relay[0] = 1; // Storage inverter ON
-			    } else if (net_energy <= -50) {
+			    } else if (net_energy <= -20) {
 			        dump_load_relay[0] = 0; // Storage inverter OFF
 			    }
 			} else if (solar_available == 1) {
 			    if (net_energy > 10) {
 			        dump_load_relay[0] = 1; // Storage inverter ON
-			    } else if (net_energy <= -50) {
+			    } else if (net_energy <= -20) {
 			        dump_load_relay[0] = 0; // Storage inverter OFF
 			    }
 			}
@@ -857,19 +858,28 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 												
 					// The chargers wait for the first 15 minutes for power to accumulate. During this time the previous state is maintained.
 					// **Primary Charger**
-					dump_load_relay[1] = (net_energy_equivalent <= -400 && check_hour >= 9 && check_hour <= 17) ? 1 : 
+					dump_load_relay[1] = (net_energy_equivalent <= -200 && check_hour >= 8 && check_hour <= 17) ? 1 : 
 					                     ((net_energy >= -50) ? 0 : dump_load_relay[1]);
 					
 					// **Secondary Charger**
-					dump_load_relay[3] = (net_energy_equivalent <= -500 && check_hour >= 10 && check_hour <= 15) ? 1 : 
+					dump_load_relay[3] = (net_energy_equivalent <= -500 && check_hour >= 9 && check_hour <= 15) ? 1 : 
 					                     (( net_energy >= -100) ? 0 : dump_load_relay[3]);			   
 					
 					/** Basement dehumidifier control **/
 					// The dehumidifier turns on last at t = 20 minutes, to ensure the power stabilizes as the chargers and dishwasher operate.
 					// It's ideal power source is unused energy as we approach the end of the hour.
-					if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -800) && (check_hour >= 9 && check_hour <= 16)) {
+					
+					/* TEMPORARY DISABLED */
+     					/*if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -800) && (check_hour >= 9 && check_hour <= 16)) {
 					    dump_load_relay[4] = 1; // Turn on dehumidifier
 					} else if (check_time == 59 || net_energy >= -150) {
+					    dump_load_relay[4] = 0; // Turn off dehumidifier
+					}*/
+
+					// Temporary for aditional battery module
+					if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -200) && (check_hour >= 8 && check_hour <= 16)) {
+					    dump_load_relay[4] = 1; // Turn on dehumidifier
+					} else if (check_time == 59 || net_energy >= -50) {
 					    dump_load_relay[4] = 0; // Turn off dehumidifier
 					}
 	
@@ -949,10 +959,13 @@ void BL_ProcessUpdate(float voltage, float current, float power,
    	sensors[OBK_CURRENT].lastReading = current;
 	sensors[OBK_POWER].lastReading = power;
 	sensors[OBK_POWER_APPARENT].lastReading = sensors[OBK_VOLTAGE].lastReading * sensors[OBK_CURRENT].lastReading;
-    	sensors[OBK_POWER_REACTIVE].lastReading = (sensors[OBK_POWER_APPARENT].lastReading <= fabsf(sensors[OBK_POWER].lastReading)
+	// Use power reactive to display netmetering
+    	/*sensors[OBK_POWER_REACTIVE].lastReading = (sensors[OBK_POWER_APPARENT].lastReading <= fabsf(sensors[OBK_POWER].lastReading)
 										? 0
 										: sqrtf(powf(sensors[OBK_POWER_APPARENT].lastReading, 2) -
-												powf(sensors[OBK_POWER].lastReading, 2)));  
+												powf(sensors[OBK_POWER].lastReading, 2)));  */
+	sensors[OBK_POWER_REACTIVE].lastReading = net_energy;
+	
 	sensors[OBK_POWER_FACTOR].lastReading =
         (sensors[OBK_POWER_APPARENT].lastReading == 0 ? 1 : sensors[OBK_POWER].lastReading / sensors[OBK_POWER_APPARENT].lastReading);
 
