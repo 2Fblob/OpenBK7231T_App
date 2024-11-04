@@ -881,9 +881,9 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 
 					// Temporary for aditional battery module
 					// Forces 'ON' Between 1PM and 3PM to acco odate charge if there is no solar
-					if (((check_time >= 40 && check_time <= 58 && net_energy_equivalent <= -200) && (check_hour >= 8 && check_hour <= 13))||(check_hour == 12 || check_hour == 13)) {
+					if (((check_time >= 40 && check_time <= 58 && net_energy_equivalent <= -200) && (check_hour >= 8 && check_hour <= 13))||(check_hour == 14 || check_hour == 16)) {
 					    dump_load_relay[4] = 1; // Turn on dehumidifier
-					} else if (check_time == 59 || net_energy >= -30) {
+					} else if (check_time == 59 || net_energy >= -10) {
 					    dump_load_relay[4] = 0; // Turn off dehumidifier
 					}
 	
