@@ -822,15 +822,15 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 			
 			if (solar_available == 0) {
-			    if (net_energy > -5) {
+			    if (net_energy > 0) {
 			        dump_load_relay[0] = 1; // Storage inverter ON
-			    } else if (net_energy <= -25) {
+			    } else if (net_energy <= -10) {
 			        dump_load_relay[0] = 0; // Storage inverter OFF
 			    }
 			} else if (solar_available == 1) {
-			    if (net_energy > 10) {
+			    if (net_energy > 50) {
 			        dump_load_relay[0] = 1; // Storage inverter ON
-			    } else if (net_energy <= -25) {
+			    } else if (net_energy <= 0) {
 			        dump_load_relay[0] = 0; // Storage inverter OFF
 			    }
 			}
@@ -850,7 +850,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				}
 				else 
 				{
-					net_energy_equivalent = net_energy*2;
+					if (current_minute < 51)
+					{
+					//net_energy_equivalent = net_energy*2;
+					net_energy_equivalent = ((float)(net_energy*(60/(60-current_minute))));
+					}
 				}
 				if (check_time > 14)
 				{
@@ -877,9 +881,9 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 
 					// Temporary for aditional battery module
 					// Forces 'ON' Between 1PM and 3PM to acco odate charge if there is no solar
-					if (((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -200) && (check_hour >= 8 && check_hour <= 13))||(check_hour == 12 || check_hour == 13)) {
+					if (((check_time >= 40 && check_time <= 58 && net_energy_equivalent <= -200) && (check_hour >= 8 && check_hour <= 13))||(check_hour == 12 || check_hour == 13)) {
 					    dump_load_relay[4] = 1; // Turn on dehumidifier
-					} else if (check_time == 59 || net_energy >= -50) {
+					} else if (check_time == 59 || net_energy >= -30) {
 					    dump_load_relay[4] = 0; // Turn off dehumidifier
 					}
 	
