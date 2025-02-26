@@ -6,7 +6,7 @@ static int net_matrix[24] = {0};
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int net_energy_equivalent = 0;
-int adjust_net_energy =0;
+int adjust_net_energy = 50;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
 //float estimated_production_hour = 0; 
@@ -336,14 +336,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		// Print Status of automation outputs)
 
 		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
-			// Clamp the estimated_energy_hour between -50 and 1000
-			int inverter_control = 0;	// Dummy variable to indicate if energy is negative.
-		        if (estimated_energy_hour < -50) {estimated_energy_hour = -50;} 
-			else if (estimated_energy_hour > 1000) {estimated_energy_hour = 1000;}
-		        // Calculate adjust_net_energy based on the clamped estimated_energy_hour
-		        adjust_net_energy = (estimated_energy_hour + 50) / 10;
-			int inverter_control 
-		// End of PWM control
+
+
+		
 		
 		poststr(request," <hr> <h4>Current system status: </h4></font>");
 		hprintf255(request,"<font size=2>- Storage Inverter: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[0], dump_load_relay_timer[0]); 
@@ -352,23 +347,24 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 
-		//Print the values on the web interface
+		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
 		temp_adjust_net_energy = (estimated_energy_hour / 10);
 		// Cap the values to ensure they're within the range of -50 to 1000
 			if (estimated_energy_hour < -50) {estimated_energy_hour = -50;} 	// Cap at -50 if lower
 			else if (estimated_energy_hour > 1000) {estimated_energy_hour = 1000;} 	// Cap at 1000 if higher
 			
 			adjust_net_energy = (estimated_energy_hour + 50) / 10;  		// Adjust energy value
-			
-			// Check if Estimated Energy Hour is greater than 0
-			if (estimated_energy_hour > 0) 
-				{
-				    hprintf255(request, "<font size=2>- Storage Charger C, Output level: <b>%i</b> <br></font>", adjust_net_energy);
-				} 
-			else 
-				{
-				    hprintf255(request, "<font size=2>- Storage Inverter B, Output level: <b>%i</b> <br></font>", adjust_net_energy);
-				}
+			// End of PWM control
+		
+		// Check if Estimated Energy Hour is greater than 0 & Print the values on the web interface
+		if (estimated_energy_hour > 0) 
+			{
+			    hprintf255(request, "<font size=2>- Storage Charger C, Output level: <b>%i</b> <br></font>", adjust_net_energy);
+			} 
+		else 
+			{
+			    hprintf255(request, "<font size=2>- Storage Inverter B, Output level: <b>%i</b> <br></font>", (5-adjust_net_energy));
+			}
 		// End of printing values for inverter & charger
 		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
 		if (estimated_energy_hour<0)
