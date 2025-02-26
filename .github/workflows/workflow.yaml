@@ -47,6 +47,7 @@ jobs:
           export BRANCHTRANSLATED=$(echo ${BRANCH} | tr '/' '_')
           echo "short_ref: ${BRANCHTRANSLATED}"
           export VERSION=""
+
           if ${{ steps.semantic.outputs.new_release_published == 'true' }}; then
             export VERSION=${{ steps.semantic.outputs.new_release_version }}
           else
@@ -55,9 +56,10 @@ jobs:
           echo "new_release: ${{ steps.semantic.outputs.new_release_published }}"
           echo "version: ${VERSION}"
           echo "::set-output name=new_release::${{ steps.semantic.outputs.new_release_published }}"
-          echo "::set-output name=short_ref::${BRANCHTRANSLATED}"
+          echo "::set-output name=short_ref::${BRANCHTRANSLATED }}"
           echo "::set-output name=sha_short::SHA-$(git rev-parse --short=12 HEAD)"
           echo "::set-output name=version::${VERSION}"
+
   build:
     name: Build
     needs: refs
@@ -70,11 +72,31 @@ jobs:
       - name: Source checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive        
+          submodules: recursive
+          
+      # Setup cache for Python dependencies
+      - name: Cache Python dependencies
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+          
+      # Cache the toolchain dependencies
+      - name: Cache arm toolchain
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/arm-toolchain
+          key: ${{ runner.os }}-arm-toolchain-${{ hashFiles('**/Makefile') }}
+          restore-keys: |
+            ${{ runner.os }}-arm-toolchain-
+
       - uses: actions/setup-python@v4
         with:
           python-version: '3.8'
           architecture: 'x64'
+          
       - name: Install dependencies
         run: |
           sudo dpkg --add-architecture i386
@@ -84,9 +106,11 @@ jobs:
           pip3 install configobj
           pip3 install toml
           pip3 install fdt
+
       - run: ls -la
       - name: Run make
         run: make APP_VERSION=${{ needs.refs.outputs.version }} APP_NAME=${{ matrix.platform }} ${{ matrix.platform }}
+        
       - name: Save build assets
         uses: actions/upload-artifact@v4
         with:
@@ -140,3 +164,5 @@ jobs:
           echo ${{ steps.semantic.outputs.new_release_major_version }}
           echo ${{ steps.semantic.outputs.new_release_minor_version }}
           echo ${{ steps.semantic.outputs.new_release_patch_version }}
+
+
