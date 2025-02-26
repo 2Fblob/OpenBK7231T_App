@@ -347,19 +347,19 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 
+		// Compute adjust_net_energy directly
+		int adjust_net_energy = (estimated_energy_hour + 50) / 10;
 		
-		int temp_estimated_energy_hour = 0;
-		// Cap the values to ensure they're within the range of -50 to 1000
-		if (estimated_energy_hour < -50) {temp_estimated_energy_hour = -50;} 	// Cap at -50 if lower
-		else if (estimated_energy_hour > 1000) {temp_estimated_energy_hour = 1000;} 	// Cap at 1000 if higher
-		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
-		int adjust_net_energy = (temp_estimated_energy_hour + 50) / 10;  
+		// Ensure adjust_net_energy is within the range 0 to 100
+		if (adjust_net_energy < 0) {
+		    adjust_net_energy = 0;
+		} else if (adjust_net_energy > 100) {
+		    adjust_net_energy = 100;
+		}
+		
 		// Update the variable to send this data
-		// Update Charger PWM
 		dump_load_relay[5] = (uint8_t)adjust_net_energy;
-		// End of PWM control
-			
-			
+		// End of / Compute adjust_net_energy directly
 		
 		// Check if Estimated Energy Hour is greater than 0 & Print the values on the web interface
 		if (estimated_energy_hour > 0) 
