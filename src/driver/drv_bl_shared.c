@@ -348,12 +348,12 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 
 		
-	
+		int temp_estimated_energy_hour = 0;
 		// Cap the values to ensure they're within the range of -50 to 1000
-		if (estimated_energy_hour < -50) {estimated_energy_hour = -50;} 	// Cap at -50 if lower
-		else if (estimated_energy_hour > 1000) {estimated_energy_hour = 1000;} 	// Cap at 1000 if higher
+		if (estimated_energy_hour < -50) {temp_estimated_energy_hour = -50;} 	// Cap at -50 if lower
+		else if (estimated_energy_hour > 1000) {temp_estimated_energy_hour = 1000;} 	// Cap at 1000 if higher
 		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
-		int adjust_net_energy = (estimated_energy_hour + 50) / 10;  
+		int adjust_net_energy = (temp_estimated_energy_hour + 50) / 10;  
 		// Update the variable to send this data
 		// Update Charger PWM
 		dump_load_relay[5] = (uint8_t)adjust_net_energy;
