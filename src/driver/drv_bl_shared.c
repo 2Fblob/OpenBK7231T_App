@@ -818,6 +818,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						        return (net_energy/10);  // If net_energy is between 0 and 100, return it as is
 						    }
 						}
+						char command[50]; 
 						sprintf(command, "SendGet http://192.168.5.20/cm?cmnd=Power%%20%d", adjust_net_energy);
 						CMD_ExecuteCommand(command, 0);
 					}
