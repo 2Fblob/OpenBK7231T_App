@@ -347,14 +347,19 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 
-		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
-		int temp_adjust_net_energy = (net_energy_equivalent / 10); 
+		
+	
 		// Cap the values to ensure they're within the range of -50 to 1000
-			if (estimated_energy_hour < -50) {estimated_energy_hour = -50;} 	// Cap at -50 if lower
-			else if (estimated_energy_hour > 1000) {estimated_energy_hour = 1000;} 	// Cap at 1000 if higher
+		if (estimated_energy_hour < -50) {estimated_energy_hour = -50;} 	// Cap at -50 if lower
+		else if (estimated_energy_hour > 1000) {estimated_energy_hour = 1000;} 	// Cap at 1000 if higher
+		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
+		int adjust_net_energy = (estimated_energy_hour + 50) / 10;  
+		// Update the variable to send this data
+		// Update Charger PWM
+		dump_load_relay[5] = (uint8_t)adjust_net_energy;
+		// End of PWM control
 			
-			adjust_net_energy = (net_energy_equivalent + 50) / 10;  		// Adjust energy value
-			// End of PWM control
+			
 		
 		// Check if Estimated Energy Hour is greater than 0 & Print the values on the web interface
 		if (estimated_energy_hour > 0) 
@@ -872,8 +877,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 				// Reset
 				last_minute = current_minute;
-				// Update Charger PWM
-				dump_load_relay[5] = (uint8_t)adjust_net_energy;
+				
 				// **Check Time Condition**
 				// New logic to estimate energy. We multiply the available power after t = 30minutes 
 				// to accomodate for the shorter timespam available to cunsume the energy
