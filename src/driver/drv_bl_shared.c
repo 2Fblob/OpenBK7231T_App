@@ -11,6 +11,8 @@ static int estimated_energy_start = 0;
 static int last_run_calc = 0;
 int cmd_ctrl = 0;
 
+#include <stdio.h>
+#include <string.h>
 #include "drv_bl_shared.h"
 
 #include "../new_cfg.h"
@@ -805,7 +807,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					else
 					{
 						cmd_ctrl = 0;
-						sprintf(command, "SendGet http://192.168.5.20/cm?cmnd=Power%%20%d", adjust_net_energy);
+						//sprintf(command, "SendGet http://192.168.5.20/cm?cmnd=Power%%20%d", adjust_net_energy);
 						int adjust_net_energy(int net_energy) {
 						    // Check if net_energy is less than 0, between 0 and 100, or greater than 100
 						    if (net_energy < 0) {
