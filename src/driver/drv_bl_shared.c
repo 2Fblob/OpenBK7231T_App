@@ -335,10 +335,15 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 				time_on, (dump_load_hysteresis-lastsync));*/
 		// Print Status of automation outputs)
 
-		// Check if net_energy is less than 0, between 0 and 100, or greater than 100
-		if (estimated_energy_hour < 0) {adjust_net_energy = 0; }// If net_energy is less than 0, return 0
-		else if (estimated_energy_hour > 1000) {adjust_net_energy = 100; } // If net_energy is greater than 100, return 100
-		else {adjust_net_energy = (estimated_energy_hour/10); }  // If net_energy is between 0 and 100, return it as is
+		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
+			// Clamp the estimated_energy_hour between -50 and 1000
+			int inverter_control = 0;	// Dummy variable to indicate if energy is negative.
+		        if (estimated_energy_hour < -50) {estimated_energy_hour = -50;} 
+			else if (estimated_energy_hour > 1000) {estimated_energy_hour = 1000;}
+		        // Calculate adjust_net_energy based on the clamped estimated_energy_hour
+		        adjust_net_energy = (estimated_energy_hour + 50) / 10;
+			int inverter_control 
+		// End of PWM control
 		
 		poststr(request," <hr> <h4>Current system status: </h4></font>");
 		hprintf255(request,"<font size=2>- Storage Inverter: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[0], dump_load_relay_timer[0]); 
@@ -346,7 +351,25 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Storage Charger B: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[3], dump_load_relay_timer[2]); 
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
-		hprintf255(request,"<font size=2>- Storage Charger C, Ouput level: <b>%i</b> <br></font>", dump_load_relay[5]); 
+
+		//Print the values on the web interface
+		temp_adjust_net_energy = (estimated_energy_hour / 10);
+		// Cap the values to ensure they're within the range of -50 to 1000
+			if (estimated_energy_hour < -50) {estimated_energy_hour = -50;} 	// Cap at -50 if lower
+			else if (estimated_energy_hour > 1000) {estimated_energy_hour = 1000;} 	// Cap at 1000 if higher
+			
+			adjust_net_energy = (estimated_energy_hour + 50) / 10;  		// Adjust energy value
+			
+			// Check if Estimated Energy Hour is greater than 0
+			if (estimated_energy_hour > 0) 
+				{
+				    hprintf255(request, "<font size=2>- Storage Charger C, Output level: <b>%i</b> <br></font>", adjust_net_energy);
+				} 
+			else 
+				{
+				    hprintf255(request, "<font size=2>- Storage Inverter B, Output level: <b>%i</b> <br></font>", adjust_net_energy);
+				}
+		// End of printing values for inverter & charger
 		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
 		if (estimated_energy_hour<0)
 		{
