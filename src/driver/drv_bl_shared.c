@@ -923,14 +923,14 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				
 				        char output_command[50] = "";
 					// For the charger we use a different command
-					if dump_load_relay_ip[output_index] == 0;
+					if (dump_load_relay_ip[output_index] == 0)
 						{
 						// Calculate values
 						int adjust_net_energy;
 						    // Check if net_energy is less than 0, between 0 and 100, or greater than 100
-						if (net_energy < 0) {adjust_net_energy = 0;}// If net_energy is less than 0, return 0
-						else if (net_energy > 1000) {adjust_net_energy = 100;} // If net_energy is greater than 100, return 100
-						else { adjust_net_energy = (net_energy/10);}  // If net_energy is between 0 and 100, return it as is
+						if (net_energy < 0) {adjust_net_energy = 0; }// If net_energy is less than 0, return 0
+						else if (net_energy > 1000) {adjust_net_energy = 100; } // If net_energy is greater than 100, return 100
+						else { adjust_net_energy = (net_energy/10); }  // If net_energy is between 0 and 100, return it as is
 						   
 						// Send Data
 						const char *ip_start = "SendGet http://192.168.5.";
