@@ -32,7 +32,7 @@ int last_dump_load_value[dump_load_relay_number] = {2, 2, 2, 2, 2, 2};
 static int dump_load_relay[dump_load_relay_number] = {0};
 static int dump_load_relay_timer[dump_load_relay_number] = {0};
 // The array where we store the ip address of these devices 
-static int dump_load_relay_ip[6] = {20, 23, 22, 29, 24, 27};
+static int dump_load_relay_ip[6] = {23, 22, 29, 24, 27, 20};
 int cmd_ctrl = dump_load_relay_number;
 
 #include "drv_bl_shared.h"
@@ -336,9 +336,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		// Print Status of automation outputs)
 
 		// Check if net_energy is less than 0, between 0 and 100, or greater than 100
-		if (net_energy < 0) {adjust_net_energy = 0; }// If net_energy is less than 0, return 0
-		else if (net_energy > 1000) {adjust_net_energy = 100; } // If net_energy is greater than 100, return 100
-		else { adjust_net_energy = (net_energy/10); }  // If net_energy is between 0 and 100, return it as is
+		if (net_energy_equivalenty < 0) {adjust_net_energy = 0; }// If net_energy is less than 0, return 0
+		else if (net_energy_equivalent > 1000) {adjust_net_energy = 100; } // If net_energy is greater than 100, return 100
+		else {net_energy_equivalent = (net_energy/10); }  // If net_energy is between 0 and 100, return it as is
 		
 		poststr(request," <hr> <h4>Current system status: </h4></font>");
 		hprintf255(request,"<font size=2>- Storage Inverter: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[0], dump_load_relay_timer[0]); 
@@ -346,7 +346,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Storage Charger B: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[3], dump_load_relay_timer[2]); 
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
-		hprintf255(request,"<font size=2>- Storage Charger C: <b>%i</b>, Ouput power: <b>%i</b> <br></font>", dump_load_relay[5], adjust_net_energy); 
+		hprintf255(request,"<font size=2>- Storage Charger C, Ouput level: <b>%i</b> <br></font>", adjust_net_energy); 
 		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
 		hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
 	
