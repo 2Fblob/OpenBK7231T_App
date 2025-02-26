@@ -887,7 +887,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				}
 				else 
 				{
-					if (current_minute < 57)
+					if (current_minute < 55)
 					{
 					//net_energy_equivalent = net_energy*2;
 					net_energy_equivalent = ((float)(net_energy*(60/(60-current_minute))));
