@@ -861,7 +861,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				}
 				else 
 				{
-					if (current_minute < 51)
+					if (current_minute < 57)
 					{
 					//net_energy_equivalent = net_energy*2;
 					net_energy_equivalent = ((float)(net_energy*(60/(60-current_minute))));
@@ -938,7 +938,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						{
 						// Send Data
 						const char *ip_start = "SendGet http://192.168.5.";
-					        const char *ip_middle = "/cm?cmndDimmer3%20";
+					        const char *ip_middle = "/cm?cmnd=Dimmer3%20";
 					        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, adjust_net_energy);
 						}
 					    else
