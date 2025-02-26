@@ -808,16 +808,15 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					{
 						cmd_ctrl = 0;
 						//sprintf(command, "SendGet http://192.168.5.20/cm?cmnd=Power%%20%d", adjust_net_energy);
-						int adjust_net_energy(int net_energy) {
+						int adjust_net_energy;
 						    // Check if net_energy is less than 0, between 0 and 100, or greater than 100
 						    if (net_energy < 0) {
-						        return 0;  // If net_energy is less than 0, return 0
+						        adjust_net_energy = 0;  // If net_energy is less than 0, return 0
 						    } else if (net_energy > 1000) {
-						        return 100;  // If net_energy is greater than 100, return 100
+						        adjust_net_energy = 100;  // If net_energy is greater than 100, return 100
 						    } else {
-						        return (net_energy/10);  // If net_energy is between 0 and 100, return it as is
+						        adjust_net_energy = (net_energy/10);  // If net_energy is between 0 and 100, return it as is
 						    }
-						}
 						char command[50]; 
 						sprintf(command, "SendGet http://192.168.5.20/cm?cmnd=Power%%20%d", adjust_net_energy);
 						CMD_ExecuteCommand(command, 0);
