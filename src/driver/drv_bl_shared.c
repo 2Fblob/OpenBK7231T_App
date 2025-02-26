@@ -716,6 +716,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				last_dump_load_value[2] = 2;
 				last_dump_load_value[3] = 2;
 				last_dump_load_value[4] = 2;
+				last_dump_load_value[5] = 2;
 				old_hour = check_hour;
 				// This resets the time the bypass relay was on throughout the day, before sunset.
 				if (check_hour < 5) {time_on = 0;}
@@ -852,6 +853,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 				// Reset
 				last_minute = current_minute;
+				// Update Charger PWM
+				dump_load_relay[5] = (uint8_t)adjust_net_energy;
 				// **Check Time Condition**
 				// New logic to estimate energy. We multiply the available power after t = 30minutes 
 				// to accomodate for the shorter timespam available to cunsume the energy
@@ -937,16 +940,14 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				
 				        // Set the ip_middle based on the relay IP address
 				        const char *ip_middle = "/cm?cmnd=Power%20"; // Default command
-				        int command_value = dump_load_relay[output_index];  // Default value is relay_state
-				
+				  
 				        if (dump_load_relay_ip[output_index] == 20) 
 				        {
 				            ip_middle = "/cm?cmnd=Dimmer3%20";  // Use Dimmer3 command if the IP is 20
-				            command_value = adjust_net_energy;  // Replace relay state with adjust_net_energy
 				        }
 				
 				        // Format the full command
-				        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, command_value);
+				        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
 				        
 				        // Execute the command
 				        CMD_ExecuteCommand(output_command, 0);
