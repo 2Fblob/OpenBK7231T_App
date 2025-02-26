@@ -40,7 +40,7 @@ jobs:
             conventional-changelog-conventionalcommits@7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set outputs
+- name: Set outputs
         id: refs
         run: |
           export BRANCH=${GITHUB_REF#refs/*/}
@@ -55,10 +55,12 @@ jobs:
           fi
           echo "new_release: ${{ steps.semantic.outputs.new_release_published }}"
           echo "version: ${VERSION}"
-          echo "::set-output name=new_release::${{ steps.semantic.outputs.new_release_published }}"
-          echo "::set-output name=short_ref::${BRANCHTRANSLATED}"
-          echo "::set-output name=sha_short::SHA-$(git rev-parse --short=12 HEAD)"
-          echo "::set-output name=version::${VERSION}"
+
+          # Use Environment Files instead of set-output
+          echo "new_release=${{ steps.semantic.outputs.new_release_published }}" >> "$GITHUB_OUTPUT"
+          echo "short_ref=${BRANCHTRANSLATED}" >> "$GITHUB_OUTPUT"
+          echo "sha_short=SHA-$(git rev-parse --short=12 HEAD)" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
   build:
     name: Build
     needs: refs
