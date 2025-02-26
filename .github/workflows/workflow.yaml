@@ -40,7 +40,7 @@ jobs:
             conventional-changelog-conventionalcommits@7
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-- name: Set outputs
+      - name: Set outputs
         id: refs
         run: |
           export BRANCH=${GITHUB_REF#refs/*/}
