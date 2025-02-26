@@ -22,16 +22,16 @@ int export_buffer = 0;
 // used for hourly averages time checking
 int check_time_estimate = 59;
 // The number of devices the automation controls, based on power level 
-#define dump_load_relay_number 5
+#define dump_load_relay_number 6
 
 // This stores the former relay states, so multiple commands are not issued
-int last_dump_load_value[dump_load_relay_number] = {2, 2, 2, 2, 2};
+int last_dump_load_value[dump_load_relay_number] = {2, 2, 2, 2, 2, 2};
 
 // The array where we store the power state for each of these devices
 static int dump_load_relay[dump_load_relay_number] = {0};
 static int dump_load_relay_timer[dump_load_relay_number] = {0};
 // The array where we store the ip address of these devices 
-static int dump_load_relay_ip[5] = {23, 22, 29, 24, 27};
+static int dump_load_relay_ip[6] = {20, 23, 22, 29, 24, 27};
 int cmd_ctrl = dump_load_relay_number;
 
 #include "drv_bl_shared.h"
@@ -922,9 +922,28 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				        last_dump_load_value[output_index] = dump_load_relay[output_index];
 				
 				        char output_command[50] = "";
-				        const char *ip_start = "SendGet http://192.168.5.";
-				        const char *ip_middle = "/cm?cmnd=Power%20";
-				        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
+					// For the charger we use a different command
+					if dump_load_relay_ip[output_index] == 0;
+						{
+						// Calculate values
+						int adjust_net_energy;
+						    // Check if net_energy is less than 0, between 0 and 100, or greater than 100
+						if (net_energy < 0) {adjust_net_energy = 0;}// If net_energy is less than 0, return 0
+						else if (net_energy > 1000) {adjust_net_energy = 100;} // If net_energy is greater than 100, return 100
+						else { adjust_net_energy = (net_energy/10);}  // If net_energy is between 0 and 100, return it as is
+						   
+						// Send Data
+						const char *ip_start = "SendGet http://192.168.5.";
+					        const char *ip_middle = "/cm?cmndDimmer3%20";
+					        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, adjust_net_energy);
+						}
+					    else
+					    {
+						// For the On/Off's we use this one
+					        const char *ip_start = "SendGet http://192.168.5.";
+					        const char *ip_middle = "/cm?cmnd=Power%20";
+					        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
+					    }
 				        
 				        CMD_ExecuteCommand(output_command, 0);
 				        
