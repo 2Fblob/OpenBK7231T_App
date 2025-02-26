@@ -348,7 +348,10 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 		hprintf255(request,"<font size=2>- Storage Charger C, Ouput level: <b>%i</b> <br></font>", adjust_net_energy); 
 		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
+		if (estimated_energy_hour<0)
+		{
 		hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
+		}
 	
 		//----------------------
 		//hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
@@ -931,7 +934,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				
 				        char output_command[50] = "";
 					// For the charger we use a different command
-					if (dump_load_relay_ip[output_index] == 5)
+					if (dump_load_relay_ip[output_index] == 6)
 						{
 						// Send Data
 						const char *ip_start = "SendGet http://192.168.5.";
