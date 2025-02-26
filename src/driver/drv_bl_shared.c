@@ -927,27 +927,26 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				//new ---------------------------------------------------------------------
 				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
 				{
-				    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
-				    {
-				        // Update the last known value
-				        last_dump_load_value[output_index] = dump_load_relay[output_index];
-				
-				        char output_command[50] = "";
-					// For the charger we use a different command
-					if (dump_load_relay_ip[output_index] == 6)
+				 	char output_command[50] = "";	
+				    	if (dump_load_relay_ip[output_index] == 5)
 						{
-						// Send Data
+						// Send Data. // For the charger we use a different command
 						const char *ip_start = "SendGet http://192.168.5.";
 					        const char *ip_middle = "/cm?cmnd=Dimmer3%20";
 					        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, adjust_net_energy);
 						}
-					    else
-					    {
-						// For the On/Off's we use this one
-					        const char *ip_start = "SendGet http://192.168.5.";
-					        const char *ip_middle = "/cm?cmnd=Power%20";
-					        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
-					    }
+				    	else
+					 	{
+						if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
+						  	{
+						        // Update the last known value
+						        last_dump_load_value[output_index] = dump_load_relay[output_index];
+							// For the On/Off's we use this one
+							const char *ip_start = "SendGet http://192.168.5.";
+							const char *ip_middle = "/cm?cmnd=Power%20";
+							sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
+							}
+						}
 				        
 				        CMD_ExecuteCommand(output_command, 0);
 				        
