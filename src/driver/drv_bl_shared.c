@@ -6,6 +6,7 @@ static int net_matrix[24] = {0};
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int net_energy_equivalent = 0;
+int adjust_net_energy =0;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
 //float estimated_production_hour = 0; 
@@ -333,12 +334,19 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		/* hprintf255(request, "<font size=1>Diversion relay total on-time today was %d min.<br> Next sync in %d min. ", 
 				time_on, (dump_load_hysteresis-lastsync));*/
 		// Print Status of automation outputs)
+
+		// Check if net_energy is less than 0, between 0 and 100, or greater than 100
+		if (net_energy < 0) {adjust_net_energy = 0; }// If net_energy is less than 0, return 0
+		else if (net_energy > 1000) {adjust_net_energy = 100; } // If net_energy is greater than 100, return 100
+		else { adjust_net_energy = (net_energy/10); }  // If net_energy is between 0 and 100, return it as is
+		
 		poststr(request," <hr> <h4>Current system status: </h4></font>");
 		hprintf255(request,"<font size=2>- Storage Inverter: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[0], dump_load_relay_timer[0]); 
 		hprintf255(request,"<font size=2>- Storage Charger A: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[1], dump_load_relay_timer[1]); 
 		hprintf255(request,"<font size=2>- Storage Charger B: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[3], dump_load_relay_timer[2]); 
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
+		hprintf255(request,"<font size=2>- Storage Charger C: <b>%i</b>, Ouput power: <b>%i</b> <br></font>", dump_load_relay[5], adjust_net_energy); 
 		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
 		hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
 	
@@ -923,15 +931,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				
 				        char output_command[50] = "";
 					// For the charger we use a different command
-					if (dump_load_relay_ip[output_index] == 0)
+					if (dump_load_relay_ip[output_index] == 5)
 						{
-						// Calculate values
-						int adjust_net_energy;
-						    // Check if net_energy is less than 0, between 0 and 100, or greater than 100
-						if (net_energy < 0) {adjust_net_energy = 0; }// If net_energy is less than 0, return 0
-						else if (net_energy > 1000) {adjust_net_energy = 100; } // If net_energy is greater than 100, return 100
-						else { adjust_net_energy = (net_energy/10); }  // If net_energy is between 0 and 100, return it as is
-						   
 						// Send Data
 						const char *ip_start = "SendGet http://192.168.5.";
 					        const char *ip_middle = "/cm?cmndDimmer3%20";
