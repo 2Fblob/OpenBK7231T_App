@@ -336,9 +336,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		// Print Status of automation outputs)
 
 		// Check if net_energy is less than 0, between 0 and 100, or greater than 100
-		if (net_energy_equivalenty < 0) {adjust_net_energy = 0; }// If net_energy is less than 0, return 0
+		if (net_energy_equivalent < 0) {adjust_net_energy = 0; }// If net_energy is less than 0, return 0
 		else if (net_energy_equivalent > 1000) {adjust_net_energy = 100; } // If net_energy is greater than 100, return 100
-		else {net_energy_equivalent = (net_energy/10); }  // If net_energy is between 0 and 100, return it as is
+		else {adjust_net_energy = (net_energy_equivalent/10); }  // If net_energy is between 0 and 100, return it as is
 		
 		poststr(request," <hr> <h4>Current system status: </h4></font>");
 		hprintf255(request,"<font size=2>- Storage Inverter: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[0], dump_load_relay_timer[0]); 
