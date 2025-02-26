@@ -927,31 +927,33 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				//new ---------------------------------------------------------------------
 				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
 				{
-				 	char output_command[50] = "";	
-				    	if (dump_load_relay_ip[output_index] == 5)
-						{
-						// Send Data. // For the charger we use a different command
-						const char *ip_start = "SendGet http://192.168.5.";
-					        const char *ip_middle = "/cm?cmnd=Dimmer3%20";
-					        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, adjust_net_energy);
-						}
-				    	else
-					 	{
-						if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
-						  	{
-						        // Update the last known value
-						        last_dump_load_value[output_index] = dump_load_relay[output_index];
-							// For the On/Off's we use this one
-							const char *ip_start = "SendGet http://192.168.5.";
-							const char *ip_middle = "/cm?cmnd=Power%20";
-							sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
-							}
-						}
+				    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
+				    {
+				        // Update the last known value
+				        last_dump_load_value[output_index] = dump_load_relay[output_index];
+				
+				        char output_command[50] = "";
+				        const char *ip_start = "SendGet http://192.168.5.";
+				
+				        // Set the ip_middle based on the relay IP address
+				        const char *ip_middle = "/cm?cmnd=Power%20"; // Default command
+				        int command_value = dump_load_relay[output_index];  // Default value is relay_state
+				
+				        if (dump_load_relay_ip[output_index] == 20) 
+				        {
+				            ip_middle = "/cm?cmnd=Dimmer3%20";  // Use Dimmer3 command if the IP is 20
+				            command_value = adjust_net_energy;  // Replace relay state with adjust_net_energy
+				        }
+				
+				        // Format the full command
+				        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, command_value);
 				        
+				        // Execute the command
 				        CMD_ExecuteCommand(output_command, 0);
 				        
 				        // Exit the loop after executing the command
 				        break;
+				    }
 				}
 			//end of execute once a minute ------------------------------------------------------------		
 			}
