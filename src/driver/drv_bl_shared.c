@@ -6,7 +6,10 @@ static int net_matrix[24] = {0};
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int net_energy_equivalent = 0;
-int adjust_net_energy = 50;
+// Compute adjust_net_energy directly
+int adjust_net_energy = 5;		// This zeros the reading.
+int estimated_energy_hour = 0;		// This is the estimated energy balance taking production and consumption into account.
+int previous_energy = 0;		// This is used for the charger to save it's last value so it knows how much to add or subtract
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
 //float estimated_production_hour = 0; 
@@ -16,7 +19,6 @@ static int last_run_calc = 0;
 int current_minute = 0;
 int last_minute = 0;
 int output_index = 0;
-int estimated_energy_hour = 0;
 // used to calculate look ahead figures for the hour
 int import_buffer = 0;
 int export_buffer = 0;
@@ -347,8 +349,31 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 
+		// Calculate the energy deficit by subtracting current energy from previous energy
+		int energy_deficit = previous_energy - estimated_energy_hour;
+		    
+		// If there's a deficit (negative available energy), reduce the load
+		if (energy_deficit > 0) {
+		    adjust_net_energy = adjust_net_energy - energy_deficit; // Adjust load by the deficit
+		} else if (energy_deficit < 0) {
+		    adjust_net_energy = adjust_net_energy + (-energy_deficit); // Adjust load if the deficit is negative
+		}
+		
+		// Cap the load value between 0 and 1000W
+		if (adjust_net_energy < 0) {
+		    adjust_net_energy = 0; // Ensure no negative load
+		} else if (adjust_net_energy > 1000) {
+		    adjust_net_energy = 1000; // Ensure no load exceeds 1000W
+		}
+		
+		// Save current energy value for the next update
+		previous_energy = estimated_energy_hour;
+		// End of energy deficit calculator
+		
 		// Compute adjust_net_energy directly
-		int adjust_net_energy = (estimated_energy_hour + 50) / 10;
+		adjust_net_energy = (estimated_energy_hour + 50) / 10;
+		previous_energy = 0;
+		
 		
 		// Ensure adjust_net_energy is within the range 0 to 100
 		if (adjust_net_energy < 0) {
@@ -376,6 +401,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		{
 		hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
 		}
+		
+		//hprintf255(request,"<font size=2>- Charger error signal: <b>%i</b><br></font>", net_energy_equivalent); 
 	
 		//----------------------
 		//hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
