@@ -9,7 +9,7 @@ static int net_energy_equivalent = 0;
 // Compute adjust_net_energy directly
 int adjust_net_energy = 5;		// This zeros the reading.
 int estimated_energy_hour = 0;		// This is the estimated energy balance taking production and consumption into account.
-int previous_energy = 0;		// This is used for the charger to save it's last value so it knows how much to add or subtract
+int charger_c_previous_energy = 0;		// This is used for the charger to save it's last value so it knows how much to add or subtract
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
 //float estimated_production_hour = 0; 
@@ -349,58 +349,32 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 
+		
 		// Calculate the energy deficit by subtracting current energy from previous energy
-		int energy_deficit = previous_energy - estimated_energy_hour;
-		    
-		// If there's a deficit (negative available energy), reduce the load
-		if (energy_deficit > 0) {
-		    adjust_net_energy = adjust_net_energy - energy_deficit; // Adjust load by the deficit
-		} else if (energy_deficit < 0) {
-		    adjust_net_energy = adjust_net_energy + (-energy_deficit); // Adjust load if the deficit is negative
-		}
+		// -------------------------------------------
+		// Calculate the energy deficit by subtracting current energy from previous energy
+		int energy_deficit = estimated_energy_hour - charger_c_previous_energy;
 		
-		/*// Cap the load value between 0 and 1000W
-		if (adjust_net_energy < 0) {
-		    adjust_net_energy = 0; // Ensure no negative load
-		} else if (adjust_net_energy > 1000) {
-		    adjust_net_energy = 1000; // Ensure no load exceeds 1000W
-		}*/
-
-		// Cap the load value between 0 and 1000W
-		if (energy_deficit < 0) {
-		   energy_deficit = 0; // Ensure no negative load
-		} else if (energy_deficit > 1000) {
-		    energy_deficit = 1000; // Ensure no load exceeds 1000W
-		}
+		// Scale the energy deficit to the range [0, 100]
+		scaled_deficit = (energy_deficit + 50) / 10;  // Scale the deficit
+		scaled_deficit = (scaled_deficit < 0) ? 0 : (scaled_deficit > 100) ? 100 : scaled_deficit;  // Clamp the value between 0 and 100
 		
-		// Save current energy value for the next update
-		previous_energy = energy_deficit;
-		// End of energy deficit calculator
+		// Save the scaled deficit value to the output variable
+		dump_load_relay[5] = (uint8_t)scaled_deficit;
 		
-		// Compute adjust_net_energy directly
-		adjust_net_energy = (energy_deficit + 50) / 10;
-		previous_energy = 0;
-		
-		
-		// Ensure adjust_net_energy is within the range 0 to 100
-		if (energy_deficit < 0) {
-		    energy_deficit = 0;
-		} else if (energy_deficit > 100) {
-		    energy_deficit = 100;
-		}
-		
-		// Update the variable to send this data
-		dump_load_relay[5] = (uint8_t)energy_deficit;
+		// Save the adjusted net energy for future reference
+		//previous_energy = energy_deficit;
+		// -------------------------------------------
 		// End of / Compute adjust_net_energy directly
 		
 		// Check if Estimated Energy Hour is greater than 0 & Print the values on the web interface
 		if (estimated_energy_hour > 0) 
 			{
-			    hprintf255(request, "<font size=2>- Storage Charger C, Output level: <b>%i</b> <br></font>", energy_deficit);
+			    hprintf255(request, "<font size=2>- Storage Charger C, Output level: <b>%i</b> <br></font>", dump_load_relay[5]);
 			} 
 		else 
 			{
-			    hprintf255(request, "<font size=2>- Storage Inverter B, Output level: <b>%i</b> <br></font>", (5-energy_deficit));
+			    hprintf255(request, "<font size=2>- Storage Inverter B, Output level: <b>%i</b> <br></font>", (5-dump_load_relay[5]));
 			}
 		// End of printing values for inverter & charger
 		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
@@ -408,7 +382,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		{
 		//hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
 		}
-		hprintf255(request,"<font size=2>- Error signal: <b>%i</b><br></font>", energy_deficit); 
+		hprintf255(request,"<font size=2>- Error signal: <b>%i</b><br></font>", charger_c_previous_energy); 
 		hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
 		
 		//hprintf255(request,"<font size=2>- Charger error signal: <b>%i</b><br></font>", net_energy_equivalent); 
@@ -1003,6 +977,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				        if (dump_load_relay_ip[output_index] == 20) 
 				        {
 				            ip_middle = "/cm?cmnd=Dimmer3%20";  // Use Dimmer3 command if the IP is 20
+					    	// Save the last value that was sent to the charger			
+						charger_c_previous_energy = dump_load_relay[5]
 				        }
 				
 				        // Format the full command
