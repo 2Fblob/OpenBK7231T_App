@@ -356,7 +356,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 			else if (estimated_energy_hour > 1000) {estimated_energy_hour = 1000;} 	// Cap at 1000 if higher
 			
 			adjust_net_energy = (estimated_energy_hour + 50) / 10;  		// Adjust energy value
-			dump_load_value[5] = adjust_net_energy;
+			dump_load_relay[5] = adjust_net_energy;
 
 			// End of PWM control
 		
@@ -385,7 +385,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Equivalent energy: <b>%i</b><br></font>", (int)estimated_energy_hour); 
 		hprintf255(request,"<font size=2>- Loop index: <b>%i</b><br></font>", update_number); 
 		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", last_dump_load_value[0], last_dump_load_value[1], last_dump_load_value[2], last_dump_load_value[3], last_dump_load_value[4], last_dump_load_value[5]); 
-		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", dump_load_value[0], dump_load_value[1], dump_load_value[2], dump_load_value[3], dump_load_value[4], dump_load_value[5]); 
+		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", dump_load_relay[0], dump_load_relay[1], dump_load_relay[2], dump_load_relay[3], dump_load_relay[4], dump_load_relay[5]); 
 
 		}	
 	
