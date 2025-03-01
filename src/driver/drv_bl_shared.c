@@ -365,7 +365,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		//previous_energy = energy_deficit;
 		// -------------------------------------------
 		// End of / Compute adjust_net_energy directly
-		
+								// Save the scaled deficit value to the output variable
+		dump_load_relay[5] = (uint8_t)scaled_power;
 		// Check if Estimated Energy Hour is greater than 0 & Print the values on the web interface
 		if (estimated_energy_hour > 0) 
 			{
@@ -384,8 +385,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		}
 		//charger_c_previous_energy = charger_c_new_energy;
 		// Displays present charger output rate and the next adjustment
-		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", charger_c_previous_energy, (net_energy_equivalent - charger_c_previous_energy)); 
-		hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
+		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", charger_c_previous_energy, ((int)estimated_energy_hour - charger_c_previous_energy)); 
+		hprintf255(request,"<font size=2>- Equivalent energy: <b>%i</b><br></font>", (int)estimated_energy_hour); 
 
 		//hprintf255(request,"<font size=2>- Charger error signal: <b>%i</b><br></font>", net_energy_equivalent); 
 	
@@ -981,7 +982,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				            ip_middle = "/cm?cmnd=Dimmer3%20";  // Use Dimmer3 command if the IP is 20
 					    	
 						// Check the new energy value for the charger
-						charger_c_new_energy += (estimated_energy_hour/*net_energy_equivalent*/ - charger_c_previous_energy);
+						charger_c_new_energy += ((int)estimated_energy_hour/*net_energy_equivalent*/ - charger_c_previous_energy);
 						// Limit range, just to be sure the values don't go crazy in case there is no load.
 						charger_c_new_energy = (charger_c_new_energy < -5000) ? -5000 : (charger_c_new_energy > 5000) ? 5000 : charger_c_new_energy;
 						
@@ -992,7 +993,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						scaled_power = (scaled_power < 0) ? 0 : (scaled_power > 100) ? 100 : scaled_power;  // Clamp the value between 0 and 100
 						
 						// Save the scaled deficit value to the output variable
-						dump_load_relay[5] = (uint8_t)scaled_power;
+						//dump_load_relay[5] = (uint8_t)scaled_power;
 				        }
 				
 				        // Format the full command
