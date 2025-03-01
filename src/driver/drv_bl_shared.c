@@ -7,7 +7,7 @@ static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int net_energy_equivalent = 0;
 static int old_output = 0;
- static int update_number = 0;
+static int update_number = 0;
 int adjust_net_energy = 50;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
@@ -883,7 +883,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				// Reset
 				last_minute = current_minute;
 				// Update Charger PWM. Calculate the new PWN values and keep a limit (0-100%)
-				dump_load_relay[5] = (uint8_t)((adjust_net_energy + old_dump_load_relay[5]) > 100 ? 100 : ((adjust_net_energy + old_dump_load_relay[5]) < 0 ? 0 : (adjust_net_energy + old_dump_load_relay[5])));
+				dump_load_relay[5] = (uint8_t)((adjust_net_energy + last_dump_load_relay[5]) > 100 ? 100 : ((adjust_net_energy + last_dump_load_relay[5]) < 0 ? 0 : (adjust_net_energy + last_dump_load_relay[5])));
 
 				// **Check Time Condition**
 				// New logic to estimate energy. We multiply the available power after t = 30minutes 
