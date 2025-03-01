@@ -1,5 +1,6 @@
 // Internal code ONLY
 
+static int last_processed_index = 0; // Keep track of the last processed relay
 static int consumption_matrix [24] = {0};
 static int export_matrix[24] = {0};
 static int net_matrix[24] = {0};
@@ -966,49 +967,36 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				}
 				}
 				//new ---------------------------------------------------------------------
-				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
-				{
-				    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
-				    {
-				        // Update the last known value
-				        last_dump_load_value[output_index] = dump_load_relay[output_index];
-				
-				        char output_command[50] = "";
-				        const char *ip_start = "SendGet http://192.168.5.";
-				
-				        // Set the ip_middle based on the relay IP address
-				        const char *ip_middle = "/cm?cmnd=Power%20"; // Default command
-				  
-				        if (dump_load_relay_ip[output_index] == 20) 
-				        {
-				            ip_middle = "/cm?cmnd=Dimmer3%20";  // Use Dimmer3 command if the IP is 20
-					    	
-						// Check the new energy value for the charger
-						charger_c_new_energy += ((int)estimated_energy_hour/*net_energy_equivalent*/ - charger_c_previous_energy);
-						// Limit range, just to be sure the values don't go crazy in case there is no load.
-						charger_c_new_energy = (charger_c_new_energy < -5000) ? -5000 : (charger_c_new_energy > 5000) ? 5000 : charger_c_new_energy;
-						
-						// Save the last value that was sent to the charger			
-						charger_c_previous_energy = charger_c_new_energy;
-						// Scale the energy deficit to the range [0, 100]
-						/*int*/ scaled_power = (charger_c_new_energy + 50) / 10;  // Scale the deficit
-						scaled_power = (scaled_power < 0) ? 0 : (scaled_power > 100) ? 100 : scaled_power;  // Clamp the value between 0 and 100
-						
-						// Save the scaled deficit value to the output variable
-						// dump_load_relay[5] = (uint8_t)scaled_power;
-						dump_load_relay[5] = 1;
-				        }
-				
-				        // Format the full command
-				        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
-				        
-				        // Execute the command
-				        CMD_ExecuteCommand(output_command, 0);
-				        
-				        // Exit the loop after executing the command
-				        break;
-				    }
-				}
+					for (int i = 0; i < dump_load_relay_number; i++) 
+					{
+					    // Calculate the next index in a circular manner
+					    int output_index = (last_processed_index + i) % dump_load_relay_number;
+					
+					    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
+					    {
+					        last_dump_load_value[output_index] = dump_load_relay[output_index];
+					
+					        char output_command[50] = "";
+					        const char *ip_start = "SendGet http://192.168.5.";
+					        const char *ip_middle = "/cm?cmnd=Power%20"; // Default command
+					
+					        if (dump_load_relay_ip[output_index] == 20) 
+					        {
+					            ip_middle = "/cm?cmnd=Dimmer3%20";  // Use Dimmer3 command for IP 20
+					            dump_load_relay[5] = 1;
+					        }
+					
+					        // Construct the command
+					        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
+					
+					        // Execute the command
+					        CMD_ExecuteCommand(output_command, 0);
+					
+					        // Update the last processed index and exit loop (process only one per run)
+					        last_processed_index = (output_index + 1) % dump_load_relay_number;
+					        break;
+					    }
+					}
 			//end of execute once a minute ------------------------------------------------------------		
 			}
 			//----------------------------
