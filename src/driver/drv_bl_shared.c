@@ -990,8 +990,10 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 							
 							// Save the last value that was sent to the charger			
 							charger_c_previous_energy = charger_c_new_energy;
-							// Scale the energy deficit to the range [0, 100]
-							/*int*/ scaled_power = (charger_c_new_energy + 50) / 10;  // Scale the deficit
+							
+							// We need a linear mapping from charger_c_new_energy to scaled_power
+							// charger_c_new_energy = -50 maps to 0 and 950 maps to 100
+							scaled_power = (charger_c_new_energy + 50) / 10;
 							scaled_power = (scaled_power < 0) ? 0 : (scaled_power > 100) ? 100 : scaled_power;  // Clamp the value between 0 and 100
 							
 							// Save the scaled deficit value to the output variable
