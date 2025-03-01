@@ -360,7 +360,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		else {adjust_net_energy = estimated_energy_hour / 10;}  // Scale positive values to [0, 100]
 
 		// Update Output
-		dump_load_relay[5] = adjust_net_energy;
+		dump_load_relay[5] = (int)adjust_net_energy;
 
 			// End of PWM control
 		
