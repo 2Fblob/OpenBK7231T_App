@@ -11,6 +11,7 @@ int adjust_net_energy = 5;		// This zeros the reading.
 int estimated_energy_hour = 0;		// This is the estimated energy balance taking production and consumption into account.
 int charger_c_previous_energy = 0;		// This is used for the charger to save it's last value so it knows how much to add or subtract
 int charger_c_new_energy = 0;
+int scaled_power = 0;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
 //float estimated_production_hour = 0; 
@@ -366,17 +367,17 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		// -------------------------------------------
 		// End of / Compute adjust_net_energy directly
 								// Save the scaled deficit value to the output variable
-		dump_load_relay[5] = (uint8_t)scaled_power;
+		//dump_load_relay[5] = (uint8_t)scaled_power;
 		// Check if Estimated Energy Hour is greater than 0 & Print the values on the web interface
 		if (estimated_energy_hour > 0) 
 			{
-			    hprintf255(request, "<font size=2>- Storage Charger C, Output level: <b>%i</b> <br></font>", dump_load_relay[5]);
+			    hprintf255(request, "<font size=2>- Storage Charger C, Output level: <b>%i</b> <br></font>", /*dump_load_relay[5]*/scaled_power);
 			} 
 		else 
 			{
-			    hprintf255(request, "<font size=2>- Storage Inverter B, Output level: <b>%i</b> <br></font>", (5-dump_load_relay[5]));
+			    hprintf255(request, "<font size=2>- Storage Inverter B, Output level: <b>%i</b> <br></font>", (5-/*dump_load_relay[5])*/scaled_power);
 			}
-		hprintf255(request,"<font size=2>- PWM Command <b>%i</b><br></font>", dump_load_relay[5]); 
+		hprintf255(request,"<font size=2>- PWM Command <b>%i</b><br></font>", /*dump_load_relay[5]*/scaled_power); 
 		// End of printing values for inverter & charger
 		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
 		if (estimated_energy_hour<0)
@@ -890,6 +891,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 				// Reset
 				last_minute = current_minute;
+				dump_load_relay[5] = 0;
 				
 				// **Check Time Condition**
 				// New logic to estimate energy. We multiply the available power after t = 30minutes 
@@ -989,11 +991,12 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						// Save the last value that was sent to the charger			
 						charger_c_previous_energy = charger_c_new_energy;
 						// Scale the energy deficit to the range [0, 100]
-						int scaled_power = (charger_c_new_energy + 50) / 10;  // Scale the deficit
+						/*int*/ scaled_power = (charger_c_new_energy + 50) / 10;  // Scale the deficit
 						scaled_power = (scaled_power < 0) ? 0 : (scaled_power > 100) ? 100 : scaled_power;  // Clamp the value between 0 and 100
 						
 						// Save the scaled deficit value to the output variable
-						//dump_load_relay[5] = (uint8_t)scaled_power;
+						// dump_load_relay[5] = (uint8_t)scaled_power;
+						dump_load_relay[5] = 1;
 				        }
 				
 				        // Format the full command
