@@ -356,7 +356,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		// Calculate the energy deficit by subtracting current energy from previous energy
 		//int energy_deficit = net_energy_equivalent - charger_c_previous_energy;
 		//int scaled_deficit = 0;
-		charger_c_new_energy = net_energy_equivalent - charger_c_previous_energy;
+		charger_c_new_energy += (net_energy_equivalent - charger_c_previous_energy);
 		
 		// Save the adjusted net energy for future reference
 		//previous_energy = energy_deficit;
