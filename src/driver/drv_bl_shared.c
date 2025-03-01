@@ -353,9 +353,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 			// Charger C Power calculation
 				// We need a linear mapping from charger_c_new_energy to scaled_power
 				int scaled_power;
-				if (charger_c_new_energy > 50) { scaled_power = 0;} 
-				else if (charger_c_new_energy < -950) {scaled_power = 100;} 
-				else {scaled_power = ((50 - charger_c_new_energy) * 100) / 1000;}
+				if (estimated_energy_hour > 50) { scaled_power = 0;} 
+				else if (estimated_energy_hour < -950) {scaled_power = 100;} 
+				else {scaled_power = ((50 - estimated_energy_hour) * 100) / 1000;}
 				
 				// Apply the new scaled value with last_dump_load_relay[5], keeping it within bounds (-50 maps to 0 and 950 maps to 100)
 				dump_load_relay[5] = (uint8_t)((scaled_power + last_dump_load_relay[5]) > 100 ? 100 : ((scaled_power + last_dump_load_relay[5]) < 0 ? 0 : (scaled_power + last_dump_load_relay[5])));
