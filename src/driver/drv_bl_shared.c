@@ -28,7 +28,7 @@ int check_time_estimate = 59;
 #define dump_load_relay_number 6
 
 // This stores the former relay states, so multiple commands are not issued
-int last_dump_load_value[dump_load_relay_number] = {2, 2, 2, 2, 2, 2};
+int last_dump_load_relay[dump_load_relay_number] = {2, 2, 2, 2, 2, 2};
 
 // The array where we store the power state for each of these devices
 static int dump_load_relay[dump_load_relay_number] = {0};
@@ -381,10 +381,10 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
 		// Print out periodic statistics and Total Generation at the bottom of the page.
 		hprintf255(request,"<h5>NetMetering (Last %d min out of %d): %.3f Wh</h5><hr>", energyCounterMinutesIndex, energyCounterSampleCount, net_energy); //Net metering shown in Wh (Small value)    
-		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", old_output, (last_dump_load_value[5]-old_output)); 
+		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", old_output, (last_dump_load_relay[5]-old_output)); 
 		hprintf255(request,"<font size=2>- Equivalent energy: <b>%i</b><br></font>", (int)estimated_energy_hour); 
 		hprintf255(request,"<font size=2>- Loop index: <b>%i</b><br></font>", update_number); 
-		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", last_dump_load_value[0], last_dump_load_value[1], last_dump_load_value[2], last_dump_load_value[3], last_dump_load_value[4], last_dump_load_value[5]); 
+		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", last_dump_load_relay[0], last_dump_load_relay[1], last_dump_load_relay[2], last_dump_load_relay[3], last_dump_load_relay[4], last_dump_load_relay[5]); 
 		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", dump_load_relay[0], dump_load_relay[1], dump_load_relay[2], dump_load_relay[3], dump_load_relay[4], dump_load_relay[5]); 
 
 		}	
@@ -740,12 +740,12 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 				hour_reset = 1;
 				// This refreshes the outputs once an hour, just in case
-				last_dump_load_value[0] = 2;
-				last_dump_load_value[1] = 2;
-				last_dump_load_value[2] = 2;
-				last_dump_load_value[3] = 2;
-				last_dump_load_value[4] = 2;
-				last_dump_load_value[5] = 2;
+				last_dump_load_relay[0] = 2;
+				last_dump_load_relay[1] = 2;
+				last_dump_load_relay[2] = 2;
+				last_dump_load_relay[3] = 2;
+				last_dump_load_relay[4] = 2;
+				last_dump_load_relay[5] = 2;
 				old_hour = check_hour;
 				// This resets the time the bypass relay was on throughout the day, before sunset.
 				if (check_hour < 5) {time_on = 0;}
@@ -882,8 +882,9 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 				// Reset
 				last_minute = current_minute;
-				// Update Charger PWM
-				dump_load_relay[5] = (uint8_t)adjust_net_energy;
+				// Update Charger PWM. Calculate the new PWN values and keep a limit (0-100%)
+				dump_load_relay[5] = (uint8_t)((adjust_net_energy + old_dump_load_relay[5]) > 100 ? 100 : ((adjust_net_energy + old_dump_load_relay[5]) < 0 ? 0 : (adjust_net_energy + old_dump_load_relay[5])));
+
 				// **Check Time Condition**
 				// New logic to estimate energy. We multiply the available power after t = 30minutes 
 				// to accomodate for the shorter timespam available to cunsume the energy
@@ -959,11 +960,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				//new ---------------------------------------------------------------------
 				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
 				{
-				    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
+				    if (dump_load_relay[output_index] != last_dump_load_relay[output_index]) 
 				    {
 				       update_number = output_index;
 					 // Update the last known value
-				        last_dump_load_value[output_index] = dump_load_relay[output_index];
+				        last_dump_load_relay[output_index] = dump_load_relay[output_index];
 				
 				        char output_command[50] = "";
 				        const char *ip_start = "SendGet http://192.168.5.";
