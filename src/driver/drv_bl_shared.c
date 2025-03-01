@@ -10,6 +10,7 @@ static int net_energy_equivalent = 0;
 int adjust_net_energy = 5;		// This zeros the reading.
 int estimated_energy_hour = 0;		// This is the estimated energy balance taking production and consumption into account.
 int charger_c_previous_energy = 0;		// This is used for the charger to save it's last value so it knows how much to add or subtract
+int charger_c_new_energy = 0;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
 //float estimated_production_hour = 0; 
@@ -353,15 +354,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		// Calculate the energy deficit by subtracting current energy from previous energy
 		// -------------------------------------------
 		// Calculate the energy deficit by subtracting current energy from previous energy
-		int energy_deficit = estimated_energy_hour - charger_c_previous_energy;
+		//int energy_deficit = net_energy_equivalent - charger_c_previous_energy;
 		//int scaled_deficit = 0;
-		
-		// Scale the energy deficit to the range [0, 100]
-		int scaled_deficit = (energy_deficit + 50) / 10;  // Scale the deficit
-		scaled_deficit = (scaled_deficit < 0) ? 0 : (scaled_deficit > 100) ? 100 : scaled_deficit;  // Clamp the value between 0 and 100
-		
-		// Save the scaled deficit value to the output variable
-		dump_load_relay[5] = (uint8_t)scaled_deficit;
+		charger_c_new_energy = net_energy_equivalent - charger_c_previous_energy;
 		
 		// Save the adjusted net energy for future reference
 		//previous_energy = energy_deficit;
@@ -383,8 +378,12 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		{
 		//hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
 		}
-		hprintf255(request,"<font size=2>- Error signal: <b>%i</b><br></font>", charger_c_previous_energy); 
+		charger_c_previous_energy = charger_c_new_energy;
+		// Displays present charger output rate and the next adjustment
+		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", charger_c_previous_energy, charger_c_new_energy); 
+		hprintf255(request,"<font size=2>- Charger PWM Command <b>%i</b><br></font>", dump_load_relay[5]); 
 		hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
+
 		
 		//hprintf255(request,"<font size=2>- Charger error signal: <b>%i</b><br></font>", net_energy_equivalent); 
 	
@@ -979,7 +978,13 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				        {
 				            ip_middle = "/cm?cmnd=Dimmer3%20";  // Use Dimmer3 command if the IP is 20
 					    	// Save the last value that was sent to the charger			
-						charger_c_previous_energy = dump_load_relay[5];
+						charger_c_previous_energy = charger_c_new_energy;
+						// Scale the energy deficit to the range [0, 100]
+						int scaled_power = (charger_c_new_energy + 50) / 10;  // Scale the deficit
+						scaled_power = (charger_c_new_energy < 0) ? 0 : (charger_c_new_energy > 100) ? 100 : charger_c_new_energy;  // Clamp the value between 0 and 100
+						
+						// Save the scaled deficit value to the output variable
+						dump_load_relay[5] = (uint8_t)scaled_power;
 				        }
 				
 				        // Format the full command
