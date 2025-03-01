@@ -375,7 +375,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 			} 
 		else 
 			{
-			    hprintf255(request, "<font size=2>- Storage Inverter B, Output level: <b>%i</b> <br></font>", (5-/*dump_load_relay[5])*/scaled_power);
+			    hprintf255(request, "<font size=2>- Storage Inverter B, Output level: <b>%i</b> <br></font>", (5-/*dump_load_relay[5])*/scaled_power));
 			}
 		hprintf255(request,"<font size=2>- PWM Command <b>%i</b><br></font>", /*dump_load_relay[5]*/scaled_power); 
 		// End of printing values for inverter & charger
