@@ -349,7 +349,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 
 		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
-		temp_adjust_net_energy = (estimated_energy_hour / 10);
+		adjust_net_energy = (estimated_energy_hour / 10);
 		// Cap the values to ensure they're within the range of -50 to 1000
 			if (estimated_energy_hour < -50) {estimated_energy_hour = -50;} 	// Cap at -50 if lower
 			else if (estimated_energy_hour > 1000) {estimated_energy_hour = 1000;} 	// Cap at 1000 if higher
@@ -380,7 +380,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
 		// Print out periodic statistics and Total Generation at the bottom of the page.
 		hprintf255(request,"<h5>NetMetering (Last %d min out of %d): %.3f Wh</h5><hr>", energyCounterMinutesIndex, energyCounterSampleCount, net_energy); //Net metering shown in Wh (Small value)    
-		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", old_output, (last_dump_load_value[5]-old_output); 
+		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", old_output, (last_dump_load_value[5]-old_output)); 
 		hprintf255(request,"<font size=2>- Equivalent energy: <b>%i</b><br></font>", (int)estimated_energy_hour); 
 		
 		}	
