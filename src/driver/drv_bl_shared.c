@@ -981,7 +981,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				            ip_middle = "/cm?cmnd=Dimmer3%20";  // Use Dimmer3 command if the IP is 20
 					    	
 						// Check the new energy value for the charger
-						charger_c_new_energy += (net_energy_equivalent - charger_c_previous_energy);
+						charger_c_new_energy += (estimated_energy_hour/*net_energy_equivalent*/ - charger_c_previous_energy);
 						// Limit range, just to be sure the values don't go crazy in case there is no load.
 						charger_c_new_energy = (charger_c_new_energy < -5000) ? -5000 : (charger_c_new_energy > 5000) ? 5000 : charger_c_new_energy;
 						
@@ -989,7 +989,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						charger_c_previous_energy = charger_c_new_energy;
 						// Scale the energy deficit to the range [0, 100]
 						int scaled_power = (charger_c_new_energy + 50) / 10;  // Scale the deficit
-						scaled_power = (charger_c_new_energy < 0) ? 0 : (charger_c_new_energy > 100) ? 100 : charger_c_new_energy;  // Clamp the value between 0 and 100
+						scaled_power = (scaled_power < 0) ? 0 : (scaled_power > 100) ? 100 : scaled_power;  // Clamp the value between 0 and 100
 						
 						// Save the scaled deficit value to the output variable
 						dump_load_relay[5] = (uint8_t)scaled_power;
