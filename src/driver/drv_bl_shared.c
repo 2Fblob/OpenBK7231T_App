@@ -352,11 +352,15 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
 		adjust_net_energy = (estimated_energy_hour / 10);
 		// Cap the values to ensure they're within the range of -50 to 1000
-			if (estimated_energy_hour < -50) {estimated_energy_hour = -50;} 	// Cap at -50 if lower
-			else if (estimated_energy_hour > 1000) {estimated_energy_hour = 1000;} 	// Cap at 1000 if higher
-			
-			adjust_net_energy = (-estimated_energy_hour + 50) / 10;  		// Adjust energy value
-			dump_load_relay[5] = adjust_net_energy;
+		// Apply scaling: 
+		// - Values ≤ -50 should map to [-5, 0] (linear scale)
+		// - 0 should remain 0
+		// - Positive values map normally up to 100
+		if (estimated_energy_hour < 0) {adjust_net_energy = (estimated_energy_hour + 50) / 10;}  // Scale negative values to [-5, 0]
+		else {adjust_net_energy = estimated_energy_hour / 10;}  // Scale positive values to [0, 100]
+
+		// Update Output
+		dump_load_relay[5] = adjust_net_energy;
 
 			// End of PWM control
 		
@@ -381,7 +385,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
 		// Print out periodic statistics and Total Generation at the bottom of the page.
 		hprintf255(request,"<h5>NetMetering (Last %d min out of %d): %.3f Wh</h5><hr>", energyCounterMinutesIndex, energyCounterSampleCount, net_energy); //Net metering shown in Wh (Small value)    
-		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", old_output, (last_dump_load_relay[5]-old_output)); 
+		hprintf255(request,"<font size=2>- <b>Charger C:</b> Output: <b>%i</b> Next cycle change: <b>%i</b><br></font>", old_output, ((adjust_net_energy + last_dump_load_relay[5]) > 100 ? 100 : ((adjust_net_energy + last_dump_load_relay[5]) < 0 ? 0 : (adjust_net_energy + last_dump_load_relay[5])))); 
 		hprintf255(request,"<font size=2>- Equivalent energy: <b>%i</b><br></font>", (int)estimated_energy_hour); 
 		hprintf255(request,"<font size=2>- Loop index: <b>%i</b><br></font>", update_number); 
 		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", last_dump_load_relay[0], last_dump_load_relay[1], last_dump_load_relay[2], last_dump_load_relay[3], last_dump_load_relay[4], last_dump_load_relay[5]); 
