@@ -372,16 +372,16 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 			{
 			    hprintf255(request, "<font size=2>- Storage Inverter B, Output level: <b>%i</b> <br></font>", (5-dump_load_relay[5]));
 			}
+		hprintf255(request,"<font size=2>- PWM Command <b>%i</b><br></font>", dump_load_relay[5]); 
 		// End of printing values for inverter & charger
 		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
 		if (estimated_energy_hour<0)
 		{
 		//hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
 		}
-		charger_c_previous_energy = charger_c_new_energy;
+		//charger_c_previous_energy = charger_c_new_energy;
 		// Displays present charger output rate and the next adjustment
 		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", charger_c_previous_energy, charger_c_new_energy); 
-		hprintf255(request,"<font size=2>- Charger PWM Command <b>%i</b><br></font>", dump_load_relay[5]); 
 		hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
 
 		
