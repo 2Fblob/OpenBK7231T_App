@@ -280,7 +280,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	}
 	// Calculate hourly rate	
 	check_time_estimate = (60 - NTP_GetMinute());
-	estimated_energy_hour = (-1*((int)net_energy+((((int)sensors[OBK_POWER].lastReading)*(int)check_time_estimate)/60)));
+	estimated_energy_hour = ((int)net_energy+((((int)sensors[OBK_POWER].lastReading)*(int)check_time_estimate)/60));
 	poststr(request, "</tr></table><br>");
 	poststr(request, "<h4>Totals:</h4>");
 	hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Metering) <br></font>", total_consumption, total_export);
@@ -355,7 +355,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 			if (estimated_energy_hour < -50) {estimated_energy_hour = -50;} 	// Cap at -50 if lower
 			else if (estimated_energy_hour > 1000) {estimated_energy_hour = 1000;} 	// Cap at 1000 if higher
 			
-			adjust_net_energy = (estimated_energy_hour + 50) / 10;  		// Adjust energy value
+			adjust_net_energy = (-estimated_energy_hour + 50) / 10;  		// Adjust energy value
 			dump_load_relay[5] = adjust_net_energy;
 
 			// End of PWM control
