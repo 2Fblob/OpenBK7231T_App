@@ -384,9 +384,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", old_output, (last_dump_load_value[5]-old_output)); 
 		hprintf255(request,"<font size=2>- Equivalent energy: <b>%i</b><br></font>", (int)estimated_energy_hour); 
 		hprintf255(request,"<font size=2>- Loop index: <b>%i</b><br></font>", update_number); 
-
-		
-		
+		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", last_dump_load_value[0], last_dump_load_value[1], last_dump_load_value[2], last_dump_load_value[3], last_dump_load_value[4], last_dump_load_value[5]); 
+			
 		}	
 	
 		/********************************************************************************************************************/
