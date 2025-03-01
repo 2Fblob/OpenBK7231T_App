@@ -7,6 +7,7 @@ static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int net_energy_equivalent = 0;
 static int old_output = 0;
+ static int update_number = 0;
 int adjust_net_energy = 50;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
@@ -382,6 +383,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<h5>NetMetering (Last %d min out of %d): %.3f Wh</h5><hr>", energyCounterMinutesIndex, energyCounterSampleCount, net_energy); //Net metering shown in Wh (Small value)    
 		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", old_output, (last_dump_load_value[5]-old_output)); 
 		hprintf255(request,"<font size=2>- Equivalent energy: <b>%i</b><br></font>", (int)estimated_energy_hour); 
+		hprintf255(request,"<font size=2>- Loop index: <b>%i</b><br></font>", update_number); 
+
+		
 		
 		}	
 	
@@ -957,7 +961,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				{
 				    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
 				    {
-				        // Update the last known value
+				       update_number = output_index;
+					 // Update the last known value
 				        last_dump_load_value[output_index] = dump_load_relay[output_index];
 				
 				        char output_command[50] = "";
