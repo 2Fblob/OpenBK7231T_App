@@ -1,18 +1,13 @@
 // Internal code ONLY
 
-static int last_processed_index = 0; // Keep track of the last processed relay
 static int consumption_matrix [24] = {0};
 static int export_matrix[24] = {0};
 static int net_matrix[24] = {0};
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int net_energy_equivalent = 0;
-// Compute adjust_net_energy directly
-int adjust_net_energy = 5;		// This zeros the reading.
-int estimated_energy_hour = 0;		// This is the estimated energy balance taking production and consumption into account.
-int charger_c_previous_energy = 0;		// This is used for the charger to save it's last value so it knows how much to add or subtract
-int charger_c_new_energy = 0;
-int scaled_power = 0;
+static int old_output = 0;
+int adjust_net_energy = 50;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
 //float estimated_production_hour = 0; 
@@ -22,6 +17,7 @@ static int last_run_calc = 0;
 int current_minute = 0;
 int last_minute = 0;
 int output_index = 0;
+int estimated_energy_hour = 0;
 // used to calculate look ahead figures for the hour
 int import_buffer = 0;
 int export_buffer = 0;
@@ -352,51 +348,41 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 
+		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
+		temp_adjust_net_energy = (estimated_energy_hour / 10);
+		// Cap the values to ensure they're within the range of -50 to 1000
+			if (estimated_energy_hour < -50) {estimated_energy_hour = -50;} 	// Cap at -50 if lower
+			else if (estimated_energy_hour > 1000) {estimated_energy_hour = 1000;} 	// Cap at 1000 if higher
+			
+			adjust_net_energy = (estimated_energy_hour + 50) / 10;  		// Adjust energy value
+			last_dump_load_value[5] = adjust_net_energy;
+
+			// End of PWM control
 		
-		// Calculate the energy deficit by subtracting current energy from previous energy
-		// -------------------------------------------
-		// Calculate the energy deficit by subtracting current energy from previous energy
-		//int energy_deficit = net_energy_equivalent - charger_c_previous_energy;
-		//int scaled_deficit = 0;
-	/*	// Check the new energy value for the charger
-		charger_c_new_energy += (net_energy_equivalent - charger_c_previous_energy);
-		// Limit range, just to be sure the values don't go crazy in case there is no load.
-		charger_c_new_energy = (charger_c_new_energy < -5000) ? -5000 : (charger_c_new_energy > 5000) ? 5000 : charger_c_new_energy;*/
-		
-		// Save the adjusted net energy for future reference
-		//previous_energy = energy_deficit;
-		// -------------------------------------------
-		// End of / Compute adjust_net_energy directly
-								// Save the scaled deficit value to the output variable
-		//dump_load_relay[5] = (uint8_t)scaled_power;
 		// Check if Estimated Energy Hour is greater than 0 & Print the values on the web interface
 		if (estimated_energy_hour > 0) 
 			{
-			    hprintf255(request, "<font size=2>- Storage Charger C, Output level: <b>%i</b> <br></font>", /*dump_load_relay[5]*/scaled_power);
+			   // hprintf255(request, "<font size=2>- Storage Charger C, Output level: <b>%i</b> <br></font>", adjust_net_energy);
 			} 
 		else 
 			{
-			    hprintf255(request, "<font size=2>- Storage Inverter B, Output level: <b>%i</b> <br></font>", (5-/*dump_load_relay[5])*/scaled_power));
+			    //hprintf255(request, "<font size=2>- Storage Inverter B, Output level: <b>%i</b> <br></font>", (5-adjust_net_energy));
 			}
-		hprintf255(request,"<font size=2>- PWM Command <b>%i</b><br></font>", /*dump_load_relay[5]*/scaled_power); 
 		// End of printing values for inverter & charger
 		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
 		if (estimated_energy_hour<0)
 		{
-		//hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
+		hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
 		}
-		//charger_c_previous_energy = charger_c_new_energy;
-		// Displays present charger output rate and the next adjustment
-		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", charger_c_previous_energy, ((int)estimated_energy_hour - charger_c_previous_energy)); 
-		hprintf255(request,"<font size=2>- Equivalent energy: <b>%i</b><br></font>", (int)estimated_energy_hour); 
-
-		//hprintf255(request,"<font size=2>- Charger error signal: <b>%i</b><br></font>", net_energy_equivalent); 
 	
 		//----------------------
 		//hprintf255(request,"<font size=1> Last NetMetering reset occured at: %d:%d<br></font>", time_hour_reset, time_min_reset); // Save the value at which the counter was synchronized
 		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
 		// Print out periodic statistics and Total Generation at the bottom of the page.
 		hprintf255(request,"<h5>NetMetering (Last %d min out of %d): %.3f Wh</h5><hr>", energyCounterMinutesIndex, energyCounterSampleCount, net_energy); //Net metering shown in Wh (Small value)    
+		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", old_output, (last_dump_load_value[5]-old_output); 
+		hprintf255(request,"<font size=2>- Equivalent energy: <b>%i</b><br></font>", (int)estimated_energy_hour); 
+		
 		}	
 	
 		/********************************************************************************************************************/
@@ -892,8 +878,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 				// Reset
 				last_minute = current_minute;
-				dump_load_relay[5] = 0;
-				
+				// Update Charger PWM
+				dump_load_relay[5] = (uint8_t)adjust_net_energy;
 				// **Check Time Condition**
 				// New logic to estimate energy. We multiply the available power after t = 30minutes 
 				// to accomodate for the shorter timespam available to cunsume the energy
@@ -903,7 +889,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				}
 				else 
 				{
-					if (current_minute < 55)
+					if (current_minute < 57)
 					{
 					//net_energy_equivalent = net_energy*2;
 					net_energy_equivalent = ((float)(net_energy*(60/(60-current_minute))));
@@ -967,49 +953,35 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				}
 				}
 				//new ---------------------------------------------------------------------
-					for (int i = 0; i < dump_load_relay_number; i++) 
-					{
-					    // Calculate the next index in a circular manner
-					    int output_index = (last_processed_index + i) % dump_load_relay_number;
-					
-					    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
-					    {
-					        last_dump_load_value[output_index] = dump_load_relay[output_index];
-					
-					        char output_command[50] = "";
-					        const char *ip_start = "SendGet http://192.168.5.";
-					        const char *ip_middle = "/cm?cmnd=Power%20"; // Default command
-					
-					        if (dump_load_relay_ip[output_index] == 20) 
-					        {
-					            ip_middle = "/cm?cmnd=Dimmer3%20";  // Use Dimmer3 command for IP 20
-					           // Check the new energy value for the charger
-							charger_c_new_energy += ((int)estimated_energy_hour/*net_energy_equivalent*/ - charger_c_previous_energy);
-							// Limit range, just to be sure the values don't go crazy in case there is no load.
-							charger_c_new_energy = (charger_c_new_energy < -5000) ? -5000 : (charger_c_new_energy > 5000) ? 5000 : charger_c_new_energy;
-							
-							// Save the last value that was sent to the charger			
-							charger_c_previous_energy = charger_c_new_energy;
-							// Scale the energy deficit to the range [0, 100]
-							/*int*/ scaled_power = (charger_c_new_energy + 50) / 10;  // Scale the deficit
-							scaled_power = (scaled_power < 0) ? 0 : (scaled_power > 100) ? 100 : scaled_power;  // Clamp the value between 0 and 100
-							
-							// Save the scaled deficit value to the output variable
-							dump_load_relay[5] = (uint8_t)scaled_power;
-
-					        }
-					
-					        // Construct the command
-					        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
-					
-					        // Execute the command
-					        CMD_ExecuteCommand(output_command, 0);
-					
-					        // Update the last processed index and exit loop (process only one per run)
-					        last_processed_index = (output_index + 1) % dump_load_relay_number;
-					        break;
-					    }
-					}
+				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
+				{
+				    if (dump_load_relay[output_index] != last_dump_load_value[output_index]) 
+				    {
+				        // Update the last known value
+				        last_dump_load_value[output_index] = dump_load_relay[output_index];
+				
+				        char output_command[50] = "";
+				        const char *ip_start = "SendGet http://192.168.5.";
+				
+				        // Set the ip_middle based on the relay IP address
+				        const char *ip_middle = "/cm?cmnd=Power%20"; // Default command
+				  
+				        if (dump_load_relay_ip[output_index] == 20) 
+				        {
+				            ip_middle = "/cm?cmnd=Dimmer3%20";  // Use Dimmer3 command if the IP is 20
+					    old_output = dump_load_relay[output_index];	
+				        }
+				
+				        // Format the full command
+				        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
+				        
+				        // Execute the command
+				        CMD_ExecuteCommand(output_command, 0);
+				        
+				        // Exit the loop after executing the command
+				        break;
+				    }
+				}
 			//end of execute once a minute ------------------------------------------------------------		
 			}
 			//----------------------------
