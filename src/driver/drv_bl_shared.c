@@ -349,6 +349,19 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 
+		//-----------
+			// Charger C Power calculation
+				// We need a linear mapping from charger_c_new_energy to scaled_power
+				int scaled_power;
+				if (charger_c_new_energy > 50) { scaled_power = 0;} 
+				else if (charger_c_new_energy < -950) {scaled_power = 100;} 
+				else {scaled_power = ((50 - charger_c_new_energy) * 100) / 1000;}
+				
+				// Apply the new scaled value with last_dump_load_relay[5], keeping it within bounds (-50 maps to 0 and 950 maps to 100)
+				dump_load_relay[5] = (uint8_t)((scaled_power + last_dump_load_relay[5]) > 100 ? 100 : ((scaled_power + last_dump_load_relay[5]) < 0 ? 0 : (scaled_power + last_dump_load_relay[5])));
+				// End of Charger C Power calculation
+		// -----------
+		/*
 		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
 		adjust_net_energy = (estimated_energy_hour / 10);
 		// Cap the values to ensure they're within the range of -50 to 1000
@@ -361,6 +374,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 
 		// Update Output
 		dump_load_relay[5] = (int)adjust_net_energy;
+		*/
 
 			// End of PWM control
 		
@@ -886,9 +900,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 				// Reset
 				last_minute = current_minute;
-				// Update Charger PWM. Calculate the new PWN values and keep a limit (0-100%)
-				dump_load_relay[5] = (uint8_t)((adjust_net_energy + last_dump_load_relay[5]) > 100 ? 100 : ((adjust_net_energy + last_dump_load_relay[5]) < 0 ? 0 : (adjust_net_energy + last_dump_load_relay[5])));
-
+				
 				// **Check Time Condition**
 				// New logic to estimate energy. We multiply the available power after t = 30minutes 
 				// to accomodate for the shorter timespam available to cunsume the energy
@@ -944,7 +956,18 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					    dump_load_relay[2] = 0; // Turn off dishwasher. We allow up to 300W from grid / battery to facilitate in poor weather
 					}
 				}
+				/*
+				// Charger C Power calculation
+				// We need a linear mapping from charger_c_new_energy to scaled_power
+				int scaled_power;
+				if (charger_c_new_energy > 50) { scaled_power = 0;} 
+				else if (charger_c_new_energy < -950) {scaled_power = 100;} 
+				else {scaled_power = ((50 - charger_c_new_energy) * 100) / 1000;}
 				
+				// Apply the new scaled value with last_dump_load_relay[5], keeping it within bounds (-50 maps to 0 and 950 maps to 100)
+				dump_load_relay[5] = (uint8_t)((scaled_power + last_dump_load_relay[5]) > 100 ? 100 : ((scaled_power + last_dump_load_relay[5]) < 0 ? 0 : (scaled_power + last_dump_load_relay[5])));
+				// End of Charger C Power calculation
+				*/
 				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
 				{
 					
