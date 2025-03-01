@@ -384,10 +384,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		}
 		//charger_c_previous_energy = charger_c_new_energy;
 		// Displays present charger output rate and the next adjustment
-		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", charger_c_previous_energy, charger_c_new_energy); 
+		hprintf255(request,"<font size=2>- <b>Charger C:</b> Last output: <b>%i</b> Change: <b>%i</b><br></font>", charger_c_previous_energy, (net_energy_equivalent - charger_c_previous_energy)); 
 		hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
 
-		
 		//hprintf255(request,"<font size=2>- Charger error signal: <b>%i</b><br></font>", net_energy_equivalent); 
 	
 		//----------------------
