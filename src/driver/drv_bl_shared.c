@@ -399,7 +399,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
 		// Print out periodic statistics and Total Generation at the bottom of the page.
 		hprintf255(request,"<h5>NetMetering (Last %d min out of %d): %.3f Wh</h5><hr>", energyCounterMinutesIndex, energyCounterSampleCount, net_energy); //Net metering shown in Wh (Small value)    
-		hprintf255(request,"<font size=2>- <b>Charger C:</b> Output: <b>%i</b> Next cycle change: <b>%i</b><br></font>", old_output, (old_output-dump_load_relay[5])); 
+		hprintf255(request,"<font size=2>- <b>Charger C:</b> Output: <b>%i</b> Next cycle change: <b>%i</b><br></font>", old_output, (dump_load_relay[5]-old_output)); 
 		hprintf255(request,"<font size=2>- Equivalent energy: <b>%i</b><br></font>", (int)estimated_energy_hour); 
 		hprintf255(request,"<font size=2>- Loop index: <b>%i</b><br></font>", update_number); 
 		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", last_dump_load_relay[0], last_dump_load_relay[1], last_dump_load_relay[2], last_dump_load_relay[3], last_dump_load_relay[4], last_dump_load_relay[5]); 
