@@ -1090,7 +1090,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				
 				        // Format the full command
 				        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
-				        
+				        print_test = 1;
 				        // Execute the command
 				        CMD_ExecuteCommand(output_command, 0);
 				        
