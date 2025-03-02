@@ -927,10 +927,14 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				}*/
 				
 				// new--------------------------------
-				if (net_energy > 0) {
-				    dump_load_relay[5] = 0;  // Reset dump_load_relay[5] to 0 if net_energy is positive
-				    change = 0;  // Set change to 0 if net_energy is positive
+			/*	if (net_energy > 0) {
+				    dump_load_relay[5] = (net_energy / 10 > 5) ? 5 : net_energy / 10;  // Set dump_load_relay[5] to net_energy/10, capped at 5
+				    change = 0;  // Ensure change remains 0
+				} else if (net_energy == 0) {
+				    dump_load_relay[5] = 0;  // Set output to 0 if net_energy is exactly 0
+				    change = 0;  // Ensure change remains 0
 				}
+					
 				else if (change != 0) { // Only change if scaled_power is not 5
 				    if (net_energy <= -50) {
 				        // Only allow increase if net_energy <= -50 (ensures a small buffer for stability)
@@ -941,9 +945,29 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				        dump_load_relay[5] += change;
 				    }
 				dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
-				}
+				}*/
 				// -----------------------------------
+				if (net_energy > 0) {
+				    dump_load_relay[5] = (net_energy / 10 > 5) ? 5 : net_energy / 10;  // Cap at 5 if net_energy / 10 exceeds 5
+				    change = 0;  // Ensure change remains 0
+				} 
+				else if (net_energy == 0) {
+				    dump_load_relay[5] = 0;  // Set output to 0 if net_energy is exactly 0
+				    change = 0;  // Ensure change remains 0
+				} 
+				else if (change != 0) { // Only modify if net_energy is negative
+				    if (net_energy <= -50) {
+				        // Only allow increase if net_energy <= -50 (ensures a small buffer for stability)
+				        dump_load_relay[5] += change;
+				    }
+				    else if (dump_load_relay[5] > 5 && change < 0) {
+				        // Only allow decrease if dump_load_relay[5] > 5 (ensures decrease is controlled)
+				        dump_load_relay[5] += change;
+				    }
+				}
 				
+				// Ensure dump_load_relay[5] stays within valid bounds (0-100)
+				dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
 			
 				//-----------------
 				// **Check Time Condition**
