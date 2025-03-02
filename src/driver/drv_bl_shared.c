@@ -921,7 +921,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				// Modify dump_load_relay[5]
 				// old --------------------------------
 				/*if (change != 0) { // Only change if scaled_power is not 5
-				    dump_load_relay[5] += change;*/
+				    dump_load_relay[5] += change;
+					    // Ensure the value is within bounds (0 to 100)
+				    dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
+				}*/
+				
 				// new--------------------------------
 				if (net_energy > 0) {
 				    dump_load_relay[5] = 0;  // Reset dump_load_relay[5] to 0 if net_energy is positive
@@ -936,12 +940,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				        // Only allow decrease if dump_load_relay[5] > 5 (ensures decrease is controlled)
 				        dump_load_relay[5] += change;
 				    }
+				dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
 				}
 				// -----------------------------------
 				
-				    // Ensure the value is within bounds (0 to 100)
-				    dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
-				}
+			
 				//-----------------
 				// **Check Time Condition**
 				// New logic to estimate energy. We multiply the available power after t = 30minutes 
