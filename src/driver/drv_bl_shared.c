@@ -1064,7 +1064,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				
 				        char output_command[50] = "";
 				        const char *ip_start = "SendGet http://192.168.5.";
-			
+					const char *ip_middle = "/cm?cmnd=Power%20"; // Default command
+
 				  	// Set the ip_middle based on the relay IP address
 				        if (dump_load_relay_ip[output_index] == 20) 
 				        {
@@ -1078,7 +1079,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				        }
 					else{
 					// Set the ip_middle based on the relay IP address
-				        const char *ip_middle = "/cm?cmnd=Power%20"; // Default command
+				        	ip_middle = "/cm?cmnd=Power%20"; // Default command
 					}
 				
 				        // Format the full command
