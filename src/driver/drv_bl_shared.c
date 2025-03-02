@@ -357,27 +357,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 				else if (estimated_energy_hour < -950) {scaled_power = 100;} 
 				else {scaled_power = ((50 - estimated_energy_hour) * 100) / 1000;}*/
 
-				int scaled_power;
-				if (estimated_energy_hour > 50) { 
-				    scaled_power = -5; // Decrease by 5 when energy is high
-				} 
-				else if (estimated_energy_hour < -950) { 
-				    scaled_power = 100; // Force max power in extreme low conditions
-				} 
-				else { 
-				    scaled_power = ((50 - estimated_energy_hour) * 100) / 1000; 
-				}
-				
-				// Calculate the change
-				int change = scaled_power - 5;
-				
-				// Modify dump_load_relay[5]
-				if (change != 0) { // Only change if scaled_power is not 5
-				    dump_load_relay[5] += change;
-				
-				    // Ensure the value is within bounds (0 to 100)
-				    dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
-				}
+				//------------------------------
 				
 				// Apply the new scaled value with last_dump_load_relay[5], keeping it within bounds (-50 maps to 0 and 950 maps to 100)
 				//dump_load_relay[5] = (uint8_t)((scaled_power + last_dump_load_relay[5]) > 100 ? 100 : ((scaled_power + last_dump_load_relay[5]) < 0 ? 0 : (scaled_power + last_dump_load_relay[5])));
@@ -922,7 +902,30 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 				// Reset
 				last_minute = current_minute;
+
+				//-----------------
+				int scaled_power;
+				if (estimated_energy_hour > 50) { 
+				    scaled_power = -5; // Decrease by 5 when energy is high
+				} 
+				else if (estimated_energy_hour < -950) { 
+				    scaled_power = 100; // Force max power in extreme low conditions
+				} 
+				else { 
+				    scaled_power = ((50 - estimated_energy_hour) * 100) / 1000; 
+				}
 				
+				// Calculate the change
+				int change = scaled_power - 5;
+				
+				// Modify dump_load_relay[5]
+				if (change != 0) { // Only change if scaled_power is not 5
+				    dump_load_relay[5] += change;
+				
+				    // Ensure the value is within bounds (0 to 100)
+				    dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
+				}
+				//-----------------
 				// **Check Time Condition**
 				// New logic to estimate energy. We multiply the available power after t = 30minutes 
 				// to accomodate for the shorter timespam available to cunsume the energy
