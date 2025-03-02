@@ -1040,21 +1040,22 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				
 				        char output_command[50] = "";
 				        const char *ip_start = "SendGet http://192.168.5.";
-				
-				        // Set the ip_middle based on the relay IP address
-				        const char *ip_middle = "/cm?cmnd=Power%20"; // Default command
-				  
+			
+				  	// Set the ip_middle based on the relay IP address
 				        if (dump_load_relay_ip[output_index] == 20) 
 				        {
 				            ip_middle = "/cm?cmnd=Dimmer3%20";  // Use Dimmer3 command if the IP is 20
 						
-					  //  old_output = dump_load_relay[output_index];	
+					//  old_output = dump_load_relay[output_index];	
 					// Check if the value is below 5, and if so, make it negative
 					if (dump_load_relay[output_index] < 5) { old_output = -dump_load_relay[output_index]; } // Make it negative
 					else { old_output = dump_load_relay[output_index]; } // Leave as is if above 5
-					// Additional logic to adjust `old_output`
-						
+					// Additional logic to adjust `old_output`	
 				        }
+					else{
+					// Set the ip_middle based on the relay IP address
+				        const char *ip_middle = "/cm?cmnd=Power%20"; // Default command
+					}
 				
 				        // Format the full command
 				        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
