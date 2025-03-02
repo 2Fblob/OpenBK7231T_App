@@ -9,7 +9,6 @@ static int net_energy_equivalent = 0;
 static int old_output = 0;
 static int update_number = 0;
 int adjust_net_energy = 50;
-int print_test = 0;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
 //float estimated_production_hour = 0; 
@@ -407,11 +406,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Loop index: <b>%i</b><br></font>", update_number); 
 		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", last_dump_load_relay[0], last_dump_load_relay[1], last_dump_load_relay[2], last_dump_load_relay[3], last_dump_load_relay[4], last_dump_load_relay[5]); 
 		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", dump_load_relay[0], dump_load_relay[1], dump_load_relay[2], dump_load_relay[3], dump_load_relay[4], dump_load_relay[5]); 
-		if (print_test == 1)
-		{
 		hprintf255(request,"<font size=2>- Debug: <b>%i %i </b><br></font>", dump_load_relay_ip[output_index], dump_load_relay[output_index]);
-		print_test = 0;
-		}
 		
 		}	
 	
@@ -1090,7 +1085,6 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				
 				        // Format the full command
 				        sprintf(output_command, "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
-				        print_test = 1;
 				        // Execute the command
 				        CMD_ExecuteCommand(output_command, 0);
 				        
