@@ -409,7 +409,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", dump_load_relay[0], dump_load_relay[1], dump_load_relay[2], dump_load_relay[3], dump_load_relay[4], dump_load_relay[5]); 
 		if (print_test == 1)
 		{
-		hprintf255(request,"<font size=2>- Debug: <b>%i %i %i %i </b><br></font>", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
+		hprintf255(request,"<font size=2>- Debug: <b>%i %i </b><br></font>", dump_load_relay_ip[output_index], dump_load_relay[output_index]);
 		print_test = 0;
 		}
 		
