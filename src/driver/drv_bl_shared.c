@@ -919,8 +919,25 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				int change = scaled_power - 5;
 				
 				// Modify dump_load_relay[5]
-				if (change != 0) { // Only change if scaled_power is not 5
-				    dump_load_relay[5] += change;
+				// old --------------------------------
+				/*if (change != 0) { // Only change if scaled_power is not 5
+				    dump_load_relay[5] += change;*/
+				// new--------------------------------
+				if (net_energy > 0) {
+				    dump_load_relay[5] = 0;  // Reset dump_load_relay[5] to 0 if net_energy is positive
+				    change = 0;  // Set change to 0 if net_energy is positive
+				}
+				else if (change != 0) { // Only change if scaled_power is not 5
+				    if (net_energy <= -50) {
+				        // Only allow increase if net_energy <= -50 (ensures a small buffer for stability)
+				        dump_load_relay[5] += change;
+				    }
+				    else if (dump_load_relay[5] > 5 && change < 0) {
+				        // Only allow decrease if dump_load_relay[5] > 5 (ensures decrease is controlled)
+				        dump_load_relay[5] += change;
+				    }
+				}
+				// -----------------------------------
 				
 				    // Ensure the value is within bounds (0 to 100)
 				    dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
