@@ -915,40 +915,12 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				    scaled_power = 100; // Force max power in extreme low conditions
 				} 
 				else { 
-				    scaled_power = ((50 - estimated_energy_hour) * 100) / 1000; 
+				    scaled_power = ((50 - estimated_energy_hour) * 100) / 1000; 	        // Check if scaled_power is between 1 and 10, inclusive
+				    if (scaled_power >= 1.0 && scaled_power <= 10.0) {scaled_power = 10.0;} 	// Replace with 10 if in this range
 				}
 				
 				// Calculate the change
 				int change = scaled_power - 5;
-				
-				// Modify dump_load_relay[5]
-				// old --------------------------------
-				/*if (change != 0) { // Only change if scaled_power is not 5
-				    dump_load_relay[5] += change;
-					    // Ensure the value is within bounds (0 to 100)
-				    dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
-				}*/
-				
-				// new--------------------------------
-			/*	if (net_energy > 0) {
-				    dump_load_relay[5] = (net_energy / 10 > 5) ? 5 : net_energy / 10;  // Set dump_load_relay[5] to net_energy/10, capped at 5
-				    change = 0;  // Ensure change remains 0
-				} else if (net_energy == 0) {
-				    dump_load_relay[5] = 0;  // Set output to 0 if net_energy is exactly 0
-				    change = 0;  // Ensure change remains 0
-				}
-					
-				else if (change != 0) { // Only change if scaled_power is not 5
-				    if (net_energy <= -50) {
-				        // Only allow increase if net_energy <= -50 (ensures a small buffer for stability)
-				        dump_load_relay[5] += change;
-				    }
-				    else if (dump_load_relay[5] > 5 && change < 0) {
-				        // Only allow decrease if dump_load_relay[5] > 5 (ensures decrease is controlled)
-				        dump_load_relay[5] += change;
-				    }
-				dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
-				}*/
 				// -----------------------------------
 				if (net_energy > 0) {
 				    dump_load_relay[5] = (net_energy / 10 > 5) ? 5 : net_energy / 10;  // Cap at 5 if net_energy / 10 exceeds 5
@@ -967,6 +939,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				        // Only allow decrease if dump_load_relay[5] > 5 (ensures decrease is controlled)
 				        dump_load_relay[5] += change;
 				    }
+					// Make sure the value is never less than 10
+					if (dump_load_relay[5] < 10) {dump_load_relay[5] = 10;}
 				}
 				
 				// Ensure dump_load_relay[5] stays within valid bounds (0-100)
@@ -976,7 +950,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				// This avoids cycling by allowing the converter to quickly throttle it's output down, until the energy buffer increases.
 				if (net_energy < 0 && net_energy < 50 && dump_load_relay[5] > net_energy) 
 				{
-				    dump_load_relay[5] = net_energy;  // Limit to net_energy if it's below 50 and positive
+				    dump_load_relay[5] = 10;  // Limit to net_energy if it's below 50 and positive
 				}
 			
 				//-----------------
@@ -989,7 +963,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				}
 				else 
 				{
-					if (current_minute < 57)
+					if (current_minute < 55)
 					{
 					//net_energy_equivalent = net_energy*2;
 					net_energy_equivalent = ((float)(net_energy*(60/(60-current_minute))));
