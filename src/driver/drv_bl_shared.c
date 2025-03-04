@@ -26,6 +26,7 @@ int export_buffer = 0;
 int check_time_estimate = 59;
 // The number of devices the automation controls, based on power level 
 #define dump_load_relay_number 6
+#define charger_c_ip 21
 
 // This stores the former relay states, so multiple commands are not issued
 int last_dump_load_relay[dump_load_relay_number] = {2, 2, 2, 2, 2, 2};
@@ -34,7 +35,7 @@ int last_dump_load_relay[dump_load_relay_number] = {2, 2, 2, 2, 2, 2};
 static int dump_load_relay[dump_load_relay_number] = {0};
 static int dump_load_relay_timer[dump_load_relay_number] = {0};
 // The array where we store the ip address of these devices 
-static int dump_load_relay_ip[6] = {23, 22, 29, 24, 27, 20};
+static int dump_load_relay_ip[dump_load_relay_number] = {23, 22, 29, 24, 27, charger_c_ip};
 int cmd_ctrl = dump_load_relay_number;
 
 #include "drv_bl_shared.h"
@@ -346,6 +347,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Storage Inverter: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[0], dump_load_relay_timer[0]); 
 		hprintf255(request,"<font size=2>- Storage Charger A: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[1], dump_load_relay_timer[1]); 
 		hprintf255(request,"<font size=2>- Storage Charger B: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[3], dump_load_relay_timer[2]); 
+		hprintf255(request,"<font size=2>- Storage Charger C: <b>%i</b> <br></font>", old_output); 
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 
@@ -401,12 +403,12 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		// hprintf255(request,"<font size=1> Last diversion Load Bypass: %d:%d </font><br>", check_hour_power, check_time_power);	
 		// Print out periodic statistics and Total Generation at the bottom of the page.
 		hprintf255(request,"<h5>NetMetering (Last %d min out of %d): %.3f Wh</h5><hr>", energyCounterMinutesIndex, energyCounterSampleCount, net_energy); //Net metering shown in Wh (Small value)    
-		hprintf255(request,"<font size=2>- <b>Charger C:</b> Output: <b>%i</b> Next cycle change: <b>%i</b><br></font>", old_output, (dump_load_relay[5]-old_output)); 
-		hprintf255(request,"<font size=2>- Equivalent energy: <b>%i</b><br></font>", (int)estimated_energy_hour); 
-		hprintf255(request,"<font size=2>- Loop index: <b>%i</b><br></font>", update_number); 
-		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", last_dump_load_relay[0], last_dump_load_relay[1], last_dump_load_relay[2], last_dump_load_relay[3], last_dump_load_relay[4], last_dump_load_relay[5]); 
-		hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", dump_load_relay[0], dump_load_relay[1], dump_load_relay[2], dump_load_relay[3], dump_load_relay[4], dump_load_relay[5]); 
-		hprintf255(request,"<font size=2>- Debug: <b>%i %i </b><br></font>", dump_load_relay_ip[output_index], dump_load_relay[output_index]);
+		// hprintf255(request,"<font size=2>- <b>Charger C:</b> Output: <b>%i</b> Next cycle change: <b>%i</b><br></font>", old_output, (dump_load_relay[5]-old_output)); 
+		//hprintf255(request,"<font size=2>- Equivalent energy: <b>%i</b><br></font>", (int)estimated_energy_hour); 
+		//hprintf255(request,"<font size=2>- Loop index: <b>%i</b><br></font>", update_number); 
+		//hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", last_dump_load_relay[0], last_dump_load_relay[1], last_dump_load_relay[2], last_dump_load_relay[3], last_dump_load_relay[4], last_dump_load_relay[5]); 
+		//hprintf255(request,"<font size=2>- status: <b>%i %i %i %i %i %i </b><br></font>", dump_load_relay[0], dump_load_relay[1], dump_load_relay[2], dump_load_relay[3], dump_load_relay[4], dump_load_relay[5]); 
+		//hprintf255(request,"<font size=2>- Debug: <b>%i %i </b><br></font>", dump_load_relay_ip[output_index], dump_load_relay[output_index]);
 		
 		}	
 	
@@ -969,6 +971,13 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				
 				// Ensure dump_load_relay[5] stays within valid bounds (0-100)
 				dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
+
+				// This reduces dump_load_relay[5] if stored energy is less than 50Wh. 
+				// This avoids cycling by allowing the converter to quickly throttle it's output down, until the energy buffer increases.
+				if (net_energy < 0 && net_energy < 50 && dump_load_relay[5] > net_energy) 
+				{
+				    dump_load_relay[5] = net_energy;  // Limit to net_energy if it's below 50 and positive
+				}
 			
 				//-----------------
 				// **Check Time Condition**
@@ -1068,7 +1077,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					const char *ip_middle = "/cm?cmnd=Power%20"; // Default command
 
 				  	// Set the ip_middle based on the relay IP address
-				        if (dump_load_relay_ip[output_index] == 20) 
+				        if (dump_load_relay_ip[output_index] == charger_c_ip) 
 				        {
 				            ip_middle = "/cm?cmnd=Dimmer3%20";  // Use Dimmer3 command if the IP is 20
 						
