@@ -948,7 +948,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 
 				// This reduces dump_load_relay[5] if stored energy is less than -50Wh. 
 				// This avoids cycling by allowing the converter to quickly throttle it's output down, until the export buffer increases.
-				if (net_energy < 50 && dump_load_relay[5] > net_energy) 
+				//if (net_energy > -50 && dump_load_relay[5] > net_energy) 
+				if (net_energy < 0 && net_energy > -51) 
 				{
 				    dump_load_relay[5] = 10;  
 				}
