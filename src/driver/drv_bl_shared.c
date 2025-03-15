@@ -1054,7 +1054,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				  	// Set the ip_middle based on the relay IP address
 				        if (dump_load_relay_ip[output_index] == charger_c_ip) 
 				        {
-				            ip_middle = "/cm?cmnd=Dimmer3%20";  // Use Dimmer3 command if the IP is 20
+				            ip_middle = "/cm?cmnd=Channel3%20";  // Use Dimmer3 command if the IP is 20
 						
 					//  old_output = dump_load_relay[output_index];	
 					// Check if the value is below 5, and if so, make it negative
