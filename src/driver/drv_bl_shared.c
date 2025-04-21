@@ -3,9 +3,9 @@
 #include <stdint.h>
 typedef uint8_t byte;
 
-uint16_t consumption_matrix[96] = {0};
-byte export_matrix[96] = {0};
-byte net_matrix[96] = {0};
+uint16_t consumption_matrix[36] = {0};
+uint16_t export_matrix[36] = {0};
+uint16_t net_matrix[36] = {0};
 int old_export_energy = 0;
 int old_real_consumption = 0;
 int net_energy_equivalent = 0;
