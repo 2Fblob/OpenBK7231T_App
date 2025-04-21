@@ -1,9 +1,8 @@
 // Internal code ONLY
-#include <stdint.h>  // This is necessary to use int16_t and uint16_t
 
-static int16_t  consumption_matrix [24] = {0};
-static int16_t  export_matrix[24] = {0};
-static int16_t  net_matrix[24] = {0};
+static int16_t  consumption_matrix [96] = {0};
+static int16_t  export_matrix[96] = {0};
+static int16_t  net_matrix[96] = {0};
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int net_energy_equivalent = 0;
@@ -256,51 +255,70 @@ if (NTP_GetMinute() % 15 == 0 && !save_to_flash_flag) {
     save_to_flash_flag = 1;  // Set the flag to indicate that data should be saved to flash
 } 
 
-if (NTP_IsTimeSynced()) {
-    for (int q = 0; q <= check_hour; q++) {  // Loop through all intervals
-        if (q == check_interval) {  // Update live data for the current interval
+if (NTP_IsTimeSynced())
+{
+    for (int q = 0; q <= check_hour; q++)
+    {
+        // Calculate the current time for 15-minute intervals (HH:MM)
+        int hour = q / 4;           // Each hour has 4 intervals
+        int minute = 15 * (q % 4);  // Calculate minute based on interval
+        char time_str[6];           // To store the formatted time string
+        snprintf(time_str, sizeof(time_str), "%02d:%02d", hour, minute);
+
+        if (q == check_hour)
+        {
             int calculate_net_energy = (net_matrix[q] + (int)net_energy);
-            hprintf255(request, "<tr><td> <b> %i:%02i </td> ", q, (q % 4) * 15);  // Print hour and minute
+            hprintf255(request, "<tr><td> <b> %s </td> ", time_str);  // Use formatted time
             hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
             hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
-            hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);
+            hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);	
             current_hour_consumption = calculate_net_energy;
-        } else {
-            hprintf255(request, "<tr><td> %i:%02i </td> ", q, (q % 4) * 15);  // Print hour and minute
+        }
+        else
+        {
+            hprintf255(request, "<tr><td> %s </td> ", time_str);  // Use formatted time
             hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]);
             hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]);
-            hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);
+            hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);	
         }
 
-        // Summing all the data for totals
+        // Summing all the data for the table to summarize below.
+        // Real Grid Consumption / Export
         total_consumption += consumption_matrix[q];
-        total_export += export_matrix[q];  
+        total_export += export_matrix[q];	
 
-        // Calculated Net Values (Export/Consumption)
-        if (net_matrix[q] < 0) {
-            total_net_export = 0; 
-            total_net_export -= net_matrix[q];
-        } else {
-            total_net_consumption = 0; 
-            total_net_consumption += net_matrix[q];
+        // Calculated Net Values
+        if (net_matrix[q] < 0) 
+        {
+            total_net_export -= net_matrix[q];  // This is correct: negative net means export
         }
+        else
+        {
+            total_net_consumption += net_matrix[q];  // This is correct: positive net means consumption
+        }
+    }
 
-        // Add current net energy to the totals
-        if (net_energy < 0) {
-            total_net_export -= net_energy;
-        } else {
-            total_net_consumption += net_energy;
-        }
+    // Add the values for this metering period (not yet saved)
+    if (net_energy < 0) 
+    {
+        total_net_export -= net_energy;  // If net energy is negative, it's export
+    }
+    else 
+    {
+        total_net_consumption += net_energy;  // If net energy is positive, it's consumption
+    }
 
-        // Track energy duration
-        if (current_hour_consumption == 0) {
-            estimated_energy_start = check_time;
-        }
-
-        if (((check_time - estimated_energy_start) > 0) && (last_run_calc != check_time)) {
-            last_run_calc = check_time;
-            import_buffer = 0;
-        }
+    // Calculate hourly rate
+    if (current_hour_consumption == 0)
+    {
+        estimated_energy_start = check_time;
+    }
+    if (((check_time - estimated_energy_start) > 0) && (!(last_run_calc == check_time)))
+    {
+        last_run_calc = check_time;
+        // Calculate Import / Export
+        // export_buffer = netmetering;
+        import_buffer = 0;
     }
 }
 	// Calculate hourly rate	
