@@ -1,4 +1,5 @@
 // Internal code ONLY
+#include <stdint.h>  // This is necessary to use int16_t and uint16_t
 
 static int16_t  consumption_matrix [24] = {0};
 static int16_t  export_matrix[24] = {0};
