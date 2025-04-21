@@ -232,13 +232,18 @@ if (NTP_IsTimeSynced()) {
 
     for (int q = 0; q <= check_interval; q++) {  // Loop through all intervals
         if (q == check_interval) {  // Update live data for the current interval
-            int calculate_net_energy = (net_matrix[q] + (int)net_energy);
+            // Add to the table ---------------------------------------------------------------------------------	
+		    export_matrix[q] = old_export_energy + (int)real_export;
+		    consumption_matrix [q] = old_real_consumption + (int)real_consumption;
+            net_matrix[q] = consumption_matrix [q] - export_matrix[q];
+	    // End of Add to the table --------------------------------------------------------------------------
+            // int calculate_net_energy = (net_matrix[q] + (int)net_energy);
             // Format time, to accomodate the 96 intervals
             int hour = q / 4;             // 0–23
             int minute = (q % 4) * 15;    // 0, 15, 30, 45
             hprintf255(request, "<tr><td> <b> %i:%02i </td> ", hour, minute);  // Print hour and minute
-            hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[check_interval]);
-            hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[check_interval]);
+            hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
+            hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
             hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);
             current_hour_consumption = calculate_net_energy;
         } else {
@@ -786,12 +791,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			}
 
 
-	// Add to the table ---------------------------------------------------------------------------------
-			
-		export_matrix[check_hour] = old_export_energy + (int)real_export;
-		consumption_matrix [check_hour] = old_real_consumption + (int)real_consumption;		
-
-	// End of Add to the table --------------------------------------------------------------------------
+// old writing to arrYS 0-96 HERE
 			
 			// If netmetering is enabled, we reset every hour.
 			if (hour_reset == 1)
