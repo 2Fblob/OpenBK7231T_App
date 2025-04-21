@@ -1,11 +1,10 @@
 // Internal code ONLY
 
 #include <stdint.h>
-typedef uint8_t byte;
 
-uint16_t consumption_matrix[36] = {0};
-uint16_t export_matrix[36] = {0};
-uint16_t net_matrix[36] = {0};
+uint16_t consumption_matrix[24] = {0};
+uint16_t export_matrix[24] = {0};
+uint16_t net_matrix[24] = {0};
 int old_export_energy = 0;
 int old_real_consumption = 0;
 int net_energy_equivalent = 0;
@@ -15,9 +14,9 @@ int adjust_net_energy = 50;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
 //float estimated_production_hour = 0; 
-static int mtqq_total_net_export = 0;
-static int estimated_energy_start = 0;
-static int last_run_calc = 0;
+int mtqq_total_net_export = 0;
+int estimated_energy_start = 0;
+int last_run_calc = 0;
 int current_minute = 0;
 int last_minute = 0;
 int output_index = 0;
