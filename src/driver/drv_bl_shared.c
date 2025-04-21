@@ -23,12 +23,14 @@ int estimated_energy_hour = 0;
 int import_buffer = 0;
 int export_buffer = 0;
 // used for hourly averages time checking
-int check_time_estimate = 59;
+// int check_time_estimate = 59;
 // The number of devices the automation controls, based on power level 
 #define dump_load_relay_number 6
 #define charger_c_ip 21
 // Flag to indicate if it's time to save data to flash
 static int save_to_flash_flag = 0;
+int check_time_estimate = 0;
+int estimated_energy_interval = 0;
 
 // This stores the former relay states, so multiple commands are not issued
 int last_dump_load_relay[dump_load_relay_number] = {2, 2, 2, 2, 2, 2};
