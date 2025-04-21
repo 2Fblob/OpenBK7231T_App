@@ -242,6 +242,8 @@ if (NTP_IsTimeSynced()) {
             hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);
             current_hour_consumption = calculate_net_energy;
         } else {
+            int hour = q / 4;             // 0–23
+            int minute = (q % 4) * 15;    // 0, 15, 30, 45
             hprintf255(request, "<tr><td> %i:%02i </td> ", hour, minute);  // Print hour and minute
             hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[check_interval]);
             hprintf255(request, "<td> %dW </td>", (int)export_matrix[check_interval]);
