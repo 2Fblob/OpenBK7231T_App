@@ -1,23 +1,23 @@
 // Internal code ONLY
 
-static int16_t  consumption_matrix [96] = {0};
-static int16_t  export_matrix[96] = {0};
-static int16_t  net_matrix[96] = {0};
+static int consumption_matrix [96] = {0};
+static int export_matrix[96] = {0};
+static int net_matrix[96] = {0};
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int net_energy_equivalent = 0;
 static int old_output = 0;
 static int update_number = 0;
-int16_t  adjust_net_energy = 50;
+int adjust_net_energy = 50;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
-int16_t  solar_available = 0;
+int solar_available = 0;
 //float estimated_production_hour = 0; 
 static int mtqq_total_net_export = 0;
 static int estimated_energy_start = 0;
 static int last_run_calc = 0;
-int16_t current_minute = 0;
-int16_t last_minute = 0;
-int16_t output_index = 0;
+intcurrent_minute = 0;
+intlast_minute = 0;
+intoutput_index = 0;
 int estimated_energy_hour = 0;
 // used to calculate look ahead figures for the hour
 int import_buffer = 0;
@@ -28,18 +28,18 @@ int export_buffer = 0;
 #define dump_load_relay_number 6
 #define charger_c_ip 21
 // Flag to indicate if it's time to save data to flash
-static int16_t  save_to_flash_flag = 0;
-int16_t  check_time_estimate = 0;
-int16_t  estimated_energy_interval = 0;
+static int save_to_flash_flag = 0;
+int check_time_estimate = 0;
+int estimated_energy_interval = 0;
 
 // This stores the former relay states, so multiple commands are not issued
-int16_t  last_dump_load_relay[dump_load_relay_number] = {2, 2, 2, 2, 2, 2};
+int last_dump_load_relay[dump_load_relay_number] = {2, 2, 2, 2, 2, 2};
 
 // The array where we store the power state for each of these devices
-static int16_t  dump_load_relay[dump_load_relay_number] = {0};
-static int16_t  dump_load_relay_timer[dump_load_relay_number] = {0};
+static int dump_load_relay[dump_load_relay_number] = {0};
+static int dump_load_relay_timer[dump_load_relay_number] = {0};
 // The array where we store the ip address of these devices 
-static int16_t  dump_load_relay_ip[dump_load_relay_number] = {23, 22, 29, 24, 27, charger_c_ip};
+static int dump_load_relay_ip[dump_load_relay_number] = {23, 22, 29, 24, 27, charger_c_ip};
 int cmd_ctrl = dump_load_relay_number;
 
 #include "drv_bl_shared.h"
@@ -58,8 +58,8 @@ int cmd_ctrl = dump_load_relay_number;
 #include "../cmnds/cmd_public.h" //for enum EventCode
 #include <math.h>
 #include <time.h>
-int16_t stat_updatesSkipped = 0;
-int16_t stat_updatesSent = 0;
+intstat_updatesSkipped = 0;
+intstat_updatesSent = 0;
 //char buffer[50];
 char ip[3];
 
