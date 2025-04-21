@@ -1,5 +1,8 @@
 // Internal code ONLY
 
+#include <stdint.h>
+typedef uint8_t byte;
+
 static byte consumption_matrix[96] = {0};
 static byte export_matrix[96] = {0};
 static byte net_matrix[96] = {0};
