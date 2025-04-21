@@ -3,14 +3,14 @@
 #include <stdint.h>
 typedef uint8_t byte;
 
-static byte consumption_matrix[96] = {0};
-static byte export_matrix[96] = {0};
-static byte net_matrix[96] = {0};
-static int old_export_energy = 0;
-static int old_real_consumption = 0;
-static int net_energy_equivalent = 0;
-static int old_output = 0;
-static int update_number = 0;
+uint16_t consumption_matrix[96] = {0};
+byte export_matrix[96] = {0};
+byte net_matrix[96] = {0};
+int old_export_energy = 0;
+int old_real_consumption = 0;
+int net_energy_equivalent = 0;
+int old_output = 0;
+int update_number = 0;
 int adjust_net_energy = 50;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
