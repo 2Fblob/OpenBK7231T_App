@@ -226,7 +226,11 @@ if (NTP_GetMinute() % 15 == 0 && !save_to_flash_flag) {
 }
 
 if (NTP_IsTimeSynced()) {
-    for (int q = 0; q <= check_hour; q++) {  // Loop through all intervals
+        // Calculate current interval index (0–95)
+        int minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
+        int check_interval = minutes_since_midnight / 15;
+        
+    for (int q = 0; q <= check_interval; q++) {  // Loop through all intervals
         if (q == check_interval) {  // Update live data for the current interval
             int calculate_net_energy = (net_matrix[q] + (int)net_energy);
             hprintf255(request, "<tr><td> <b> %i:%02i </td> ", q, (q % 4) * 15);  // Print hour and minute
