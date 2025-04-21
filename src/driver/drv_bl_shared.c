@@ -233,7 +233,10 @@ if (NTP_IsTimeSynced()) {
     for (int q = 0; q <= check_interval; q++) {  // Loop through all intervals
         if (q == check_interval) {  // Update live data for the current interval
             int calculate_net_energy = (net_matrix[q] + (int)net_energy);
-            hprintf255(request, "<tr><td> <b> %i:%02i </td> ", q, (q % 4) * 15);  // Print hour and minute
+            // Format time, to accomodate the 96 intervals
+            int hour = q / 4;             // 0–23
+            int minute = (q % 4) * 15;    // 0, 15, 30, 45
+            hprintf255(request, "<tr><td> <b> %i:%02i </td> ", hour, minute);  // Print hour and minute
             hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
             hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
             hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);
@@ -251,10 +254,10 @@ if (NTP_IsTimeSynced()) {
 
         // Calculated Net Values (Export/Consumption)
         if (net_matrix[q] < 0) {
-            total_net_export = 0; 
+           // total_net_export = 0; 
             total_net_export -= net_matrix[q];
         } else {
-            total_net_consumption = 0; 
+            //total_net_consumption = 0; 
             total_net_consumption += net_matrix[q];
         }
 
