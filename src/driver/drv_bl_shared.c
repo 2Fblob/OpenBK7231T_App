@@ -1,8 +1,8 @@
 // Internal code ONLY
 
-static int16_t  consumption_matrix [96] = {0};
-static int16_t  export_matrix[96] = {0};
-static int16_t  net_matrix[96] = {0};
+static int16_t  consumption_matrix [24] = {0};
+static int16_t  export_matrix[24] = {0};
+static int16_t  net_matrix[24] = {0};
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int net_energy_equivalent = 0;
