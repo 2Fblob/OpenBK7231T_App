@@ -9,6 +9,7 @@ static int net_energy_equivalent = 0;
 static int old_output = 0;
 static int update_number = 0;
 int adjust_net_energy = 50;
+int save_to_flash_flag = 0;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
 static int estimated_energy_start = 0;
@@ -17,6 +18,7 @@ int current_minute = 0;
 int last_minute = 0;
 int output_index = 0;
 int estimated_energy_hour = 0;
+int estimated_energy_interval = 0;
 // used for hourly averages time checking
 int check_time_estimate = 59;
 // The number of devices the automation controls, based on power level 
@@ -218,7 +220,61 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	int total_export = 0;
 	int current_hour_consumption = 0;
 	
-    if (NTP_IsTimeSynced())
+    // Set flag to save data to flash every 15 minutes
+if (NTP_GetMinute() % 15 == 0 && !save_to_flash_flag) {
+    save_to_flash_flag = 1;  // Set the flag to indicate that data should be saved to flash
+}
+
+if (NTP_IsTimeSynced()) {
+    for (int q = 0; q <= check_hour; q++) {  // Loop through all intervals
+        if (q == check_interval) {  // Update live data for the current interval
+            int calculate_net_energy = (net_matrix[q] + (int)net_energy);
+            hprintf255(request, "<tr><td> <b> %i:%02i </td> ", q, (q % 4) * 15);  // Print hour and minute
+            hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
+            hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
+            hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);
+            current_hour_consumption = calculate_net_energy;
+        } else {
+            hprintf255(request, "<tr><td> %i:%02i </td> ", q, (q % 4) * 15);  // Print hour and minute
+            hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]);
+            hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]);
+            hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);
+        }
+
+        // Summing all the data for totals
+        total_consumption += consumption_matrix[q];
+        total_export += export_matrix[q];  
+
+        // Calculated Net Values (Export/Consumption)
+        if (net_matrix[q] < 0) {
+            total_net_export = 0; 
+            total_net_export -= net_matrix[q];
+        } else {
+            total_net_consumption = 0; 
+            total_net_consumption += net_matrix[q];
+        }
+
+        // Add current net energy to the totals
+        if (net_energy < 0) {
+            total_net_export -= net_energy;
+        } else {
+            total_net_consumption += net_energy;
+        }
+
+        // Track energy duration
+        if (current_hour_consumption == 0) {
+            estimated_energy_start = check_time;
+        }
+
+        if (((check_time - estimated_energy_start) > 0) && (last_run_calc != check_time)) {
+            last_run_calc = check_time;
+            import_buffer = 0;
+        }
+    }
+}
+
+
+    /*if (NTP_IsTimeSynced())
         {
         for (int q=0; q<=check_hour; q++)
             {
@@ -270,7 +326,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Metering) <br></font>", total_consumption, total_export);
         hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Net Metering) <br></font>", total_net_consumption, total_net_export);
         hprintf255(request, "<font size=2>- Hour Estimation: <b>%iW</b> <br></font>", (int)estimated_energy_hour);
-        }
+        }*/
 	}
 
 	/********************************************************************************************************************/
