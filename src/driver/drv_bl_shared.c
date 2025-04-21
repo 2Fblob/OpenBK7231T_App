@@ -70,25 +70,16 @@ static byte old_hour = 0;
 static byte time_hour_reset = 0;
 static byte time_min_reset = 0;
 static byte old_time = 0;
-#define max_power_bypass_off -500
 #define dump_load_hysteresis 1	// This is shortest time the relay will turn on or off. Recommended 1/4 of the netmetering period. Never use less than 1min as this stresses the relay/load.
-//int min_production = -50;	// The minimun instantaneous solar production that will trigger the dump load.
-#define dump_load_on 15		// The ammount of 'excess' energy stored over the period. Above this, the dump load will be turned on.
-#define dump_load_off 1		// The minimun 'excess' energy stored over the period. Below this, the dump load will be turned off.
 #define max_export -3300
 
 // These variables are used to program the bypass load, for example turn it on late afternoon if there was no sun for the day
 //#define bypass_timer_reset 23	// Just so it doesn't accidentally reset when the device is rebooted (0)...
-#define bypass_on_time 15
-#define bypass_off_time 18
-#define min_daily_time_on 120	// Runs the diversion load up to this specified ammount of time, if there wasn't enough sun over the day.
-int time_on = 0;		// Variable to count how long the Bypass load ran during the day
+
 //int dump_load_relay = 0;	// Variable to Indicate on the Webpage if the Bypass load is on
 int lastsync = 0; 		// Variable to run the bypass relay loop. It's used to take note of the last time it run
 byte check_time = 0; 		// Variable for Minutes
-byte check_hour = 0;		// Variable for Hour	
-byte check_time_power = 0; 		// Variable for Minutes
-byte check_hour_power = 0;		
+byte check_hour = 0;		// Variable for Hour		
 
 //Command to turn remote plug on/off
 //const char* rem_relay_on = "http://<ip>/cm?cmnd=Power%20on";
@@ -288,19 +279,6 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Net Metering) <br></font>", total_net_consumption, total_net_export);
 	hprintf255(request, "<font size=2>- Hour Estimation: <b>%iW</b> <br></font>", (int)estimated_energy_hour);
 	
-	//--------------------------------------------------------------------------------------------------
-		//mtqq_total_net_export = net_matrix[check_hour];
-	//--------------------------------------------------------------------------------------------------
-		// Update status of the diversion relay on webpage		
-		//-------------------------------------------------------------------------------------------------------------------------------------------------
-		
-		//-----------------------------------------------------------------------------------------------------
-		//hprintf255(request, "<font size=1>Last sync at minute: %dmin. Boosting from %dh to %dh<br> Relay Thresholds: On: %d Wh, Off: %dWh<br> Instant Power: %dW, Consumption: %dW, Generation: %dW <br></font>", 
-		//	lastsync, bypass_on_time, bypass_off_time, dump_load_on, dump_load_off, (int)sensors[OBK_POWER].lastReading, (int)sensors[OBK_CONSUMPTION_TOTAL].lastReading, (int)real_export);
-		// -------------------------------------------------------------------------------------------------------------------
-		// This was the original loop 'energyCounterStatsEnable == true'
-		/********************************************************************************************************************/
-	//------------------------------------------------------------------------------------------------------------------------------------------
 	}
 	// Some other stats...
     	/*hprintf255(request, "<p><br><h5>Changes: %i sent, %i Skipped, %li Saved. <br> %s<hr></p>",
@@ -783,29 +761,6 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				//update_tables = 1;
 			}
 
-			//Make an animation to indicate bypass is on
-			//if (dump_load_relay == 4)
-			//{
-				// In case we want to do something here. Not currently implemented.
-			//}
-			
-			// This turns the bypass load off if we are using a lot of power
-			//if (((sensors[OBK_POWER].lastReading) > max_power_bypass_off) && (!(dump_load_relay == 4)))
-			/*if (((sensors[OBK_POWER].lastReading) > max_power_bypass_off) && (!(dump_load_relay == 4)))
-			{
-				// Make sure we don't run it twice on the same minute
-				if (!(check_time == check_time_power))
-				{
-					// Hold the loop
-					lastsync = 0;
-					//hour_reset = 0;
-					dump_load_relay = 4;
-					//cmdCMD_ExecuteCommand("SendGet http://192.168.5.4/cm?cmnd=Power%20off", 0);
-					check_time_power = check_time;
-					check_hour_power = check_hour;
-				}
-				
-			}*/
 
 	// Add to the table ---------------------------------------------------------------------------------
 			
@@ -848,35 +803,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// ------------------------------------------------------------------------------------------------------------------
 			// Calculate the Effective energy consumed / produced during the period by summing both counters and deduct their values at the start of the period
 			net_energy = (real_consumption - real_export);			// calculate difference since start
-			// ------------------------------------------------------------------------------------------------------------------
-			
-			// Bypass load code. Runs if there is excess energy and at a programmable time, in case there was no sun
-			// Make sure to reset the old time at every hour, otherwise the loop will not run, because old minutes are ahead in time!
-
-			// Status Check
-			// Here we define a Bypass. For example if a very heavy load is connected, it's likelly our bypass load is not desired.
-			// In this case, we turn the load off and wait for the next cycle for a new update.
-
-			//The relay is updated ever x numer of minutes as defined on 'dump_load_hysteresis'
-			
-			
-			// Here we update the variables based on our energyu value
-			//------------------------------------------------------------------------------
-			// Since readings reset at the turn of the hour, we wait 15 minutes or untill we have 'stored > 200W) to average before runing any actions. 
-			// The equipment remains on it's previous state for the hour before.
-				
-			// Define the conditions for each relay based on the given variables
-
-			/*
-			// ** Storage inverter control **
-			if (net_energy > 10) {
-			    dump_load_relay[0] = 1; // Storage inverter ON
-			} else if (net_energy <= -50) {
-			    dump_load_relay[0] = 0; // Storage inverter OFF
-			}*/
-			// new
-			// ** Storage inverter control **
-			
+			// ------------------------------------------------------------------------------------------------------------------			
 			// ** Storage inverter control **
 
 			if (net_energy < -100) {
@@ -981,17 +908,6 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					// **Secondary Charger**
 					dump_load_relay[3] = (net_energy_equivalent <= -500 && check_hour >= 9 && check_hour <= 15) ? 1 : 
 					                     (( net_energy >= -100) ? 0 : dump_load_relay[3]);			   
-					
-					/** Basement dehumidifier control **/
-					// The dehumidifier turns on last at t = 20 minutes, to ensure the power stabilizes as the chargers and dishwasher operate.
-					// It's ideal power source is unused energy as we approach the end of the hour.
-					
-					/* TEMPORARY DISABLED */
-     					/*if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -800) && (check_hour >= 9 && check_hour <= 16)) {
-					    dump_load_relay[4] = 1; // Turn on dehumidifier
-					} else if (check_time == 59 || net_energy >= -150) {
-					    dump_load_relay[4] = 0; // Turn off dehumidifier
-					}*/
 
 					// Temporary for aditional battery module
 					// Forces 'ON' Between 1PM and 3PM to acco odate charge if there is no solar
