@@ -15,9 +15,9 @@ int solar_available = 0;
 static int mtqq_total_net_export = 0;
 static int estimated_energy_start = 0;
 static int last_run_calc = 0;
-intcurrent_minute = 0;
-intlast_minute = 0;
-intoutput_index = 0;
+int current_minute = 0;
+int last_minute = 0;
+int output_index = 0;
 int estimated_energy_hour = 0;
 // used to calculate look ahead figures for the hour
 int import_buffer = 0;
@@ -58,8 +58,8 @@ int cmd_ctrl = dump_load_relay_number;
 #include "../cmnds/cmd_public.h" //for enum EventCode
 #include <math.h>
 #include <time.h>
-intstat_updatesSkipped = 0;
-intstat_updatesSent = 0;
+int stat_updatesSkipped = 0;
+int stat_updatesSent = 0;
 //char buffer[50];
 char ip[3];
 
