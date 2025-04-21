@@ -265,7 +265,7 @@ if (NTP_IsTimeSynced()) {
         if (net_energy < 0) {
             total_net_export -= net_energy;
         } else {
-            total_net_consumption += net_energy;x`
+            total_net_consumption += net_energy;
         }
 
         // Track energy duration
