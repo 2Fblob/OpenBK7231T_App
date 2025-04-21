@@ -1,8 +1,8 @@
 // Internal code ONLY
 
-static int consumption_matrix [24] = {0}; 
-static int export_matrix[24] = {0};
-static int net_matrix[24] = {0};
+static int consumption_matrix [96] = {0}; 
+static int export_matrix[96] = {0};
+static int net_matrix[96] = {0};
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int net_energy_equivalent = 0;
@@ -11,17 +11,12 @@ static int update_number = 0;
 int adjust_net_energy = 50;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
-//float estimated_production_hour = 0; 
-static int mtqq_total_net_export = 0;
 static int estimated_energy_start = 0;
 static int last_run_calc = 0;
 int current_minute = 0;
 int last_minute = 0;
 int output_index = 0;
 int estimated_energy_hour = 0;
-// used to calculate look ahead figures for the hour
-int import_buffer = 0;
-int export_buffer = 0;
 // used for hourly averages time checking
 int check_time_estimate = 59;
 // The number of devices the automation controls, based on power level 
@@ -223,86 +218,61 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	int total_export = 0;
 	int current_hour_consumption = 0;
 	
-	if (NTP_IsTimeSynced())
-	{
-	for (int q=0; q<=check_hour; q++)
-		{
-		if (q == check_hour)
-			{
-			int calculate_net_energy = (net_matrix[q]+(int)net_energy);
-			hprintf255(request, "<tr><td> <b> %i:00 </td> ", q);
-			hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
-			hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
-			hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);	
-			current_hour_consumption = calculate_net_energy;
-			}
-		else
-			{
-			hprintf255(request, "<tr><td> %i:00 </td> ", q);
-			hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]);
-			hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]);
-			hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);	
-			
-			}
-		// Summ  all the data on the table to summarize below.
-		// Real Grid Consumption / Export
-		total_consumption += consumption_matrix[q];
-		total_export += export_matrix[q];	
-		// Calculated Net Values
-		
-		if (net_matrix[q]<0)	{total_net_export = 0; total_net_export -= net_matrix[q];}
-		else	{total_net_consumption = 0; total_net_consumption += net_matrix[q];}
-		// -----------------------------------------------------
-		//} commented?
-	// Add the values for this metering period (not yet saved)
-	if (net_energy<0) {total_net_export -= net_energy;}
-	else {total_net_consumption += net_energy;}
-	// Calculate hourly rate
-	if (current_hour_consumption == 0)
-		{
-		estimated_energy_start = check_time;
-		}
-	if (((check_time-estimated_energy_start)>0)&&(!(last_run_calc==check_time)))
-	{
-	last_run_calc=check_time;
-	// Calculate Import / Export
-	//export_buffer = netmetering;
-	import_buffer = 0;
+    if (NTP_IsTimeSynced())
+        {
+        for (int q=0; q<=check_hour; q++)
+            {
+            if (q == check_hour)
+                {
+                int calculate_net_energy = (net_matrix[q]+(int)net_energy);
+                hprintf255(request, "<tr><td> <b> %i:00 </td> ", q);
+                hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
+                hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
+                hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);	
+                current_hour_consumption = calculate_net_energy;
+                }
+            else
+                {
+                hprintf255(request, "<tr><td> %i:00 </td> ", q);
+                hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]);
+                hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]);
+                hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);	
+                
+                }
+            // Summ  all the data on the table to summarize below.
+            // Real Grid Consumption / Export
+            total_consumption += consumption_matrix[q];
+            total_export += export_matrix[q];	
+            // Calculated Net Values
+            
+            if (net_matrix[q]<0)	{total_net_export = 0; total_net_export -= net_matrix[q];}
+            else	{total_net_consumption = 0; total_net_consumption += net_matrix[q];}
+            // -----------------------------------------------------
+            //} commented?
+            // Add the values for this metering period (not yet saved)
+            if (net_energy<0) {total_net_export -= net_energy;}
+            else {total_net_consumption += net_energy;}
+            // Calculate hourly rate
+            if (current_hour_consumption == 0)
+                {
+                estimated_energy_start = check_time;
+                }
+            if (((check_time-estimated_energy_start)>0)&&(!(last_run_calc==check_time)))
+                {
+                last_run_calc=check_time;
+                }
+            }
+        // Calculate hourly rate	
+        check_time_estimate = (60 - NTP_GetMinute());
+        estimated_energy_hour = ((int)net_energy+((((int)sensors[OBK_POWER].lastReading)*(int)check_time_estimate)/60));
+        poststr(request, "</tr></table><br>");
+        poststr(request, "<h4>Totals:</h4>");
+        hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Metering) <br></font>", total_consumption, total_export);
+        hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Net Metering) <br></font>", total_net_consumption, total_net_export);
+        hprintf255(request, "<font size=2>- Hour Estimation: <b>%iW</b> <br></font>", (int)estimated_energy_hour);
+        }
 	}
-	}
-	// Calculate hourly rate	
-	check_time_estimate = (60 - NTP_GetMinute());
-	estimated_energy_hour = ((int)net_energy+((((int)sensors[OBK_POWER].lastReading)*(int)check_time_estimate)/60));
-	poststr(request, "</tr></table><br>");
-	poststr(request, "<h4>Totals:</h4>");
-	hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Metering) <br></font>", total_consumption, total_export);
-	hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Net Metering) <br></font>", total_net_consumption, total_net_export);
-	hprintf255(request, "<font size=2>- Hour Estimation: <b>%iW</b> <br></font>", (int)estimated_energy_hour);
-	
-	}
-	// Some other stats...
-    	/*hprintf255(request, "<p><br><h5>Changes: %i sent, %i Skipped, %li Saved. <br> %s<hr></p>",
-               stat_updatesSent, stat_updatesSkipped, ConsumptionSaveCounter,
-               mode);*/
 
-	/*poststr(request, "<h5>Energy Clear Date: ");
-	if (ConsumptionResetTime) {
-		ltm = gmtime(&ConsumptionResetTime);
-		hprintf255(request, "%04d-%02d-%02d %02d:%02d:%02d",
-					ltm->tm_year+1900, ltm->tm_mon+1, ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec);
-	} else {
-		poststr(request, "(not set)");
-	}*/
-	
-	/********************************************************************************************************************/
-	/*hprintf255(request, "<br>");
-	if(DRV_IsRunning("NTP")==false) {
-		hprintf255(request,"NTP driver is not started, daily energy stats disbled.");
-	} else if (!NTP_IsTimeSynced()) {
-		hprintf255(request,"Daily energy stats awaiting NTP driver to sync real time...");
-	}
-	hprintf255(request, "</h5>");*/
-	}
 	/********************************************************************************************************************/
     	if (energyCounterStatsEnable == true)
 	{	
