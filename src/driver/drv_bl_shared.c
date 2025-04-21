@@ -28,7 +28,7 @@ int check_time_estimate = 59;
 #define dump_load_relay_number 6
 #define charger_c_ip 21
 // Flag to indicate if it's time to save data to flash
-static bool save_to_flash_flag = false;
+static int save_to_flash_flag = 0;
 
 // This stores the former relay states, so multiple commands are not issued
 int last_dump_load_relay[dump_load_relay_number] = {2, 2, 2, 2, 2, 2};
@@ -250,8 +250,8 @@ if (NTP_GetHour() == 0 && NTP_GetMinute() == 0) {
 
 // Set flag to save data to flash every 15 minutes
 if (NTP_GetMinute() % 15 == 0 && !save_to_flash_flag) {
-    save_to_flash_flag = true;  // Set the flag to indicate that data should be saved to flash
-}
+    save_to_flash_flag = 1;  // Set the flag to indicate that data should be saved to flash
+} 
 
 if (NTP_IsTimeSynced()) {
     for (int q = 0; q <= check_hour; q++) {  // Loop through all intervals
@@ -309,7 +309,7 @@ if (NTP_IsTimeSynced()) {
 	hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Net Metering) <br></font>", total_net_consumption, total_net_export);
 	hprintf255(request, "<font size=2>- Hour Estimation: <b>%iW</b> <br></font>", (int)estimated_energy_hour);
 */
-/ Calculate 15-minute rate estimation
+// Calculate 15-minute rate estimation
 check_time_estimate = (15 - (NTP_GetMinute() % 15));  // Minutes until the next 15-minute mark
 estimated_energy_interval = ((int)net_energy + (((int)sensors[OBK_POWER].lastReading) * (int)check_time_estimate) / 15);
 
