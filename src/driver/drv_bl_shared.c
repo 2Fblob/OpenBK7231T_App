@@ -307,19 +307,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     	if (energyCounterStatsEnable == true)
 	{	
     	
-       		//hprintf255(request,"<hr><h2>Periodic Statistics</h2>");
-		//If we are measuring negative power, we can run the commands to get the netmetering stats
-		// We need NTP enabled for this, as well as the statistics. They need to be manually configured because of duration and time zone.
-			
-		// We print some stats, mainly for debugging
-		/* hprintf255(request, "<font size=1>Diversion relay total on-time today was %d min.<br> Next sync in %d min. ", 
-				time_on, (dump_load_hysteresis-lastsync));*/
-		// Print Status of automation outputs)
 
 		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
-
-
-		
 		
 		poststr(request," <hr> <h4>Current system status: </h4></font>");
 		hprintf255(request,"<font size=2>- Storage Inverter: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[0], dump_load_relay_timer[0]); 
@@ -749,7 +738,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				last_dump_load_relay[5] = 2;
 				old_hour = check_hour;
 				// This resets the time the bypass relay was on throughout the day, before sunset.
-				if (check_hour < 5) {time_on = 0;}
+				
 			}
 			else if (!(check_time == old_time))
 			{
