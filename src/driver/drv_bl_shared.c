@@ -236,10 +236,10 @@ if (NTP_IsTimeSynced()) {
 
 
 		// Reset energy values when a new 15-minute interval starts
-if (check_interval != last_interval) {
+if (q != last_interval) {
 	old_export_energy = real_export;
     old_real_consumption = real_consumption;
-    last_interval = check_interval;
+    last_interval = q;
 }
 		// Add to the table ---------------------------------------------------------------------------------	
 		    export_matrix[q] = old_export_energy + (int)real_export;
