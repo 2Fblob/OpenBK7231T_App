@@ -250,9 +250,9 @@ if (NTP_IsTimeSynced()) {
             int hour = q / 4;             // 0–23
             int minute = (q % 4) * 15;    // 0, 15, 30, 45
             hprintf255(request, "<tr><td> %i:%02i </td> ", hour, minute);  // Print hour and minute
-            hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[check_interval]);
-            hprintf255(request, "<td> %dW </td>", (int)export_matrix[check_interval]);
-            hprintf255(request, "<td> %dW </td> </tr>", net_matrix[check_interval]);
+            hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]);
+            hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]);
+            hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);
         }
 
         // Summing all the data for totals
