@@ -53,6 +53,7 @@ int cmd_ctrl = dump_load_relay_number;
 #include <time.h>
 int stat_updatesSkipped = 0;
 int stat_updatesSent = 0;
+static int last_interval = -1;
 //char buffer[50];
 char ip[3];
 
