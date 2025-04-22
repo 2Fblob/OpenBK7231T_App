@@ -231,14 +231,16 @@ if (NTP_IsTimeSynced()) {
         int minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
         int check_interval = minutes_since_midnight / 15;
 
-    for (int q = 0; q <= check_interval; q++) {  // Loop through all intervals
+    for (int q = 0; q < 96; q++) {  // Loop through all intervals
         if (q == check_interval) {  // Update live data for the current interval
 
 
 		// Reset energy values when a new 15-minute interval starts
 if (q != last_interval) {
-	old_export_energy = real_export;
-    old_real_consumption = real_consumption;
+	//old_export_energy = real_export;
+    real_export = 0;
+    real_consumption = 0;
+    //old_real_consumption = real_consumption;
     last_interval = q;
 }       // I also made changes to line 821 as the reset is calculated here now.
 		// Add to the table ---------------------------------------------------------------------------------	
