@@ -240,7 +240,7 @@ if (q != last_interval) {
 	old_export_energy = real_export;
     old_real_consumption = real_consumption;
     last_interval = q;
-}
+}       // I also made changes to line 821 as the reset is calculated here now.
 		// Add to the table ---------------------------------------------------------------------------------	
 		    export_matrix[q] = old_export_energy + (int)real_export;
 		    consumption_matrix [q] = old_real_consumption + (int)real_consumption;
@@ -809,15 +809,16 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				lastsync = 0;
 
 				//We want the last hour values to be recovered. So we use some logic.
-				if (check_hour >0) {net_matrix[check_hour-1] += net_energy;}
-				else {net_matrix[23] += net_energy;}
+				//if (check_hour >0) {net_matrix[check_hour-1] += net_energy;}
+				//else {net_matrix[23] += net_energy;}
 				// Clear old data from our current time table.
-				net_matrix[check_hour] = 0;
-				consumption_matrix [check_hour] = 0;
-				export_matrix[check_hour] = 0;
+				//net_matrix[check_hour] = 0;
+				//consumption_matrix [check_hour] = 0;
+				//export_matrix[check_hour] = 0;
 				
 				
 			// Clear the variables
+            /*
 			old_export_energy = 0;
 			old_real_consumption = 0;
 			net_energy = 0;
@@ -830,7 +831,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			savetoflash = 1;
 			// Save the time
 			time_hour_reset = check_hour;
-			time_min_reset = check_time;	
+			time_min_reset = check_time;	*/
 			}
 	
 			// ------------------------------------------------------------------------------------------------------------------
