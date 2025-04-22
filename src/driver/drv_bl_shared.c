@@ -232,7 +232,15 @@ if (NTP_IsTimeSynced()) {
 
     for (int q = 0; q <= check_interval; q++) {  // Loop through all intervals
         if (q == check_interval) {  // Update live data for the current interval
-            // Add to the table ---------------------------------------------------------------------------------	
+
+
+		// Reset energy values when a new 15-minute interval starts
+if (check_interval != last_interval) {
+	old_export_energy = real_export;
+    old_real_consumption = real_consumption;
+    last_interval = check_interval;
+}
+		// Add to the table ---------------------------------------------------------------------------------	
 		    export_matrix[q] = old_export_energy + (int)real_export;
 		    consumption_matrix [q] = old_real_consumption + (int)real_consumption;
             net_matrix[q] = consumption_matrix [q] - export_matrix[q];
