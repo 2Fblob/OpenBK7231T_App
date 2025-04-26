@@ -232,35 +232,34 @@ if (NTP_IsTimeSynced()) {
         int check_interval = minutes_since_midnight / 15;
 
     for (int q = 0; q < 96; q++) {  // Loop through all intervals
-        if (q == check_interval) {  // Update live data for the current interval
-
-
-		// Reset energy values when a new 15-minute interval starts
-if (q != last_interval) {
-	//old_export_energy = real_export;
-    real_export = 0;
-    real_consumption = 0;
-    //old_real_consumption = real_consumption;
-    last_interval = q;
-}       // I also made changes to line 821 as the reset is calculated here now.
+	// Format time, to accomodate the 96 intervals
+        int hour = q / 4;             // 0–23
+        int minute = (q % 4) * 15;    // 0, 15, 30, 45
+	// Check: Did a new time interval started? If so, reset totals. // I also made changes to line 821 as the reset is calculated here now.
+	if (q != last_interval) 
+		{
+	    		real_export = 0;
+	    		real_consumption = 0;
+	    		last_interval = q;
+		}       
+        // This bolds the text, so we can determine what interval we are on the web interface, in real time.
+	// This is also the loop that activelly changes the cell values for each interval. Outside this loop the values are not changed, simply displayed and summed.
+	if (q == check_interval) 
+		{  // Update live data for the current interval			
 		// Add to the table ---------------------------------------------------------------------------------	
-		    export_matrix[q] = old_export_energy + (int)real_export;
-		    consumption_matrix [q] = old_real_consumption + (int)real_consumption;
-            net_matrix[q] = consumption_matrix [q] - export_matrix[q];
-	    // End of Add to the table --------------------------------------------------------------------------
-            // int calculate_net_energy = (net_matrix[q] + (int)net_energy);
-            // Format time, to accomodate the 96 intervals
-            int hour = q / 4;             // 0–23
-            int minute = (q % 4) * 15;    // 0, 15, 30, 45
-            hprintf255(request, "<tr><td> <b> %i:%02i </td> ", hour, minute);  // Print hour and minute
-            hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
-            hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
-            hprintf255(request, "<td> <b> %dW </td> </tr>", net_matrix[q]  /*calculate_net_energy*/);
-           // current_hour_consumption = calculate_net_energy;
-        } else {
-            int hour = q / 4;             // 0–23
-            int minute = (q % 4) * 15;    // 0, 15, 30, 45
-            hprintf255(request, "<tr><td> %i:%02i </td> ", hour, minute);  // Print hour and minute
+		export_matrix[q] = old_export_energy + (int)real_export;
+		consumption_matrix [q] = old_real_consumption + (int)real_consumption;
+	        net_matrix[q] = consumption_matrix [q] - export_matrix[q];
+		// End of Add to the table --------------------------------------------------------------------------
+	        hprintf255(request, "<tr><td> <b> %i:%02i </td> ", hour, minute);  // Print hour and minute
+	        hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
+	        hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
+	        hprintf255(request, "<td> <b> %dW </td> </tr>", net_matrix[q]  /*calculate_net_energy*/);
+	        } 
+	else 
+	{
+            // This just printes all the values on the array that are not the current time period.
+	    hprintf255(request, "<tr><td> %i:%02i </td> ", hour, minute);  // Print hour and minute
             hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]);
             hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]);
             hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);
@@ -269,22 +268,18 @@ if (q != last_interval) {
         // Summing all the data for totals
         total_consumption += consumption_matrix[q];
         total_export += export_matrix[q];  
-
         // Calculated Net Values (Export/Consumption)
         if (net_matrix[q] < 0) {
            // total_net_export = 0; 
             total_net_export -= net_matrix[q];
-        } else {
-            //total_net_consumption = 0; 
-            total_net_consumption += net_matrix[q];
-        }
+        } 
+	else {total_net_consumption += net_matrix[q];}
 
         // Add current net energy to the totals
         if (net_energy < 0) {
             total_net_export -= net_energy;
-        } else {
-            total_net_consumption += net_energy;
-        }
+        } else 
+	{total_net_consumption += net_energy;}
 
         // Track energy duration
         if (current_hour_consumption == 0) {
@@ -293,7 +288,6 @@ if (q != last_interval) {
 
         if (((check_time - estimated_energy_start) > 0) && (last_run_calc != check_time)) {
             last_run_calc = check_time;
-            //import_buffer = 0;
         }
     }
 }
