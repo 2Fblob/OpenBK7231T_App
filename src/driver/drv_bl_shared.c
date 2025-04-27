@@ -20,6 +20,13 @@ int output_index = 0;
 int estimated_energy_hour = 0;
 int estimated_energy_interval = 0;
 
+	// Initialize temp variables
+	int total_net_consumption = 0;
+	int total_net_export = 0;
+	int total_consumption = 0;
+	int total_export = 0;
+	int current_hour_consumption = 0;
+
 int minutes_since_midnight = 0;
 int check_interval = 0;
 
@@ -148,6 +155,75 @@ time_t ConsumptionResetTime = 0;
 int changeSendAlwaysFrames = 60;
 int changeDoNotSendMinFrames = 5;
 
+
+void UpdateEnergyMatricesBackground() {
+    if (!NTP_IsTimeSynced()) return;
+
+    minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
+    check_interval = minutes_since_midnight / net_metering_period;
+
+    if (check_interval != last_interval) {
+        // Update current 15-min slot
+        export_matrix[check_interval] = old_export_energy + (int)real_export;
+        consumption_matrix[check_interval] = old_real_consumption + (int)real_consumption;
+        net_matrix[check_interval] = consumption_matrix[check_interval] - export_matrix[check_interval];
+
+        last_interval = check_interval;
+
+        // Reset for new interval
+        real_export = 0;
+        real_consumption = 0;
+
+        // Now update the global totals
+        total_consumption = 0;
+        total_export = 0;
+        total_net_consumption = 0;
+        total_net_export = 0;
+
+        for (int q = 0; q < 96; q++) {
+            total_consumption += consumption_matrix[q];
+            total_export += export_matrix[q];
+
+            if (net_matrix[q] < 0) {
+                total_net_export -= net_matrix[q];
+            } else {
+                total_net_consumption += net_matrix[q];
+            }
+        }
+    }
+	//
+	        // Summing all the data for totals
+	        total_consumption += consumption_matrix[q];
+	        total_export += export_matrix[q];  
+	
+	        // Calculated Net Values (Export/Consumption)
+	        if (net_matrix[q] < 0) {
+	           // total_net_export = 0; 
+	            total_net_export -= net_matrix[q];
+	        } else {
+	            //total_net_consumption = 0; 
+	            total_net_consumption += net_matrix[q];
+	        }
+	
+	        // Add current net energy to the totals
+	        if (net_energy < 0) {
+	            total_net_export -= net_energy;
+	        } else {
+	            total_net_consumption += net_energy;
+	        }
+	
+	        // Track energy duration
+	        if (current_hour_consumption == 0) {
+	            estimated_energy_start = check_time;
+	        }
+	
+	        if (((check_time - estimated_energy_start) > 0) && (last_run_calc != check_time)) {
+	            last_run_calc = check_time;
+	            //import_buffer = 0;
+	        }
+	//
+}
+
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 {
    // int i;
@@ -219,12 +295,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	poststr(request, "<th>Net Metering </th></tr><hr>");
 
 	// First field: Time
-	// Initialize temp variables
-	int total_net_consumption = 0;
-	int total_net_export = 0;
-	int total_consumption = 0;
-	int total_export = 0;
-	int current_hour_consumption = 0;
+
 	
     // Set flag to save data to flash every 15 minutes
 if (NTP_GetMinute() % 15 == 0 && !save_to_flash_flag) {
@@ -241,17 +312,7 @@ if (NTP_IsTimeSynced()) {
 
 
 		// Reset energy values when a new 15-minute interval starts
-if (q != last_interval) {
-	//old_export_energy = real_export;
-    real_export = 0;
-    real_consumption = 0;
-    //old_real_consumption = real_consumption;
-    last_interval = q;
-}       // I also made changes to line 821 as the reset is calculated here now.
-		// Add to the table ---------------------------------------------------------------------------------	
-		    export_matrix[q] = old_export_energy + (int)real_export;
-		    consumption_matrix [q] = old_real_consumption + (int)real_consumption;
-            net_matrix[q] = consumption_matrix [q] - export_matrix[q];
+   // I also made changes to line 821 as the reset is calculated here now.
 	    // End of Add to the table --------------------------------------------------------------------------
             // int calculate_net_energy = (net_matrix[q] + (int)net_energy);
             // Format time, to accomodate the 96 intervals
@@ -271,35 +332,7 @@ if (q != last_interval) {
             hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);
         }
 
-        // Summing all the data for totals
-        total_consumption += consumption_matrix[q];
-        total_export += export_matrix[q];  
 
-        // Calculated Net Values (Export/Consumption)
-        if (net_matrix[q] < 0) {
-           // total_net_export = 0; 
-            total_net_export -= net_matrix[q];
-        } else {
-            //total_net_consumption = 0; 
-            total_net_consumption += net_matrix[q];
-        }
-
-        // Add current net energy to the totals
-        if (net_energy < 0) {
-            total_net_export -= net_energy;
-        } else {
-            total_net_consumption += net_energy;
-        }
-
-        // Track energy duration
-        if (current_hour_consumption == 0) {
-            estimated_energy_start = check_time;
-        }
-
-        if (((check_time - estimated_energy_start) > 0) && (last_run_calc != check_time)) {
-            last_run_calc = check_time;
-            //import_buffer = 0;
-        }
     }
 }
 
