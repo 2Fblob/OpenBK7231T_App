@@ -26,6 +26,7 @@ int estimated_energy_interval = 0;
 	int total_consumption = 0;
 	int total_export = 0;
 	int current_hour_consumption = 0;
+int last_energy_update_minute = -1;
 
 int minutes_since_midnight = 0;
 int check_interval = 0;
@@ -156,63 +157,47 @@ int changeSendAlwaysFrames = 60;
 int changeDoNotSendMinFrames = 5;
 
 
+
 void UpdateEnergyMatricesBackground() {
     if (!NTP_IsTimeSynced()) return;
+
+    int current_minute = NTP_GetMinute();
+
+    // Only update once per new minute
+    if (current_minute == last_energy_update_minute) {
+        return; // Same minute, do nothing
+    }
+    last_energy_update_minute = current_minute;
 
     minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
     check_interval = minutes_since_midnight / net_metering_period;
 
     if (check_interval != last_interval) {
-        // Update current 15-min slot
         export_matrix[check_interval] = old_export_energy + (int)real_export;
         consumption_matrix[check_interval] = old_real_consumption + (int)real_consumption;
         net_matrix[check_interval] = consumption_matrix[check_interval] - export_matrix[check_interval];
 
         last_interval = check_interval;
 
-        // Reset for new interval
         real_export = 0;
         real_consumption = 0;
+    }
 
-        // Now update the global totals
-        total_consumption = 0;
-        total_export = 0;
-        total_net_consumption = 0;
-        total_net_export = 0;
+    total_consumption = 0;
+    total_export = 0;
+    total_net_consumption = 0;
+    total_net_export = 0;
 
-        for (int q = 0; q < 96; q++) {
-            total_consumption += consumption_matrix[q];
-            total_export += export_matrix[q];
-
-		// Calculated Net Values (Export/Consumption)
-            if (net_matrix[q] < 0) {
-                total_net_export -= net_matrix[q];
-            } else {
-                total_net_consumption += net_matrix[q];
-		net_energy = total_net_consumption;
-            }
-			        // Add current net energy to the totals
-	       // if (net_energy < 0) {
-	       //     total_net_export -= net_energy;
-	      //  } else {
-	       //     total_net_consumption += net_energy;
-	       // }
+    for (int q = 0; q < 96; q++) {
+        total_consumption += consumption_matrix[q];
+        total_export += export_matrix[q];
+        if (net_matrix[q] < 0) {
+            total_net_export -= net_matrix[q];
+        } else {
+            total_net_consumption += net_matrix[q];
+            net_energy = total_net_consumption;
         }
     }
-	        // Summing all the data for totals
-	       // total_consumption += consumption_matrix[q];
-	       // total_export += export_matrix[q];  
-	      
-	        // Track energy duration
-	   //     if (current_hour_consumption == 0) {
-	     //       estimated_energy_start = check_time;
-	       // }
-	
-	        //if (((check_time - estimated_energy_start) > 0) && (last_run_calc != check_time)) {
-	          //  last_run_calc = check_time;
-	            //import_buffer = 0;
-	        //}
-	//
 }
 
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
