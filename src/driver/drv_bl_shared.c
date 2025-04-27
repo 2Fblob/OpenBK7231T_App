@@ -21,13 +21,13 @@ int estimated_energy_hour = 0;
 int estimated_energy_interval = 0;
 
 // consumption calculations variables:
-	int total_net_consumption = 0;
-	int total_net_export = 0;
-	int total_consumption = 0;
-	int total_export = 0;
-	int current_hour_consumption = 0;
+int total_net_consumption = 0;
+int total_net_export = 0;
+int total_consumption = 0;
+int total_export = 0;
+int current_hour_consumption = 0;
 
-int minutes_since_midnight = 0;x`
+int minutes_since_midnight = 0;
 int check_interval = 0;
 
 // used for hourly averages time checking
