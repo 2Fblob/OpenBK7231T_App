@@ -1,4 +1,4 @@
-// Updated version with new metering modes and correct runtime logic.
+// Updated version without using bool, true, false keywords.
 
 #define INTERVAL_MINUTES 15
 #define INTERVALS_PER_DAY (24 * 60 / INTERVAL_MINUTES)
@@ -11,7 +11,7 @@ static int last_interval = -1;
 static float net_energy = 0;
 static float real_export = 0;
 static float real_consumption = 0;
-static byte save_to_flash_flag = 0;
+static int save_to_flash_flag = 0;
 
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request) {
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) {
@@ -80,15 +80,15 @@ void BL_ProcessUpdate(...) {
             export_array[current_interval] += real_export;
 
             // Handle day rollover
-            bool reset_needed = false;
-            if (net_metering_mode == 1 && current_interval == 0 && last_interval == 95) {
-                reset_needed = true;
+            int reset_needed = 0;
+            if ((net_metering_mode == 1) && (current_interval == 0) && (last_interval == 95)) {
+                reset_needed = 1;
             }
-            if (net_metering_mode == 2 && current_interval == 0 && last_interval == 23) {
-                reset_needed = true;
+            if ((net_metering_mode == 2) && (current_interval == 0) && (last_interval == 23)) {
+                reset_needed = 1;
             }
 
-            if (reset_needed) {
+            if (reset_needed != 0) {
                 float net = consumption_array[last_interval] - export_array[last_interval];
                 if (net > 0) {
                     sensors[OBK_CONSUMPTION_TOTAL].lastReading += net;
@@ -104,11 +104,11 @@ void BL_ProcessUpdate(...) {
             }
         }
 
-        if ((NTP_GetMinute() == 0) && (!save_to_flash_flag)) {
+        if ((NTP_GetMinute() == 0) && (save_to_flash_flag == 0)) {
             save_to_flash_flag = 1;
         }
 
-        if (save_to_flash_flag) {
+        if (save_to_flash_flag != 0) {
             save_to_flash_flag = 0;
             // Your Flash saving code here
         }
