@@ -283,61 +283,6 @@ if (NTP_IsTimeSynced()) {
 	hprintf255(request, "<td>%s%dW</td></tr>", (q == check_interval ? "<b> " : ""), net_matrix[q]);
     }
 }
-
-
-    /*if (NTP_IsTimeSynced())
-        {
-        for (int q=0; q<=check_hour; q++)
-            {
-            if (q == check_hour)
-                {
-                int calculate_net_energy = (net_matrix[q]+(int)net_energy);
-                hprintf255(request, "<tr><td> <b> %i:00 </td> ", q);
-                hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
-                hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
-                hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);	
-                current_hour_consumption = calculate_net_energy;
-                }
-            else
-                {
-                hprintf255(request, "<tr><td> %i:00 </td> ", q);
-                hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]);
-                hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]);
-                hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);	
-                
-                }
-            // Summ  all the data on the table to summarize below.
-            // Real Grid Consumption / Export
-            total_consumption += consumption_matrix[q];
-            total_export += export_matrix[q];	
-            // Calculated Net Values
-            
-            if (net_matrix[q]<0)	{total_net_export = 0; total_net_export -= net_matrix[q];}
-            else	{total_net_consumption = 0; total_net_consumption += net_matrix[q];}
-            // -----------------------------------------------------
-            //} commented?
-            // Add the values for this metering period (not yet saved)
-            if (net_energy<0) {total_net_export -= net_energy;}
-            else {total_net_consumption += net_energy;}
-            // Calculate hourly rate
-            if (current_hour_consumption == 0)
-                {
-                estimated_energy_start = check_time;
-                }
-            if (((check_time-estimated_energy_start)>0)&&(!(last_run_calc==check_time)))
-                {
-                last_run_calc=check_time;
-                }
-            }
-        // Calculate hourly rate	
-        check_time_estimate = (60 - NTP_GetMinute());
-        estimated_energy_hour = ((int)net_energy+((((int)sensors[OBK_POWER].lastReading)*(int)check_time_estimate)/60));
-        poststr(request, "</tr></table><br>");
-        poststr(request, "<h4>Totals:</h4>");
-        hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Metering) <br></font>", total_consumption, total_export);
-        hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Net Metering) <br></font>", total_net_consumption, total_net_export);
-        hprintf255(request, "<font size=2>- Hour Estimation: <b>%iW</b> <br></font>", (int)estimated_energy_hour);
-        }*/
 	}
 
 	/********************************************************************************************************************/
@@ -1243,20 +1188,6 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 	energyCounterMinutes[0] += energy_counter_data;
 	//energy_counter_data = 0;
 	//-----------------------------------------------------------------------------------------------------------------------------
-	/*if ((int)power>0)
-	{
-		sensors[OBK_CONSUMPTION_TOTAL].lastReading += energyWh;
-		energyCounterMinutes[0] += (int)energyWh;
-	}
-	else
-	{
-		//If not positive, we check if the negative power flag is enabled. If so, we load the generation counter.
-		if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
-		{
-			// If the power is negative - Load the generation counter, but only if we allow negative measurements :-)
-			sensors[OBK_GENERATION_TOTAL].lastReading += energyWh;	
-			energyCounterMinutes[0] -= (int)energyWh;	
-		}
 	}*/
 	//-----------------------------------------------------------------------------------------------------------------------------
     }
