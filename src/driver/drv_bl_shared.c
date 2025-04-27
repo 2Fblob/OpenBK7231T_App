@@ -27,6 +27,9 @@ int estimated_energy_interval = 0;
 	int total_export = 0;
 	int current_hour_consumption = 0;
 int last_energy_update_minute = -1;
+// Globals you need:
+float accumulated_export = 0;
+float accumulated_consumption = 0;
 
 int minutes_since_midnight = 0;
 int check_interval = 0;
