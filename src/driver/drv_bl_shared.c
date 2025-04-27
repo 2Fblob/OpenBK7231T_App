@@ -247,23 +247,20 @@ if (NTP_IsTimeSynced()) {
 	// This is also the loop that activelly changes the cell values for each interval. Outside this loop the values are not changed, simply displayed and summed.
 	
         
-    if (q == current_interval) 
-		{  // Update live data for the current interval			
-		// Add to the table ---------------------------------------------------------------------------------	
-		export_matrix[q] = old_export_energy + (int)real_export;
-		consumption_matrix [q] = old_real_consumption + (int)real_consumption;
-	        net_matrix[q] = consumption_matrix [q] - export_matrix[q];
-		// End of Add to the table --------------------------------------------------------------------------
-	        hprintf255(request, "<tr><td> <b> %i:%02i </td> ", hour, minute);  // Print hour and minute
-	        hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
-	        hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
-	        hprintf255(request, "<td> <b> %dW </td> </tr>", net_matrix[q]  /*calculate_net_energy*/);
-	        } 
-	else 
+	if (q == current_interval) 
 	{
-            // This just printes all the values on the array that are not the current time period.
-	    hprintf255(request, "<tr><td> %i:%02i </td> ", hour, minute);  /* Print hour and minute*/   hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]); hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]); hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);
-        }
+	    // Update live data for the current interval
+	    export_matrix[q] = old_export_energy + (int)real_export;
+	    consumption_matrix[q] = old_real_consumption + (int)real_consumption;
+	    net_matrix[q] = consumption_matrix[q] - export_matrix[q];
+	}
+	
+	// Single printing section
+	hprintf255(request, "<tr><td>%s%i:%02i%s</td> ", (q == current_interval) ? "<b>" : "", hour, minute, (q == current_interval) ? "</b>" : "");
+	hprintf255(request, "<td>%s%dW%s</td> ", (q == current_interval) ? "<b>" : "", (int)consumption_matrix[q], (q == current_interval) ? "</b>" : "");
+	hprintf255(request, "<td>%s%dW%s</td> ", (q == current_interval) ? "<b>" : "", (int)export_matrix[q], (q == current_interval) ? "</b>" : "");
+	hprintf255(request, "<td>%s%dW%s</td></tr>", (q == current_interval) ? "<b>" : "", net_matrix[q], (q == current_interval) ? "</b>" : "");
+
 
         // Summing all the data for totals
         total_consumption += consumption_matrix[q];
