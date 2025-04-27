@@ -23,6 +23,43 @@ int estimated_energy_interval = 0;
 int minutes_since_midnight = 0;
 int check_interval = 0;
 
+void UpdateEnergyMatricesBackground() {
+    if (!NTP_IsTimeSynced()) return;
+
+    minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
+    check_interval = minutes_since_midnight / net_metering_period;
+
+    if (check_interval != last_interval) {
+        // Update current 15-min slot
+        export_matrix[check_interval] = old_export_energy + (int)real_export;
+        consumption_matrix[check_interval] = old_real_consumption + (int)real_consumption;
+        net_matrix[check_interval] = consumption_matrix[check_interval] - export_matrix[check_interval];
+
+        last_interval = check_interval;
+
+        // Reset for new interval
+        real_export = 0;
+        real_consumption = 0;
+
+        // Now update the global totals
+        total_consumption = 0;
+        total_export = 0;
+        total_net_consumption = 0;
+        total_net_export = 0;
+
+        for (int q = 0; q < 96; q++) {
+            total_consumption += consumption_matrix[q];
+            total_export += export_matrix[q];
+
+            if (net_matrix[q] < 0) {
+                total_net_export -= net_matrix[q];
+            } else {
+                total_net_consumption += net_matrix[q];
+            }
+        }
+    }
+}
+
 // used for hourly averages time checking
 int check_time_estimate = 59;
 // The number of devices the automation controls, based on power level 
@@ -233,73 +270,17 @@ if (NTP_GetMinute() % 15 == 0 && !save_to_flash_flag) {
 
 if (NTP_IsTimeSynced()) {
         // Calculate current interval index (0–95)
-        minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
-        check_interval = minutes_since_midnight / net_metering_period;
+       // minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
+       // check_interval = minutes_since_midnight / net_metering_period;
 
     for (int q = 0; q < 96; q++) {  // Loop through all intervals
-        if (q == check_interval) {  // Update live data for the current interval
-
-
-		// Reset energy values when a new 15-minute interval starts
-if (q != last_interval) {
-	//old_export_energy = real_export;
-    real_export = 0;
-    real_consumption = 0;
-    //old_real_consumption = real_consumption;
-    last_interval = q;
-}       // I also made changes to line 821 as the reset is calculated here now.
-		// Add to the table ---------------------------------------------------------------------------------	
-		    export_matrix[q] = old_export_energy + (int)real_export;
-		    consumption_matrix [q] = old_real_consumption + (int)real_consumption;
-            net_matrix[q] = consumption_matrix [q] - export_matrix[q];
-	    // End of Add to the table --------------------------------------------------------------------------
-            // int calculate_net_energy = (net_matrix[q] + (int)net_energy);
-            // Format time, to accomodate the 96 intervals
-            int hour = q / 4;             // 0–23
-            int minute = (q % 4) * 15;    // 0, 15, 30, 45
-            hprintf255(request, "<tr><td> <b> %i:%02i </td> ", hour, minute);  // Print hour and minute
-            hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
-            hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
-            hprintf255(request, "<td> <b> %dW </td> </tr>", net_matrix[q]  /*calculate_net_energy*/);
-           // current_hour_consumption = calculate_net_energy;
-        } else {
-            int hour = q / 4;             // 0–23
-            int minute = (q % 4) * 15;    // 0, 15, 30, 45
-            hprintf255(request, "<tr><td> %i:%02i </td> ", hour, minute);  // Print hour and minute
-            hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]);
-            hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]);
-            hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);
-        }
-
-        // Summing all the data for totals
-        total_consumption += consumption_matrix[q];
-        total_export += export_matrix[q];  
-
-        // Calculated Net Values (Export/Consumption)
-        if (net_matrix[q] < 0) {
-           // total_net_export = 0; 
-            total_net_export -= net_matrix[q];
-        } else {
-            //total_net_consumption = 0; 
-            total_net_consumption += net_matrix[q];
-        }
-
-        // Add current net energy to the totals
-        if (net_energy < 0) {
-            total_net_export -= net_energy;
-        } else {
-            total_net_consumption += net_energy;
-        }
-
-        // Track energy duration
-        if (current_hour_consumption == 0) {
-            estimated_energy_start = check_time;
-        }
-
-        if (((check_time - estimated_energy_start) > 0) && (last_run_calc != check_time)) {
-            last_run_calc = check_time;
-            //import_buffer = 0;
-        }
+        int hour = q / 4;             
+	int minute = (q % 4) * 15;    
+	
+	hprintf255(request, "<tr><td>%s%i:%02i</td> ", (q == check_interval ? "<b> " : ""), hour, minute);
+	hprintf255(request, "<td>%s%dW</td> ", (q == check_interval ? "<b> " : ""), (int)consumption_matrix[q]);
+	hprintf255(request, "<td>%s%dW</td>", (q == check_interval ? "<b> " : ""), (int)export_matrix[q]);
+	hprintf255(request, "<td>%s%dW</td></tr>", (q == check_interval ? "<b> " : ""), net_matrix[q]);
     }
 }
 
@@ -777,7 +758,41 @@ void BL_ProcessUpdate(float voltage, float current, float power,
     char datetime[64];
 	float diff;
 
+		
+	UpdateEnergyMatricesBackground();
+
 		if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
+		{			
+			//sync with the clock
+			check_time = NTP_GetMinute();
+			check_hour = NTP_GetHour();
+
+			// This variable runs once every hour
+			if (!(check_hour == old_hour))
+			{
+				hour_reset = 1;
+				// This refreshes the outputs once an hour, just in case
+				last_dump_load_relay[0] = 2;
+				last_dump_load_relay[1] = 2;
+				last_dump_load_relay[2] = 2;
+				last_dump_load_relay[3] = 2;
+				last_dump_load_relay[4] = 2;
+				last_dump_load_relay[5] = 2;
+				old_hour = check_hour;
+				// This resets the time the bypass relay was on throughout the day, before sunset.
+				
+			}
+			else if (!(check_time == old_time))
+			{
+				// This runs once a minute
+				min_reset = 1;
+				//overpower_reset = 1;
+				old_time = check_time;
+				lastsync++;
+				//update_tables = 1;
+			}
+
+	if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
 		{			
 			//sync with the clock
 			check_time = NTP_GetMinute();
