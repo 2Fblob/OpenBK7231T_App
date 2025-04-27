@@ -161,42 +161,22 @@ int changeDoNotSendMinFrames = 5;
 void UpdateEnergyMatricesBackground() {
     if (!NTP_IsTimeSynced()) return;
 
-    int current_minute = NTP_GetMinute();
+    accumulated_export += real_export;
+    accumulated_consumption += real_consumption;
 
-    // Only update once per new minute
-    if (current_minute == last_energy_update_minute) {
-        return; // Same minute, do nothing
-    }
-    last_energy_update_minute = current_minute;
+    int minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
+    int current_interval = minutes_since_midnight / net_metering_period;
 
-    minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
-    check_interval = minutes_since_midnight / net_metering_period;
-
-    if (check_interval != last_interval) {
-        export_matrix[check_interval] = old_export_energy + (int)real_export;
-        consumption_matrix[check_interval] = old_real_consumption + (int)real_consumption;
-        net_matrix[check_interval] = consumption_matrix[check_interval] - export_matrix[check_interval];
-
-        last_interval = check_interval;
-
-        real_export = 0;
-        real_consumption = 0;
-    }
-
-    total_consumption = 0;
-    total_export = 0;
-    total_net_consumption = 0;
-    total_net_export = 0;
-
-    for (int q = 0; q < 96; q++) {
-        total_consumption += consumption_matrix[q];
-        total_export += export_matrix[q];
-        if (net_matrix[q] < 0) {
-            total_net_export -= net_matrix[q];
-        } else {
-            total_net_consumption += net_matrix[q];
-            net_energy = total_net_consumption;
+    while (accumulated_export >= 1.0f || accumulated_consumption >= 1.0f) {
+        if (accumulated_export >= 1.0f) {
+            export_matrix[current_interval] += 1;
+            accumulated_export -= 1.0f;
         }
+        if (accumulated_consumption >= 1.0f) {
+            consumption_matrix[current_interval] += 1;
+            accumulated_consumption -= 1.0f;
+        }
+        net_matrix[current_interval] = consumption_matrix[current_interval] - export_matrix[current_interval];
     }
 }
 
