@@ -20,7 +20,14 @@ int output_index = 0;
 int estimated_energy_hour = 0;
 int estimated_energy_interval = 0;
 
-int minutes_since_midnight = 0;
+// consumption calculations variables:
+	int total_net_consumption = 0;
+	int total_net_export = 0;
+	int total_consumption = 0;
+	int total_export = 0;
+	int current_hour_consumption = 0;
+
+int minutes_since_midnight = 0;x`
 int check_interval = 0;
 
 // used for hourly averages time checking
@@ -255,13 +262,6 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	poststr(request, "<th>Export </th>");
 	poststr(request, "<th>Net Metering </th></tr><hr>");
 
-	// First field: Time
-	// Initialize temp variables
-	int total_net_consumption = 0;
-	int total_net_export = 0;
-	int total_consumption = 0;
-	int total_export = 0;
-	int current_hour_consumption = 0;
 	
     // Set flag to save data to flash every 15 minutes
 if (NTP_GetMinute() % 15 == 0 && !save_to_flash_flag) {
