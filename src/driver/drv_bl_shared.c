@@ -19,6 +19,10 @@ int last_minute = 0;
 int output_index = 0;
 int estimated_energy_hour = 0;
 int estimated_energy_interval = 0;
+
+int minutes_since_midnight = 0;
+int check_interval = 0;
+
 // used for hourly averages time checking
 int check_time_estimate = 59;
 // The number of devices the automation controls, based on power level 
@@ -229,8 +233,8 @@ if (NTP_GetMinute() % 15 == 0 && !save_to_flash_flag) {
 
 if (NTP_IsTimeSynced()) {
         // Calculate current interval index (0–95)
-        int minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
-        int check_interval = minutes_since_midnight / net_metering_period;
+        minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
+        check_interval = minutes_since_midnight / net_metering_period;
 
     for (int q = 0; q < 96; q++) {  // Loop through all intervals
         if (q == check_interval) {  // Update live data for the current interval
