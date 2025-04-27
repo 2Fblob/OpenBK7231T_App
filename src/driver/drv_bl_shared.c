@@ -199,8 +199,8 @@ void UpdateEnergyMatricesBackground() {
         }
     }
 	        // Summing all the data for totals
-	        total_consumption += consumption_matrix[q];
-	        total_export += export_matrix[q];  
+	       // total_consumption += consumption_matrix[q];
+	       // total_export += export_matrix[q];  
 	      
 	        // Track energy duration
 	   //     if (current_hour_consumption == 0) {
