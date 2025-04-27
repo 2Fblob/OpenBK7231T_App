@@ -189,13 +189,14 @@ void UpdateEnergyMatricesBackground() {
                 total_net_export -= net_matrix[q];
             } else {
                 total_net_consumption += net_matrix[q];
+		net_energy = total_net_consumption;
             }
 			        // Add current net energy to the totals
-	        if (net_energy < 0) {
-	            total_net_export -= net_energy;
-	        } else {
-	            total_net_consumption += net_energy;
-	        }
+	       // if (net_energy < 0) {
+	       //     total_net_export -= net_energy;
+	      //  } else {
+	       //     total_net_consumption += net_energy;
+	       // }
         }
     }
 	        // Summing all the data for totals
@@ -298,31 +299,16 @@ if (NTP_IsTimeSynced()) {
         check_interval = minutes_since_midnight / net_metering_period;
 
     for (int q = 0; q < 96; q++) {  // Loop through all intervals
-        if (q == check_interval) {  // Update live data for the current interval
-
-
-		// Reset energy values when a new 15-minute interval starts
-   // I also made changes to line 821 as the reset is calculated here now.
-	    // End of Add to the table --------------------------------------------------------------------------
-            // int calculate_net_energy = (net_matrix[q] + (int)net_energy);
-            // Format time, to accomodate the 96 intervals
-            int hour = q / 4;             // 0–23
-            int minute = (q % 4) * 15;    // 0, 15, 30, 45
-            hprintf255(request, "<tr><td> <b> %i:%02i </td> ", hour, minute);  // Print hour and minute
-            hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
-            hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
-            hprintf255(request, "<td> <b> %dW </td> </tr>", net_matrix[q]  /*calculate_net_energy*/);
-           // current_hour_consumption = calculate_net_energy;
-        } else {
-            int hour = q / 4;             // 0–23
-            int minute = (q % 4) * 15;    // 0, 15, 30, 45
-            hprintf255(request, "<tr><td> %i:%02i </td> ", hour, minute);  // Print hour and minute
-            hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]);
-            hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]);
-            hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);
-        }
-
-
+        const char* start_tag = (q == check_interval) ? "<b>" : "";
+	const char* end_tag = (q == check_interval) ? "</b>" : "";
+	
+	int hour = q / 4;
+	int minute = (q % 4) * 15;
+	
+	hprintf255(request, "<tr><td> %s%i:%02i%s </td> ", start_tag, hour, minute, end_tag);
+	hprintf255(request, "<td> %s%dW%s </td> ", start_tag, (int)consumption_matrix[q], end_tag);
+	hprintf255(request, "<td> %s%dW%s </td>", start_tag, (int)export_matrix[q], end_tag);
+	hprintf255(request, "<td> %s%dW%s </td> </tr>", start_tag, net_matrix[q], end_tag);
     }
 }
 
