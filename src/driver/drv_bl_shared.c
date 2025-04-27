@@ -23,43 +23,6 @@ int estimated_energy_interval = 0;
 int minutes_since_midnight = 0;
 int check_interval = 0;
 
-void UpdateEnergyMatricesBackground() {
-    if (!NTP_IsTimeSynced()) return;
-
-    minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
-    check_interval = minutes_since_midnight / net_metering_period;
-
-    if (check_interval != last_interval) {
-        // Update current 15-min slot
-        export_matrix[check_interval] = old_export_energy + (int)real_export;
-        consumption_matrix[check_interval] = old_real_consumption + (int)real_consumption;
-        net_matrix[check_interval] = consumption_matrix[check_interval] - export_matrix[check_interval];
-
-        last_interval = check_interval;
-
-        // Reset for new interval
-        real_export = 0;
-        real_consumption = 0;
-
-        // Now update the global totals
-        total_consumption = 0;
-        total_export = 0;
-        total_net_consumption = 0;
-        total_net_export = 0;
-
-        for (int q = 0; q < 96; q++) {
-            total_consumption += consumption_matrix[q];
-            total_export += export_matrix[q];
-
-            if (net_matrix[q] < 0) {
-                total_net_export -= net_matrix[q];
-            } else {
-                total_net_consumption += net_matrix[q];
-            }
-        }
-    }
-}
-
 // used for hourly averages time checking
 int check_time_estimate = 59;
 // The number of devices the automation controls, based on power level 
@@ -184,6 +147,43 @@ time_t ConsumptionResetTime = 0;
 
 int changeSendAlwaysFrames = 60;
 int changeDoNotSendMinFrames = 5;
+
+void UpdateEnergyMatricesBackground() {
+    if (!NTP_IsTimeSynced()) return;
+
+    minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
+    check_interval = minutes_since_midnight / net_metering_period;
+
+    if (check_interval != last_interval) {
+        // Update current 15-min slot
+        export_matrix[check_interval] = old_export_energy + (int)real_export;
+        consumption_matrix[check_interval] = old_real_consumption + (int)real_consumption;
+        net_matrix[check_interval] = consumption_matrix[check_interval] - export_matrix[check_interval];
+
+        last_interval = check_interval;
+
+        // Reset for new interval
+        real_export = 0;
+        real_consumption = 0;
+
+        // Now update the global totals
+        total_consumption = 0;
+        total_export = 0;
+        total_net_consumption = 0;
+        total_net_export = 0;
+
+        for (int q = 0; q < 96; q++) {
+            total_consumption += consumption_matrix[q];
+            total_export += export_matrix[q];
+
+            if (net_matrix[q] < 0) {
+                total_net_export -= net_matrix[q];
+            } else {
+                total_net_consumption += net_matrix[q];
+            }
+        }
+    }
+}
 
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 {
