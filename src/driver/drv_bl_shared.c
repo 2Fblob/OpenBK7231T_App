@@ -184,43 +184,33 @@ void UpdateEnergyMatricesBackground() {
             total_consumption += consumption_matrix[q];
             total_export += export_matrix[q];
 
+		// Calculated Net Values (Export/Consumption)
             if (net_matrix[q] < 0) {
                 total_net_export -= net_matrix[q];
             } else {
                 total_net_consumption += net_matrix[q];
             }
-        }
-    }
-	//
-	        // Summing all the data for totals
-	        total_consumption += consumption_matrix[q];
-	        total_export += export_matrix[q];  
-	
-	        // Calculated Net Values (Export/Consumption)
-	        if (net_matrix[q] < 0) {
-	           // total_net_export = 0; 
-	            total_net_export -= net_matrix[q];
-	        } else {
-	            //total_net_consumption = 0; 
-	            total_net_consumption += net_matrix[q];
-	        }
-	
-	        // Add current net energy to the totals
+			        // Add current net energy to the totals
 	        if (net_energy < 0) {
 	            total_net_export -= net_energy;
 	        } else {
 	            total_net_consumption += net_energy;
 	        }
-	
+        }
+    }
+	        // Summing all the data for totals
+	        total_consumption += consumption_matrix[q];
+	        total_export += export_matrix[q];  
+	      
 	        // Track energy duration
-	        if (current_hour_consumption == 0) {
-	            estimated_energy_start = check_time;
-	        }
+	   //     if (current_hour_consumption == 0) {
+	     //       estimated_energy_start = check_time;
+	       // }
 	
-	        if (((check_time - estimated_energy_start) > 0) && (last_run_calc != check_time)) {
-	            last_run_calc = check_time;
+	        //if (((check_time - estimated_energy_start) > 0) && (last_run_calc != check_time)) {
+	          //  last_run_calc = check_time;
 	            //import_buffer = 0;
-	        }
+	        //}
 	//
 }
 
