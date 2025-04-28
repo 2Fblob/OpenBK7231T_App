@@ -754,6 +754,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
     char datetime[64];
 	float diff;
 
+	UpdateEnergyMatricesBackground();
+	
 		if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
 		{			
 			//sync with the clock
