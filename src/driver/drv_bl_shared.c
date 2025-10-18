@@ -1045,15 +1045,14 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					 // Update the last known value
 				        last_dump_load_relay[output_index] = dump_load_relay[output_index];
 				
-				        char output_command[96] = "";
+				        char output_command[50] = "";
 				        const char *ip_start = "SendGet http://192.168.5.";
 					const char *ip_middle = "/cm?cmnd=Power%20"; // Default command
 
 				  	// Set the ip_middle based on the relay IP address
 				        if (dump_load_relay_ip[output_index] == charger_c_ip) 
 				        {
-				            
-							ip_middle = "/cm?cmnd=Channel3%20";
+				            ip_middle = "/cm?cmnd=Channel3%20";  // Use Dimmer3 command if the IP is 20
 						
 					//  old_output = dump_load_relay[output_index];	
 					// Check if the value is below 5, and if so, make it negative
@@ -1074,7 +1073,6 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				        // Exit the loop after executing the command
 				        break;
 				    }
-				}
 			//end of execute once a minute ------------------------------------------------------------		
 			}
 			//----------------------------
