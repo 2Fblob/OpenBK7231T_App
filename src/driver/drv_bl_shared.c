@@ -1073,6 +1073,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				        // Exit the loop after executing the command
 				        break;
 				    }
+				}
 			//end of execute once a minute ------------------------------------------------------------		
 			}
 			//----------------------------
