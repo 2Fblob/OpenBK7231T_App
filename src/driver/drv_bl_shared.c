@@ -1,24 +1,32 @@
 // Internal code ONLY
 
-static int consumption_matrix [96] = {0}; 
-static int export_matrix[96] = {0};
-static int net_matrix[96] = {0};
+// Charger C mapping constants
+#define CHARGER_MIN_PWM   10     // lowest useful duty for the supply
+#define SURPLUS_START_W   100    // start charging only when >=100W expected
+#define SURPLUS_FULL_W    1000   // 1000W maps to 100% PWM
+
+static int consumption_matrix [24] = {0};
+static int export_matrix[24] = {0};
+static int net_matrix[24] = {0};
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int net_energy_equivalent = 0;
 static int old_output = 0;
 static int update_number = 0;
 int adjust_net_energy = 50;
-int save_to_flash_flag = 0;
 // variable to tell the inverter to keep slight export through the night, but ease up through the day when the panels are likelly to be producing.
 int solar_available = 0;
+//float estimated_production_hour = 0; 
+static int mtqq_total_net_export = 0;
 static int estimated_energy_start = 0;
 static int last_run_calc = 0;
 int current_minute = 0;
 int last_minute = 0;
 int output_index = 0;
 int estimated_energy_hour = 0;
-int estimated_energy_interval = 0;
+// used to calculate look ahead figures for the hour
+int import_buffer = 0;
+int export_buffer = 0;
 // used for hourly averages time checking
 int check_time_estimate = 59;
 // The number of devices the automation controls, based on power level 
@@ -67,16 +75,25 @@ static byte old_hour = 0;
 static byte time_hour_reset = 0;
 static byte time_min_reset = 0;
 static byte old_time = 0;
+#define max_power_bypass_off -500
 #define dump_load_hysteresis 1	// This is shortest time the relay will turn on or off. Recommended 1/4 of the netmetering period. Never use less than 1min as this stresses the relay/load.
+//int min_production = -50;	// The minimun instantaneous solar production that will trigger the dump load.
+#define dump_load_on 15		// The ammount of 'excess' energy stored over the period. Above this, the dump load will be turned on.
+#define dump_load_off 1		// The minimun 'excess' energy stored over the period. Below this, the dump load will be turned off.
 #define max_export -3300
 
 // These variables are used to program the bypass load, for example turn it on late afternoon if there was no sun for the day
 //#define bypass_timer_reset 23	// Just so it doesn't accidentally reset when the device is rebooted (0)...
-
+#define bypass_on_time 15
+#define bypass_off_time 18
+#define min_daily_time_on 120	// Runs the diversion load up to this specified ammount of time, if there wasn't enough sun over the day.
+int time_on = 0;		// Variable to count how long the Bypass load ran during the day
 //int dump_load_relay = 0;	// Variable to Indicate on the Webpage if the Bypass load is on
 int lastsync = 0; 		// Variable to run the bypass relay loop. It's used to take note of the last time it run
 byte check_time = 0; 		// Variable for Minutes
-byte check_hour = 0;		// Variable for Hour		
+byte check_hour = 0;		// Variable for Hour	
+byte check_time_power = 0; 		// Variable for Minutes
+byte check_hour_power = 0;		
 
 //Command to turn remote plug on/off
 //const char* rem_relay_on = "http://<ip>/cm?cmnd=Power%20on";
@@ -220,128 +237,117 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	int total_export = 0;
 	int current_hour_consumption = 0;
 	
-    // Set flag to save data to flash every 15 minutes
-if (NTP_GetMinute() % 15 == 0 && !save_to_flash_flag) {
-    save_to_flash_flag = 1;  // Set the flag to indicate that data should be saved to flash
-}
-
-if (NTP_IsTimeSynced()) {
-        // Calculate current interval index (0–95)
-        int minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
-        int check_interval = minutes_since_midnight / 15;
-
-    for (int q = 0; q <= check_interval; q++) {  // Loop through all intervals
-        if (q == check_interval) {  // Update live data for the current interval
-            int calculate_net_energy = (net_matrix[q] + (int)net_energy);
-            // Format time, to accomodate the 96 intervals
-            int hour = q / 4;             // 0–23
-            int minute = (q % 4) * 15;    // 0, 15, 30, 45
-            hprintf255(request, "<tr><td> <b> %i:%02i </td> ", hour, minute);  // Print hour and minute
-            hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
-            hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
-            hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);
-            current_hour_consumption = calculate_net_energy;
-        } else {
-            hprintf255(request, "<tr><td> %i:%02i </td> ", q, (q % 4) * 15);  // Print hour and minute
-            hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]);
-            hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]);
-            hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);
-        }
-
-        // Summing all the data for totals
-        total_consumption += consumption_matrix[q];
-        total_export += export_matrix[q];  
-
-        // Calculated Net Values (Export/Consumption)
-        if (net_matrix[q] < 0) {
-           // total_net_export = 0; 
-            total_net_export -= net_matrix[q];
-        } else {
-            //total_net_consumption = 0; 
-            total_net_consumption += net_matrix[q];
-        }
-
-        // Add current net energy to the totals
-        if (net_energy < 0) {
-            total_net_export -= net_energy;
-        } else {
-            total_net_consumption += net_energy;
-        }
-
-        // Track energy duration
-        if (current_hour_consumption == 0) {
-            estimated_energy_start = check_time;
-        }
-
-        if (((check_time - estimated_energy_start) > 0) && (last_run_calc != check_time)) {
-            last_run_calc = check_time;
-            //import_buffer = 0;
-        }
-    }
-}
-
-
-    /*if (NTP_IsTimeSynced())
-        {
-        for (int q=0; q<=check_hour; q++)
-            {
-            if (q == check_hour)
-                {
-                int calculate_net_energy = (net_matrix[q]+(int)net_energy);
-                hprintf255(request, "<tr><td> <b> %i:00 </td> ", q);
-                hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
-                hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
-                hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);	
-                current_hour_consumption = calculate_net_energy;
-                }
-            else
-                {
-                hprintf255(request, "<tr><td> %i:00 </td> ", q);
-                hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]);
-                hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]);
-                hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);	
-                
-                }
-            // Summ  all the data on the table to summarize below.
-            // Real Grid Consumption / Export
-            total_consumption += consumption_matrix[q];
-            total_export += export_matrix[q];	
-            // Calculated Net Values
-            
-            if (net_matrix[q]<0)	{total_net_export = 0; total_net_export -= net_matrix[q];}
-            else	{total_net_consumption = 0; total_net_consumption += net_matrix[q];}
-            // -----------------------------------------------------
-            //} commented?
-            // Add the values for this metering period (not yet saved)
-            if (net_energy<0) {total_net_export -= net_energy;}
-            else {total_net_consumption += net_energy;}
-            // Calculate hourly rate
-            if (current_hour_consumption == 0)
-                {
-                estimated_energy_start = check_time;
-                }
-            if (((check_time-estimated_energy_start)>0)&&(!(last_run_calc==check_time)))
-                {
-                last_run_calc=check_time;
-                }
-            }
-        // Calculate hourly rate	
-        check_time_estimate = (60 - NTP_GetMinute());
-        estimated_energy_hour = ((int)net_energy+((((int)sensors[OBK_POWER].lastReading)*(int)check_time_estimate)/60));
-        poststr(request, "</tr></table><br>");
-        poststr(request, "<h4>Totals:</h4>");
-        hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Metering) <br></font>", total_consumption, total_export);
-        hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Net Metering) <br></font>", total_net_consumption, total_net_export);
-        hprintf255(request, "<font size=2>- Hour Estimation: <b>%iW</b> <br></font>", (int)estimated_energy_hour);
-        }*/
+	if (NTP_IsTimeSynced())
+	{
+	for (int q=0; q<=check_hour; q++)
+		{
+		if (q == check_hour)
+			{
+			int calculate_net_energy = (net_matrix[q]+(int)net_energy);
+			hprintf255(request, "<tr><td> <b> %i:00 </td> ", q);
+			hprintf255(request, "<td> <b> %dW </td> ", (int)consumption_matrix[q]);
+			hprintf255(request, "<td> <b> %dW </td>", (int)export_matrix[q]);
+			hprintf255(request, "<td> <b> %dW </td> </tr>", calculate_net_energy);	
+			current_hour_consumption = calculate_net_energy;
+			}
+		else
+			{
+			hprintf255(request, "<tr><td> %i:00 </td> ", q);
+			hprintf255(request, "<td> %dW </td> ", (int)consumption_matrix[q]);
+			hprintf255(request, "<td> %dW </td>", (int)export_matrix[q]);
+			hprintf255(request, "<td> %dW </td> </tr>", net_matrix[q]);	
+			
+			}
+		// Summ  all the data on the table to summarize below.
+		// Real Grid Consumption / Export
+		total_consumption += consumption_matrix[q];
+		total_export += export_matrix[q];	
+		// Calculated Net Values
+		
+		if (net_matrix[q]<0)	{total_net_export = 0; total_net_export -= net_matrix[q];}
+		else	{total_net_consumption = 0; total_net_consumption += net_matrix[q];}
+		// -----------------------------------------------------
+		//} commented?
+	// Add the values for this metering period (not yet saved)
+	if (net_energy<0) {total_net_export -= net_energy;}
+	else {total_net_consumption += net_energy;}
+	// Calculate hourly rate
+	if (current_hour_consumption == 0)
+		{
+		estimated_energy_start = check_time;
+		}
+	if (((check_time-estimated_energy_start)>0)&&(!(last_run_calc==check_time)))
+	{
+	last_run_calc=check_time;
+	// Calculate Import / Export
+	//export_buffer = netmetering;
+	import_buffer = 0;
 	}
+	}
+	// Calculate hourly rate	
+	check_time_estimate = (60 - NTP_GetMinute());
+	//estimated_energy_hour = ((int)net_energy+((((int)sensors[OBK_POWER].lastReading)*(int)check_time_estimate)/60));
+	//estimated_energy_hour = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate) / 60;
+	poststr(request, "</tr></table><br>");
+	poststr(request, "<h4>Totals:</h4>");
+	hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Metering) <br></font>", total_consumption, total_export);
+	hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Net Metering) <br></font>", total_net_consumption, total_net_export);
+	hprintf255(request, "<font size=2>- Hour Estimation: <b>%iW</b> <br></font>", (int)estimated_energy_hour);
+	
+	//--------------------------------------------------------------------------------------------------
+		//mtqq_total_net_export = net_matrix[check_hour];
+	//--------------------------------------------------------------------------------------------------
+		// Update status of the diversion relay on webpage		
+		//-------------------------------------------------------------------------------------------------------------------------------------------------
+		
+		//-----------------------------------------------------------------------------------------------------
+		//hprintf255(request, "<font size=1>Last sync at minute: %dmin. Boosting from %dh to %dh<br> Relay Thresholds: On: %d Wh, Off: %dWh<br> Instant Power: %dW, Consumption: %dW, Generation: %dW <br></font>", 
+		//	lastsync, bypass_on_time, bypass_off_time, dump_load_on, dump_load_off, (int)sensors[OBK_POWER].lastReading, (int)sensors[OBK_CONSUMPTION_TOTAL].lastReading, (int)real_export);
+		// -------------------------------------------------------------------------------------------------------------------
+		// This was the original loop 'energyCounterStatsEnable == true'
+		/********************************************************************************************************************/
+	//------------------------------------------------------------------------------------------------------------------------------------------
+	}
+	// Some other stats...
+    	/*hprintf255(request, "<p><br><h5>Changes: %i sent, %i Skipped, %li Saved. <br> %s<hr></p>",
+               stat_updatesSent, stat_updatesSkipped, ConsumptionSaveCounter,
+               mode);*/
 
+	/*poststr(request, "<h5>Energy Clear Date: ");
+	if (ConsumptionResetTime) {
+		ltm = gmtime(&ConsumptionResetTime);
+		hprintf255(request, "%04d-%02d-%02d %02d:%02d:%02d",
+					ltm->tm_year+1900, ltm->tm_mon+1, ltm->tm_mday, ltm->tm_hour, ltm->tm_min, ltm->tm_sec);
+	} else {
+		poststr(request, "(not set)");
+	}*/
+	
+	/********************************************************************************************************************/
+	/*hprintf255(request, "<br>");
+	if(DRV_IsRunning("NTP")==false) {
+		hprintf255(request,"NTP driver is not started, daily energy stats disbled.");
+	} else if (!NTP_IsTimeSynced()) {
+		hprintf255(request,"Daily energy stats awaiting NTP driver to sync real time...");
+	}
+	hprintf255(request, "</h5>");*/
+	}
 	/********************************************************************************************************************/
     	if (energyCounterStatsEnable == true)
 	{	
     	
+       		//hprintf255(request,"<hr><h2>Periodic Statistics</h2>");
+		//If we are measuring negative power, we can run the commands to get the netmetering stats
+		// We need NTP enabled for this, as well as the statistics. They need to be manually configured because of duration and time zone.
+			
+		// We print some stats, mainly for debugging
+		/* hprintf255(request, "<font size=1>Diversion relay total on-time today was %d min.<br> Next sync in %d min. ", 
+				time_on, (dump_load_hysteresis-lastsync));*/
+		// Print Status of automation outputs)
 
 		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
+
+
+		
 		
 		poststr(request," <hr> <h4>Current system status: </h4></font>");
 		hprintf255(request,"<font size=2>- Storage Inverter: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[0], dump_load_relay_timer[0]); 
@@ -351,19 +357,6 @@ if (NTP_IsTimeSynced()) {
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 
-		//-----------
-			// Charger C Power calculation
-				// We need a linear mapping from charger_c_new_energy to scaled_power
-				/*int scaled_power;
-				if (estimated_energy_hour > 50) { scaled_power = 0;} 
-				else if (estimated_energy_hour < -950) {scaled_power = 100;} 
-				else {scaled_power = ((50 - estimated_energy_hour) * 100) / 1000;}*/
-
-				//------------------------------
-				
-				// Apply the new scaled value with last_dump_load_relay[5], keeping it within bounds (-50 maps to 0 and 950 maps to 100)
-				//dump_load_relay[5] = (uint8_t)((scaled_power + last_dump_load_relay[5]) > 100 ? 100 : ((scaled_power + last_dump_load_relay[5]) < 0 ? 0 : (scaled_power + last_dump_load_relay[5])));
-				// End of Charger C Power calculation
 		// -----------
 		/*
 		// This generates the PWM signal. Mainly positive scale, but allows a bit of negative to control the inverter with some hysterisys.
@@ -771,7 +764,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				last_dump_load_relay[5] = 2;
 				old_hour = check_hour;
 				// This resets the time the bypass relay was on throughout the day, before sunset.
-				
+				if (check_hour < 5) {time_on = 0;}
 			}
 			else if (!(check_time == old_time))
 			{
@@ -783,6 +776,29 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				//update_tables = 1;
 			}
 
+			//Make an animation to indicate bypass is on
+			//if (dump_load_relay == 4)
+			//{
+				// In case we want to do something here. Not currently implemented.
+			//}
+			
+			// This turns the bypass load off if we are using a lot of power
+			//if (((sensors[OBK_POWER].lastReading) > max_power_bypass_off) && (!(dump_load_relay == 4)))
+			/*if (((sensors[OBK_POWER].lastReading) > max_power_bypass_off) && (!(dump_load_relay == 4)))
+			{
+				// Make sure we don't run it twice on the same minute
+				if (!(check_time == check_time_power))
+				{
+					// Hold the loop
+					lastsync = 0;
+					//hour_reset = 0;
+					dump_load_relay = 4;
+					//cmdCMD_ExecuteCommand("SendGet http://192.168.5.4/cm?cmnd=Power%20off", 0);
+					check_time_power = check_time;
+					check_hour_power = check_hour;
+				}
+				
+			}*/
 
 	// Add to the table ---------------------------------------------------------------------------------
 			
@@ -825,7 +841,35 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// ------------------------------------------------------------------------------------------------------------------
 			// Calculate the Effective energy consumed / produced during the period by summing both counters and deduct their values at the start of the period
 			net_energy = (real_consumption - real_export);			// calculate difference since start
-			// ------------------------------------------------------------------------------------------------------------------			
+			// ------------------------------------------------------------------------------------------------------------------
+			
+			// Bypass load code. Runs if there is excess energy and at a programmable time, in case there was no sun
+			// Make sure to reset the old time at every hour, otherwise the loop will not run, because old minutes are ahead in time!
+
+			// Status Check
+			// Here we define a Bypass. For example if a very heavy load is connected, it's likelly our bypass load is not desired.
+			// In this case, we turn the load off and wait for the next cycle for a new update.
+
+			//The relay is updated ever x numer of minutes as defined on 'dump_load_hysteresis'
+			
+			
+			// Here we update the variables based on our energyu value
+			//------------------------------------------------------------------------------
+			// Since readings reset at the turn of the hour, we wait 15 minutes or untill we have 'stored > 200W) to average before runing any actions. 
+			// The equipment remains on it's previous state for the hour before.
+				
+			// Define the conditions for each relay based on the given variables
+
+			/*
+			// ** Storage inverter control **
+			if (net_energy > 10) {
+			    dump_load_relay[0] = 1; // Storage inverter ON
+			} else if (net_energy <= -50) {
+			    dump_load_relay[0] = 0; // Storage inverter OFF
+			}*/
+			// new
+			// ** Storage inverter control **
+			
 			// ** Storage inverter control **
 
 			if (net_energy < -100) {
@@ -854,69 +898,74 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			{
 				// Reset
 				last_minute = current_minute;
+				// New timing here (Oct 25)
+				// Keep the hour projection fresh for control logic
+			    check_time_estimate = (60 - NTP_GetMinute());
+				// Simple projection: current net + remaining minutes * current power / 60
+			    // (Replace with your PV-based forecast if you have one.)
+			    estimated_energy_hour = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate) / 60;
+
 
 				//-----------------
-				int scaled_power;
-				if (estimated_energy_hour > 50) { 
-				    scaled_power = -5; // Decrease by 5 when energy is high
-				} 
-				else if (estimated_energy_hour < -950) { 
-				    scaled_power = 100; // Force max power in extreme low conditions
-				} 
-				else { 
-				    scaled_power = ((50 - estimated_energy_hour) * 100) / 1000; 	        // Check if scaled_power is between 1 and 10, inclusive
-				    if (scaled_power >= 1.0 && scaled_power <= 10.0) {scaled_power = 10.0;} 	// Replace with 10 if in this range
-				}
+				// New scalled power (OCT '25)
+				// ===== Charger C unified output (0..5 = inverter hints, 10..100 = charger PWM) =====
+				int prev = dump_load_relay[5];
+				int out  = prev;
 				
-				// Calculate the change
-				int change = scaled_power - 5;
-				// -----------------------------------
 				if (net_energy > 0) {
-				    dump_load_relay[5] = (net_energy / 10 > 5) ? 5 : net_energy / 10;  // Cap at 5 if net_energy / 10 exceeds 5
-				    change = 0;  // Ensure change remains 0
-				} 
-				else if (net_energy == 0) {
-				    dump_load_relay[5] = 0;  // Set output to 0 if net_energy is exactly 0
-				    change = 0;  // Ensure change remains 0
-				} 
-				else if (change != 0) { // Only modify if net_energy is negative
-				    if (net_energy <= -50) {
-				        // Only allow increase if net_energy <= -50 (ensures a small buffer for stability)
-				        dump_load_relay[5] += change;
+				    // We are importing: send inverter hints 1..5 in 10W steps (cap at 5)
+				    int steps = net_energy / 10;
+				    if (steps > 5) steps = 5;
+				    if (steps < 1) steps = 1;        // any import => at least 1
+				    out = steps;                      // 1..5
+				} else {
+				    // Not importing: use projected surplus to drive charger PWM
+				    int est = estimated_energy_hour;
+				
+				    if (est >= SURPLUS_START_W) {
+				        // Map [100W..1000W] -> [10..100]
+				        int spanW = SURPLUS_FULL_W - SURPLUS_START_W;           // 900
+				        int num   = est - SURPLUS_START_W;                      // 0..900+
+				        if (num > spanW) num = spanW;
+				        int pwm = CHARGER_MIN_PWM + (num * (100 - CHARGER_MIN_PWM)) / spanW;  // 10..100
+				        if (pwm < CHARGER_MIN_PWM) pwm = CHARGER_MIN_PWM;
+				        if (pwm > 100) pwm = 100;
+				        out = pwm;                                              // 10..100
+				    } else if (est > 0) {
+				        // 0<est<100W: gray zone — hold at 10% if we were already charging, else 0
+				        out = (prev >= CHARGER_MIN_PWM) ? CHARGER_MIN_PWM : 0;  // 10 or 0
+				    } else {
+				        // No surplus predicted
+				        out = 0;
 				    }
-				    else if (dump_load_relay[5] > 5 && change < 0) {
-				        // Only allow decrease if dump_load_relay[5] > 5 (ensures decrease is controlled)
-				        dump_load_relay[5] += change;
-				    }
-					// Make sure the value is never less than 10
-					if (dump_load_relay[5] < 10) {dump_load_relay[5] = 10;}
+				
+				    // Never output reserved 6..9
+				    if (out > 5 && out < CHARGER_MIN_PWM) out = CHARGER_MIN_PWM;
 				}
 				
-				// Ensure dump_load_relay[5] stays within valid bounds (0-100)
-				dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
-
-				// This reduces dump_load_relay[5] if stored energy is less than -50Wh. 
-				// This avoids cycling by allowing the converter to quickly throttle it's output down, until the export buffer increases.
-				//if (net_energy > -50 && dump_load_relay[5] > net_energy) 
-				if (net_energy < 0 && net_energy > -51) 
-				{
-				    dump_load_relay[5] = 10;  
-				}
+				// Clamp
+				if (out < 0) out = 0;
+				if (out > 100) out = 100;
+				
+				dump_load_relay[5] = out;
 			
 				//-----------------
 				// **Check Time Condition**
 				// New logic to estimate energy. We multiply the available power after t = 30minutes 
 				// to accomodate for the shorter timespam available to cunsume the energy
-				if (current_minute < 30)
+				if (current_minute > 0)
 				{
-					net_energy_equivalent = ((float)(net_energy*(60/current_minute)));					
-				}
-				else 
-				{
-					if (current_minute < 55)
+					if (current_minute < 30)
 					{
-					//net_energy_equivalent = net_energy*2;
-					net_energy_equivalent = ((float)(net_energy*(60/(60-current_minute))));
+						net_energy_equivalent = ((float)(net_energy*(60/current_minute)));					
+					}
+					else 
+					{
+						if (current_minute < 55)
+						{
+						int rem = 60 - current_minute; // 5..30
+   						net_energy_equivalent = (int)((float)net_energy * (60.0f / (float)rem));
+						}
 					}
 				}
 				if (check_time > 14)
@@ -930,6 +979,17 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					// **Secondary Charger**
 					dump_load_relay[3] = (net_energy_equivalent <= -500 && check_hour >= 9 && check_hour <= 15) ? 1 : 
 					                     (( net_energy >= -100) ? 0 : dump_load_relay[3]);			   
+					
+					/** Basement dehumidifier control **/
+					// The dehumidifier turns on last at t = 20 minutes, to ensure the power stabilizes as the chargers and dishwasher operate.
+					// It's ideal power source is unused energy as we approach the end of the hour.
+					
+					/* TEMPORARY DISABLED */
+     					/*if ((check_time >= 20 && check_time <= 58 && net_energy_equivalent <= -800) && (check_hour >= 9 && check_hour <= 16)) {
+					    dump_load_relay[4] = 1; // Turn on dehumidifier
+					} else if (check_time == 59 || net_energy >= -150) {
+					    dump_load_relay[4] = 0; // Turn off dehumidifier
+					}*/
 
 					// Temporary for aditional battery module
 					// Forces 'ON' Between 1PM and 3PM to acco odate charge if there is no solar
@@ -985,14 +1045,15 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					 // Update the last known value
 				        last_dump_load_relay[output_index] = dump_load_relay[output_index];
 				
-				        char output_command[50] = "";
+				        char output_command[96] = "";
 				        const char *ip_start = "SendGet http://192.168.5.";
 					const char *ip_middle = "/cm?cmnd=Power%20"; // Default command
 
 				  	// Set the ip_middle based on the relay IP address
 				        if (dump_load_relay_ip[output_index] == charger_c_ip) 
 				        {
-				            ip_middle = "/cm?cmnd=Channel3%20";  // Use Dimmer3 command if the IP is 20
+				            
+							ip_middle = "/cm?cmnd=Channel3%20";
 						
 					//  old_output = dump_load_relay[output_index];	
 					// Check if the value is below 5, and if so, make it negative
