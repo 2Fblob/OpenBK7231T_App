@@ -912,38 +912,39 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				int prev = dump_load_relay[5];
 				int out  = prev;
 				
+				// Import case  → inverter hint 1..5 (later sent as −1..−5)
 				if (net_energy > 0) {
-				    // We are importing: send inverter hints 1..5 in 10W steps (cap at 5)
 				    int steps = net_energy / 10;
 				    if (steps > 5) steps = 5;
-				    if (steps < 1) steps = 1;        // any import => at least 1
-				    out = steps;                      // 1..5
-				} else {
-				    // Not importing: use projected surplus to drive charger PWM
+				    if (steps < 1) steps = 1;
+				    out = steps;  // 1..5
+				} 
+				// Export case  → charger PWM 10–100 %
+				else {
 				    int est = estimated_energy_hour;
+				    int surplusW = (est < 0) ? -est : 0;   // use magnitude when negative
 				
-				    if (est >= SURPLUS_START_W) {
-				        // Map [100W..1000W] -> [10..100]
-				        int spanW = SURPLUS_FULL_W - SURPLUS_START_W;           // 900
-				        int num   = est - SURPLUS_START_W;                      // 0..900+
+				    if (surplusW >= SURPLUS_START_W) {
+				        int spanW = SURPLUS_FULL_W - SURPLUS_START_W; // 900
+				        int num   = surplusW - SURPLUS_START_W;       // 0..900
 				        if (num > spanW) num = spanW;
-				        int pwm = CHARGER_MIN_PWM + (num * (100 - CHARGER_MIN_PWM)) / spanW;  // 10..100
-				        if (pwm < CHARGER_MIN_PWM) pwm = CHARGER_MIN_PWM;
+				        int pwm = CHARGER_MIN_PWM + (num * (100 - CHARGER_MIN_PWM)) / spanW; // 10..100
 				        if (pwm > 100) pwm = 100;
-				        out = pwm;                                              // 10..100
-				    } else if (est > 0) {
-				        // 0<est<100W: gray zone — hold at 10% if we were already charging, else 0
-				        out = (prev >= CHARGER_MIN_PWM) ? CHARGER_MIN_PWM : 0;  // 10 or 0
-				    } else {
-				        // No surplus predicted
+				        out = pwm;
+				    } 
+				    else if (surplusW > 0) {
+				        // gray zone 0–100 W → hold 10 % if previously charging
+				        out = (prev >= CHARGER_MIN_PWM) ? CHARGER_MIN_PWM : 0;
+				    } 
+				    else {
 				        out = 0;
 				    }
 				
-				    // Never output reserved 6..9
+				    // avoid reserved 6–9 region
 				    if (out > 5 && out < CHARGER_MIN_PWM) out = CHARGER_MIN_PWM;
 				}
 				
-				// Clamp
+				// Clamp to valid bounds
 				if (out < 0) out = 0;
 				if (out > 100) out = 100;
 				
@@ -973,11 +974,11 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 												
 					// The chargers wait for the first 15 minutes for power to accumulate. During this time the previous state is maintained.
 					// **Primary Charger**
-					dump_load_relay[1] = (net_energy_equivalent <= -200 && check_hour >= 8 && check_hour <= 17) ? 1 : 
+					dump_load_relay[1] = (net_energy_equivalent <= -200 && check_hour >= 0 && check_hour <= 20) ? 1 : 
 					                     ((net_energy >= -50) ? 0 : dump_load_relay[1]);
 					
 					// **Secondary Charger**
-					dump_load_relay[3] = (net_energy_equivalent <= -500 && check_hour >= 9 && check_hour <= 15) ? 1 : 
+					dump_load_relay[3] = (net_energy_equivalent <= -500 && check_hour >= 0 && check_hour <= 20) ? 1 : 
 					                     (( net_energy >= -100) ? 0 : dump_load_relay[3]);			   
 					
 					/** Basement dehumidifier control **/
