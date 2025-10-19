@@ -8,15 +8,15 @@
 // Charger C mapping constants
 #define CHARGER_MIN_PWM   10     	// lowest useful duty for the supply
 #define CHARGER_MAX_PWM  100
-#define SURPLUS_START_W   100   	 // start charging only when >=100W expected
-#define SURPLUS_FULL_W    1000   	// 1000W maps to 100% PWM
+//#define SURPLUS_START_W   100   	 // start charging only when >=100W expected
+//#define SURPLUS_FULL_W    1000   	// 1000W maps to 100% PWM
 int charger_c_pwm_debug = 0;  		 // holds last commanded PWM for Charger C
-float est_avg = 0.0f;                 // smoothed estimate
-int last_estimated_energy_hour = 0;   // previous averaged estimate
-int last_pwm_c = 0;                   // last PWM value sent
-int charger_c_initialized = 0;		   // flag for first run
+//float est_avg = 0.0f;                 // smoothed estimate
+//int last_estimated_energy_hour = 0;   // previous averaged estimate
+//int last_pwm_c = 0;                   // last PWM value sent
+//int charger_c_initialized = 0;		   // flag for first run
 
-#define DELTA_SCALE      0.5f
+//#define DELTA_SCALE      0.5f
 
 
 
@@ -309,8 +309,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Net Metering) <br></font>", total_net_consumption, total_net_export);
 	hprintf255(request, "<font size=2>- Hour Estimation: <b>%iW</b> <br></font>", (int)estimated_energy_hour);
 	// --- Charger C debug line ---
-	hprintf255(request, "<font size=2 color=#0099FF>- Charger C PWM: <b>%i%%</b> (AvgEst: %iW, ΔE: %iW) <br></font>",
-    charger_c_pwm_debug, (int)est_avg, (int)(est_avg - last_estimated_energy_hour));
+	hprintf255(request, "<font size=2 color=#0099FF>- Charger C PWM: <b>%i%%</b> <br></font>",
+    charger_c_pwm_debug);
 	
 	//--------------------------------------------------------------------------------------------------
 		//mtqq_total_net_export = net_matrix[check_hour];
@@ -926,48 +926,40 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 
 				//-----------------
 				// New scalled power (OCT '25)
-				// ===== Charger C unified output (0..5 = inverter hints, 10..100 = charger PWM) =====
-				int prev = dump_load_relay[5];
-				int out  = prev;
+				//---------------------------------------------------------------------------
+				// Charger C / Inverter unified PWM (0..100)
+				//  - Import  (net_energy > 0):   0..5   (10 W per step, capped at 5)
+				//  - Export  (net_energy <= -50): 10..100 from net_energy_equivalent (W/10)
+				//  - Export but buffer not met (>-50): 0
+				//  - Never emit 6..9 (reserved)
+				//---------------------------------------------------------------------------
+				int pwm = 0;
 				
-				// Import case  → inverter hint 1..5 (later sent as −1..−5)
 				if (net_energy > 0) {
-				    int steps = net_energy / 10;
-				    if (steps > 5) steps = 5;
-				    if (steps < 1) steps = 1;
-				    out = steps;  // 1..5
-				} 
-				// Export case  → charger PWM 10–100 %
-				else {
-				    int est = estimated_energy_hour;
-				    int surplusW = (est < 0) ? -est : 0;   // use magnitude when negative
-				
-				    if (surplusW >= SURPLUS_START_W) {
-				        int spanW = SURPLUS_FULL_W - SURPLUS_START_W; // 900
-				        int num   = surplusW - SURPLUS_START_W;       // 0..900
-				        if (num > spanW) num = spanW;
-				        int pwm = CHARGER_MIN_PWM + (num * (100 - CHARGER_MIN_PWM)) / spanW; // 10..100
-				        if (pwm > 100) pwm = 100;
-				        out = pwm;
-				    } 
-				    else if (surplusW > 0) {
-				        // gray zone 0–100 W → hold 10 % if previously charging
-				        out = (prev >= CHARGER_MIN_PWM) ? CHARGER_MIN_PWM : 0;
-				    } 
-				    else {
-				        out = 0;
-				    }
-				
-				    // avoid reserved 6–9 region
-				    if (out > 5 && out < CHARGER_MIN_PWM) out = CHARGER_MIN_PWM;
+				    // Import side → inverter hint 0..5 (10 W per step)
+				    int steps = (int)(net_energy / 10);
+				    if (steps < 0)  steps = 0;
+				    if (steps > 5)  steps = 5;
+				    pwm = steps;                 // 0..5
+				} else if (net_energy <= -50) {
+				    // Export side and buffer met → charger PWM 10..100
+				    int projW = -net_energy_equivalent;       // make positive
+				    if (projW < 0) projW = 0;                 // safety
+				    int p = projW / 10;                       // 1 step per 10 W
+				    if (p < 10)  p = 10;                      // floor to charger domain
+				    if (p > 100) p = 100;                     // cap at 100
+				    pwm = p;                                  // 10..100
+				} else {
+				    // Export but buffer not met yet
+				    pwm = 0;
 				}
 				
-				// Clamp to valid bounds
-				if (out < 0) out = 0;
-				if (out > 100) out = 100;
+				// Never output 6..9 (reserved)
+				if (pwm > 5 && pwm < 10) pwm = 10;
 				
-				dump_load_relay[5] = out;
-			
+				// Apply
+				dump_load_relay[5] = pwm;
+				charger_c_pwm_debug = pwm;    // for your web debug line
 				//-----------------
 				// **Check Time Condition**
 				// New logic to estimate energy. We multiply the available power after t = 30minutes 
@@ -1074,9 +1066,9 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			dump_load_relay[5] = pwm_c;
 			charger_c_pwm_debug = pwm_c;
 			
-			char output_command[50];
-			sprintf(output_command, "Dimmer %d", pwm_c);
-			CMD_ExecuteCommand(dump_load_relay_ip[5], output_command);
+			//char output_command[50];
+			//sprintf(output_command, "Dimmer %d", pwm_c);
+			//CMD_ExecuteCommand(dump_load_relay_ip[5], output_command);
 
 			
 			//---------------------------------------------------------------------------
