@@ -4,6 +4,8 @@
 #define CHARGER_MIN_PWM   10     // lowest useful duty for the supply
 #define SURPLUS_START_W   100    // start charging only when >=100W expected
 #define SURPLUS_FULL_W    1000   // 1000W maps to 100% PWM
+int charger_c_pwm_debug = 0;   // holds last commanded PWM for Charger C
+
 
 static int consumption_matrix [24] = {0};
 static int export_matrix[24] = {0};
@@ -293,6 +295,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Metering) <br></font>", total_consumption, total_export);
 	hprintf255(request, "<font size=2>- Consumption: <b>%iW</b>, Export: <b>%iW</b> (Net Metering) <br></font>", total_net_consumption, total_net_export);
 	hprintf255(request, "<font size=2>- Hour Estimation: <b>%iW</b> <br></font>", (int)estimated_energy_hour);
+	// --- Charger C debug line ---
+	hprintf255(request, "<font size=2 color=#0099FF>- Charger C PWM: <b>%i%%</b> (AvgEst: %iW, ΔE: %iW) <br></font>",
+    charger_c_pwm_debug, (int)est_avg, (int)(est_avg - last_estimated_energy_hour));
 	
 	//--------------------------------------------------------------------------------------------------
 		//mtqq_total_net_export = net_matrix[check_hour];
@@ -1009,18 +1014,70 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					    dump_load_relay[2] = 0; // Turn off dishwasher. We allow up to 300W from grid / battery to facilitate in poor weather
 					}
 				}
-				/*
-				// Charger C Power calculation
-				// We need a linear mapping from charger_c_new_energy to scaled_power
-				int scaled_power;
-				if (charger_c_new_energy > 50) { scaled_power = 0;} 
-				else if (charger_c_new_energy < -950) {scaled_power = 100;} 
-				else {scaled_power = ((50 - charger_c_new_energy) * 100) / 1000;}
-				
-				// Apply the new scaled value with last_dump_load_relay[5], keeping it within bounds (-50 maps to 0 and 950 maps to 100)
-				dump_load_relay[5] = (uint8_t)((scaled_power + last_dump_load_relay[5]) > 100 ? 100 : ((scaled_power + last_dump_load_relay[5]) < 0 ? 0 : (scaled_power + last_dump_load_relay[5])));
-				// End of Charger C Power calculation
-				*/
+			//---------------------------------------------------------------------------
+			// Charger C Power Calculation (feed-forward + incremental correction)
+			//---------------------------------------------------------------------------
+			
+			// --- constants ---
+			static const int CHARGER_MAX_PWM  = 100;     // cap for PWM
+			static const float DELTA_SCALE    = 0.5f;    // 100 W error ⇒ 5 % PWM change per loop
+			
+			// --- persistent state (across loops) ---
+			static int last_estimated_energy_hour = 0;   // previous hourly estimate
+			static int last_pwm_c = 0;                   // last PWM sent
+			static bool charger_c_initialized = false;   // first-run flag
+			static float est_avg = 0.0f;                 // smoothed estimate
+			
+			// --- global debug variable ---
+			extern int charger_c_pwm_debug;
+			
+			// --- smoothing to prevent flicker ---
+			est_avg = 0.7f * est_avg + 0.3f * estimated_energy_hour;
+			
+			// --- local working var ---
+			int pwm_c = last_pwm_c;
+			
+			// --- 1. First run → feed-forward from current estimate ---
+			if (!charger_c_initialized) {
+			    if (est_avg > SURPLUS_START_W) {
+			        pwm_c = CHARGER_MIN_PWM +
+			                 (int)((est_avg - SURPLUS_START_W) *
+			                 (CHARGER_MAX_PWM - CHARGER_MIN_PWM) /
+			                 (SURPLUS_FULL_W - SURPLUS_START_W));
+			        if (pwm_c > CHARGER_MAX_PWM) pwm_c = CHARGER_MAX_PWM;
+			    } else {
+			        pwm_c = 0;
+			    }
+			    charger_c_initialized = true;
+			}
+			
+			// --- 2. Later runs → incremental correction ---
+			else {
+			    int delta_energy = (int)(est_avg - last_estimated_energy_hour);
+			    int delta_pwm = (int)(-delta_energy * DELTA_SCALE / 10.0f);   // 200 W ⇒ ±10 %
+			    pwm_c += delta_pwm;
+			
+			    if (pwm_c < 0) pwm_c = 0;
+			    if (pwm_c > CHARGER_MAX_PWM) pwm_c = CHARGER_MAX_PWM;
+			
+			    // keep supply alive at minimum duty
+			    if (pwm_c > 0 && pwm_c < CHARGER_MIN_PWM)
+			        pwm_c = CHARGER_MIN_PWM;
+			}
+			
+			// --- 3. Save state for next loop ---
+			last_estimated_energy_hour = (int)est_avg;
+			last_pwm_c = pwm_c;
+			
+			// --- 4. Apply to relay + send to charger ---
+			dump_load_relay[5] = pwm_c;
+			charger_c_pwm_debug = pwm_c;
+			
+			sprintf(output_command, "Dimmer %d", pwm_c);
+			WebQuery(dump_load_relay_ip[5], output_command);
+			
+			//---------------------------------------------------------------------------
+			// End of Charger C Power Calculation
 				for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
 				{
 					
