@@ -1,15 +1,18 @@
 // Internal code ONLY
 
+
+
 // Charger C mapping constants
-#define CHARGER_MIN_PWM   10     // lowest useful duty for the supply
-#define SURPLUS_START_W   100    // start charging only when >=100W expected
-#define SURPLUS_FULL_W    1000   // 1000W maps to 100% PWM
-int charger_c_pwm_debug = 0;   // holds last commanded PWM for Charger C
+#define CHARGER_MIN_PWM   10     	// lowest useful duty for the supply
+#define CHARGER_MAX_PWM  100
+#define SURPLUS_START_W   100   	 // start charging only when >=100W expected
+#define SURPLUS_FULL_W    1000   	// 1000W maps to 100% PWM
+int charger_c_pwm_debug = 0;  		 // holds last commanded PWM for Charger C
 float est_avg = 0.0f;                 // smoothed estimate
 int last_estimated_energy_hour = 0;   // previous averaged estimate
 int last_pwm_c = 0;                   // last PWM value sent
-bool charger_c_initialized = false;   // flag for first run
-#define CHARGER_MAX_PWM  100
+int charger_c_initialized = 0;		   // flag for first run
+
 #define DELTA_SCALE      0.5f
 
 
@@ -1025,19 +1028,6 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			// Charger C Power Calculation (feed-forward + incremental correction)
 			//---------------------------------------------------------------------------
 			
-			// --- constants ---
-			//static const int CHARGER_MAX_PWM  = 100;     // cap for PWM
-			//static const float DELTA_SCALE    = 0.5f;    // 100 W error ⇒ 5 % PWM change per loop
-			
-			// --- persistent state (across loops) ---
-			//static int last_estimated_energy_hour = 0;   // previous hourly estimate
-			//static int last_pwm_c = 0;                   // last PWM sent
-			//static bool charger_c_initialized = false;   // first-run flag
-			
-			
-			// --- global debug variable ---
-			//extern int charger_c_pwm_debug;
-			
 			// --- smoothing to prevent flicker ---
 			est_avg = 0.7f * est_avg + 0.3f * estimated_energy_hour;
 			
@@ -1055,7 +1045,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    } else {
 			        pwm_c = 0;
 			    }
-			    charger_c_initialized = true;
+			    charger_c_initialized = 1;
 			}
 			
 			// --- 2. Later runs → incremental correction ---
