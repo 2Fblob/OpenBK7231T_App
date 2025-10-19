@@ -1075,7 +1075,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			
 			char output_command[50];
 			sprintf(output_command, "Dimmer %d", pwm_c);
-			WebQuery(dump_load_relay_ip[5], output_command);
+			CMD_ExecuteCommand(dump_load_relay_ip[5], output_command);
 
 			
 			//---------------------------------------------------------------------------
