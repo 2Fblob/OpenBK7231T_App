@@ -970,7 +970,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 				{
 					if (current_minute < 30)
 					{
-						net_energy_equivalent = ((float)(net_energy*(60/current_minute)));					
+						net_energy_equivalent = (int)((float)net_energy * (60.0f / (float)current_minute));				
 					}
 					else 
 					{
@@ -1080,8 +1080,10 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			dump_load_relay[5] = pwm_c;
 			charger_c_pwm_debug = pwm_c;
 			
+			char output_command[50];
 			sprintf(output_command, "Dimmer %d", pwm_c);
 			WebQuery(dump_load_relay_ip[5], output_command);
+
 			
 			//---------------------------------------------------------------------------
 			// End of Charger C Power Calculation
