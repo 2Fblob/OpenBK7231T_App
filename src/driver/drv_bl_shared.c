@@ -1,5 +1,8 @@
 // Internal code ONLY
 
+#include <stdlib.h>   // atof, abs
+#include <stdio.h>    // snprintf
+#include <string.h>   // memset, strlen
 
 
 // Charger C mapping constants
@@ -152,13 +155,13 @@ float lastReadingFrequency = NAN;
 
 portTickType energyCounterStamp;
 
-bool energyCounterStatsEnable = false;
+int energyCounterStatsEnable = 0;
 int energyCounterSampleCount = 60;
 int energyCounterSampleInterval = 60;
 float *energyCounterMinutes = NULL;
 portTickType energyCounterMinutesStamp;
 long energyCounterMinutesIndex;
-bool energyCounterStatsJSONEnable = false;
+int energyCounterStatsJSONEnable = 0;
 
 int actual_mday = -1;
 float lastSavedEnergyCounterValue = 0.0f;
@@ -319,7 +322,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		//hprintf255(request, "<font size=1>Last sync at minute: %dmin. Boosting from %dh to %dh<br> Relay Thresholds: On: %d Wh, Off: %dWh<br> Instant Power: %dW, Consumption: %dW, Generation: %dW <br></font>", 
 		//	lastsync, bypass_on_time, bypass_off_time, dump_load_on, dump_load_off, (int)sensors[OBK_POWER].lastReading, (int)sensors[OBK_CONSUMPTION_TOTAL].lastReading, (int)real_export);
 		// -------------------------------------------------------------------------------------------------------------------
-		// This was the original loop 'energyCounterStatsEnable == true'
+		// This was the original loop 'energyCounterStatsEnable == 1'
 		/********************************************************************************************************************/
 	//------------------------------------------------------------------------------------------------------------------------------------------
 	}
@@ -347,7 +350,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	hprintf255(request, "</h5>");*/
 	}
 	/********************************************************************************************************************/
-    	if (energyCounterStatsEnable == true)
+    	if (energyCounterStatsEnable == 1)
 	{	
     	
        		//hprintf255(request,"<hr><h2>Periodic Statistics</h2>");
@@ -443,7 +446,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	            if ((i%20)!=0)
 	                hprintf255(request, "<br>");
 	            hprintf255(request, "History Index: %ld<hr><br>JSON Stats: %s <br>", energyCounterMinutesIndex,
-	                    (energyCounterStatsJSONEnable == true) ? "enabled" : "disabled");
+	                    (energyCounterStatsJSONEnable == 1) ? "1" : "0");
 	        }
 	        hprintf255(request, "</h5>");
 	    } 
@@ -483,7 +486,7 @@ commandResult_t BL09XX_ResetEnergyCounter(const void *context, const char *cmd, 
         sensors[OBK_GENERATION_TOTAL].lastReading = 0.0;
 	sensors[OBK_CONSUMPTION_TOTAL].lastReading = 0.0;
         energyCounterStamp = xTaskGetTickCount();
-        if (energyCounterStatsEnable == true)
+        if (energyCounterStatsEnable == 1)
         {
             if (energyCounterMinutes != NULL)
             {
@@ -560,7 +563,7 @@ commandResult_t BL09XX_SetupEnergyStatistic(const void *context, const char *cmd
     {
         addLogAdv(LOG_INFO, LOG_FEATURE_ENERGYMETER, "Consumption History enabled");
         /* Enable function */
-        energyCounterStatsEnable = true;
+        energyCounterStatsEnable = 1;
         if (energyCounterSampleCount != sample_count)
         {
             /* upgrade sample count, free memory */
@@ -594,7 +597,7 @@ commandResult_t BL09XX_SetupEnergyStatistic(const void *context, const char *cmd
     } else {
         /* Disable Consimption Nistory */
         addLogAdv(LOG_INFO, LOG_FEATURE_ENERGYMETER, "Consumption History disabled");
-        energyCounterStatsEnable = false;
+        energyCounterStatsEnable = 0;
         if (energyCounterMinutes != NULL)
         {
             os_free(energyCounterMinutes);
@@ -604,7 +607,7 @@ commandResult_t BL09XX_SetupEnergyStatistic(const void *context, const char *cmd
         energyCounterSampleInterval = sample_time;
     }
 
-    energyCounterStatsJSONEnable = (json_enable != 0) ? true : false; 
+    energyCounterStatsJSONEnable = (json_enable != 0) ? 1 : 0; 
 
     return CMD_RES_OK;
 }
@@ -1249,7 +1252,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
         }
     }
 
-    if (energyCounterStatsEnable == true)
+    if (energyCounterStatsEnable == 1)
     {
         interval = energyCounterSampleInterval;
         interval *= (1000 / portTICK_PERIOD_MS); 
@@ -1261,7 +1264,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading  += energyCounterMinutes[i];
 				}
 			}
-            if ((energyCounterStatsJSONEnable == true) && (MQTT_IsReady() == true))
+            if ((energyCounterStatsJSONEnable == 1) && (MQTT_IsReady() == 1))
             {
                 root = cJSON_CreateObject();
                 cJSON_AddNumberToObject(root, "uptime", g_secondsElapsed);
@@ -1472,7 +1475,7 @@ void BL_Shared_Init(void)
     }
     energyCounterStamp = xTaskGetTickCount(); 
 
-    if (energyCounterStatsEnable == true)
+    if (energyCounterStatsEnable == 1)
     {
         if (energyCounterMinutes == NULL)
         {
