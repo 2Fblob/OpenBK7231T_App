@@ -923,45 +923,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			    // (Replace with your PV-based forecast if you have one.)
 			    estimated_energy_hour = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate) / 60;
 
-
-				//-----------------
-				// New scalled power (OCT '25)
-				//---------------------------------------------------------------------------
-				// Charger C / Inverter unified PWM (0..100)
-				//  - Import  (net_energy > 0):   0..5   (10 W per step, capped at 5)
-				//  - Export  (net_energy <= -50): 10..100 from net_energy_equivalent (W/10)
-				//  - Export but buffer not met (>-50): 0
-				//  - Never emit 6..9 (reserved)
-				//---------------------------------------------------------------------------
-				int pwm = 0;
-				
-				if (net_energy > 0) {
-				    // Import side → inverter hint 0..5 (10 W per step)
-				    int steps = (int)(net_energy / 10);
-				    if (steps < 0)  steps = 0;
-				    if (steps > 5)  steps = 5;
-				    pwm = steps;                 // 0..5
-				} else if (net_energy <= -50) {
-				    // Export side and buffer met → charger PWM 10..100
-				    int projW = -net_energy_equivalent;       // make positive
-				    if (projW < 0) projW = 0;                 // safety
-				    int p = projW / 10;                       // 1 step per 10 W
-				    if (p < 10)  p = 10;                      // floor to charger domain
-				    if (p > 100) p = 100;                     // cap at 100
-				    pwm = p;                                  // 10..100
-				} else {
-				    // Export but buffer not met yet
-				    pwm = 0;
-				}
-				
-				// Never output 6..9 (reserved)
-				if (pwm > 5 && pwm < 10) pwm = 10;
-				
-				// Apply
-				dump_load_relay[5] = pwm;
-				charger_c_pwm_debug = pwm;    // for your web debug line
-				//-----------------
-				// **Check Time Condition**
+								// **Check Time Condition**
 				// New logic to estimate energy. We multiply the available power after t = 30minutes 
 				// to accomodate for the shorter timespam available to cunsume the energy
 				if (current_minute > 0)
@@ -979,7 +941,7 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 						}
 					}
 				}
-				if (check_time > 14)
+				if (check_time > 10)
 				{
 												
 					// The chargers wait for the first 15 minutes for power to accumulate. During this time the previous state is maintained.
@@ -1019,57 +981,50 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 					    dump_load_relay[2] = 0; // Turn off dishwasher. We allow up to 300W from grid / battery to facilitate in poor weather
 					}
 				}
+				
+				//-----------------
+				// New scalled power (OCT '25)
+				//---------------------------------------------------------------------------
+				// Charger C / Inverter unified PWM (0..100)
+				//  - Import  (net_energy > 0):   0..5   (10 W per step, capped at 5)
+				//  - Export  (net_energy <= -50): 10..100 from net_energy_equivalent (W/10)
+				//  - Export but buffer not met (>-50): 0
+				//  - Never emit 6..9 (reserved)
+				//---------------------------------------------------------------------------
+				int pwm = 0;
+				
+				if (net_energy > 0) {
+				    // Import side → inverter hint 0..5 (10 W per step)
+				    int steps = (int)(net_energy / 10);
+				    if (steps < 0)  steps = 0;
+				    if (steps > 5)  steps = 5;
+				    pwm = steps;                 // 0..5
+				} else if (net_energy <= -50) {
+				    // Export side and buffer met → charger PWM 10..100
+				    int projW = -net_energy_equivalent;       // make positive
+				    if (projW < 0) projW = 0;                 // safety
+				    int p = projW / 10;                       // 1 step per 10 W
+				    if (p < 10)  p = 10;                      // floor to charger domain
+				    if (p > 100) p = 100;                     // cap at 100
+				    pwm = p;                                  // 10..100
+				} else {
+				    // Export but buffer not met yet
+				    pwm = 0;
+				}
+				
+				// Never output 6..9 (reserved)
+				if (pwm > 5 && pwm < 10) pwm = 10;
+				
+				// Apply
+				dump_load_relay[5] = pwm;
+				charger_c_pwm_debug = pwm;    // for your web debug line
+				//-----------------
+
 			//---------------------------------------------------------------------------
-			// Charger C Power Calculation (feed-forward + incremental correction)
-			//---------------------------------------------------------------------------
-			
-			// --- smoothing to prevent flicker ---
-			//est_avg = 0.7f * est_avg + 0.3f * estimated_energy_hour;
-			est_avg = 0.7f * est_avg + 0.3f * net_energy_equivalent;
-			
-			// --- local working var ---
-			int pwm_c = last_pwm_c;
-			
-			// --- 1. First run → feed-forward from current estimate ---
-			if (!charger_c_initialized) {
-			    if (est_avg > SURPLUS_START_W) {
-			        pwm_c = CHARGER_MIN_PWM +
-			                 (int)((est_avg - SURPLUS_START_W) *
-			                 (CHARGER_MAX_PWM - CHARGER_MIN_PWM) /
-			                 (SURPLUS_FULL_W - SURPLUS_START_W));
-			        if (pwm_c > CHARGER_MAX_PWM) pwm_c = CHARGER_MAX_PWM;
-			    } else {
-			        pwm_c = 0;
-			    }
-			    charger_c_initialized = 1;
-			}
-			
-			// --- 2. Later runs → incremental correction ---
-			else {
-			    int delta_energy = (int)(est_avg - last_estimated_energy_hour);
-			    int delta_pwm = (int)(-delta_energy * DELTA_SCALE / 10.0f);   // 200 W ⇒ ±10 %
-			    pwm_c += delta_pwm;
-			
-			    if (pwm_c < 0) pwm_c = 0;
-			    if (pwm_c > CHARGER_MAX_PWM) pwm_c = CHARGER_MAX_PWM;
-			
-			    // keep supply alive at minimum duty
-			    if (pwm_c > 0 && pwm_c < CHARGER_MIN_PWM)
-			        pwm_c = CHARGER_MIN_PWM;
-			}
-			
-			// --- 3. Save state for next loop ---
-			last_estimated_energy_hour = (int)est_avg;
-			last_pwm_c = pwm_c;
-			
-			// --- 4. Apply to relay + send to charger ---
-			dump_load_relay[5] = pwm_c;
-			charger_c_pwm_debug = pwm_c;
 			
 			//char output_command[50];
 			//sprintf(output_command, "Dimmer %d", pwm_c);
 			//CMD_ExecuteCommand(dump_load_relay_ip[5], output_command);
-
 			
 			//---------------------------------------------------------------------------
 			// End of Charger C Power Calculation
