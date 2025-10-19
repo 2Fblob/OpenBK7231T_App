@@ -1032,7 +1032,8 @@ void BL_ProcessUpdate(float voltage, float current, float power,
 			//---------------------------------------------------------------------------
 			
 			// --- smoothing to prevent flicker ---
-			est_avg = 0.7f * est_avg + 0.3f * estimated_energy_hour;
+			//est_avg = 0.7f * est_avg + 0.3f * estimated_energy_hour;
+			est_avg = 0.7f * est_avg + 0.3f * net_energy_equivalent;
 			
 			// --- local working var ---
 			int pwm_c = last_pwm_c;
