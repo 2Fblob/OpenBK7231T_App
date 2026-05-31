@@ -150,7 +150,11 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     else if(DRV_IsRunning("RN8209")) { mode = "RN8209"; } 
     else { mode = "PWR"; }
 
-    poststr(request, "<hr><table style='width:100%'>");
+    // Start Master Two-Column Table
+    poststr(request, "<hr><table style='width:100%; vertical-align: top;'><tr><td style='width:50%; vertical-align: top;'>");
+    
+    // Left Column: Sensor Table
+    poststr(request, "<table style='width:100%'>");
 
 	for (int i = (OBK__FIRST); i <= (OBK_CONSUMPTION__DAILY_LAST); i++) {
 		if (i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))){i++;}
@@ -172,11 +176,45 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	poststr(request, "</table>");
 	hprintf255(request, "<font size=1>Saving Interval: %.2fW</font>", changeSavedThresholdEnergy);
 
+    // Switch to Right Column: System Status
+    poststr(request, "</td><td style='width:50%; vertical-align: top; padding-left: 20px;'>");
+
+    if (energyCounterStatsEnable == true)
+	{	
+		poststr(request,"<h4>Current system status:</h4>");
+		hprintf255(request,"<font size=2>- Storage Inverter: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[0], dump_load_relay_timer[0]); 
+		hprintf255(request,"<font size=2>- Storage Charger A: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[1], dump_load_relay_timer[1]); 
+		hprintf255(request,"<font size=2>- Storage Charger B: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[3], dump_load_relay_timer[2]); 
+		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
+		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
+
+		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
+		
+		if (net_energy_equivalent < 0)
+		{
+		    hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
+		}
+
+        hprintf255(request,"<font size=2>- 15-Min Estimation: <b>%i Wh</b><br></font>", estimated_energy_period);
+        hprintf255(request,"<font size=2 color=#0099FF>- Charger C PWM: <b>%i%%</b><br><br></font>", dump_load_relay[5]);
+	
+        int minutes_since_last_interval = minutes_since_midnight % net_metering_period;
+        int minutes_till_next_interval = 15-minutes_since_last_interval;
+		
+        // Cleaned up NetMetering stats
+        hprintf255(request,"<b>NetMetering (Last %d min out of %d): %.3f Wh</b><br><br>", minutes_since_last_interval , net_metering_period, net_energy); 
+        hprintf255(request,"<b>%d min to next cycle</b>", minutes_till_next_interval); 
+    }
+
+    // Close Master Table
+    poststr(request, "</td></tr></table>");
+
+    // Full-Width Bottom Section: Matrix Table
 	if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
 	{
+        poststr(request, "<br><h2>Energy Stats (Last 6 Hours)</h2>");
         poststr(request, "<table style='width:100%; text-align: center;'>");
-        poststr(request, "<h2>Energy Stats (Last 6 Hours)</h2>");
-        poststr(request, "<tr><th>Time </th><th>Import </th><th>Export </th><th>Net </th></tr><hr>");
+        poststr(request, "<tr><th style='text-align: left;'>Time </th><th>Import </th><th>Export </th><th>Net </th></tr><hr>");
 
         if (NTP_IsTimeSynced()) {
             minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
@@ -205,38 +243,20 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
                     int disp_exp = export_matrix[buffer_index] + (int)real_export;
                     int disp_net = net_matrix[buffer_index] + (int)(real_consumption - real_export);
                     
-                    hprintf255(request, "<tr><td> %s%02i:%02i%s </td><td> %s%dW%s </td><td> %s%dW%s </td><td> %s%dW%s </td></tr>", 
+                    hprintf255(request, "<tr><td style='text-align: left;'> %s%02i:%02i%s </td><td> %s%dW%s </td><td> %s%dW%s </td><td> %s%dW%s </td></tr>", 
                                start_tag, hour, minute, end_tag, start_tag, disp_cons, end_tag, start_tag, disp_exp, end_tag, start_tag, disp_net, end_tag);
                 } else {
                     // History Rows: Show time and net only
                     int disp_net = net_matrix[buffer_index];
-                    hprintf255(request, "<tr><td> %02i:%02i </td><td> - </td><td> - </td><td> %dW </td></tr>", 
+                    hprintf255(request, "<tr><td style='text-align: left;'> %02i:%02i </td><td> - </td><td> - </td><td> %dW </td></tr>", 
                                hour, minute, disp_net);
                 }
             }
         }
         poststr(request, "</table>");
 	}
-
-    if (energyCounterStatsEnable == true)
-	{	
-		poststr(request," <hr> <h4>Current system status: </h4></font>");
-
-		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
-		
-		if (net_energy_equivalent < 0)
-		{
-		    hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
-		}
-
-        hprintf255(request,"<font size=2>- 15-Min Estimation: <b>%i Wh</b><br></font>", estimated_energy_period);
-        hprintf255(request,"<font size=2 color=#0099FF>- Charger C PWM: <b>%i%%</b><br></font>", dump_load_relay[5]);
-	
-        int minutes_since_last_interval = minutes_since_midnight % net_metering_period;
-        int minutes_till_next_interval = 15-minutes_since_last_interval;
-		hprintf255(request,"<h5>NetMetering (Last %d min out of %d): %.3f Wh with %d min to next cycle </h5><hr>", minutes_since_last_interval , net_metering_period, net_energy, minutes_till_next_interval); 
-    }	
 }
+
 
 void BL09XX_SaveEmeteringStatistics()
 {
