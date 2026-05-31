@@ -221,11 +221,6 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     if (energyCounterStatsEnable == true)
 	{	
 		poststr(request," <hr> <h4>Current system status: </h4></font>");
-		hprintf255(request,"<font size=2>- Storage Inverter: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[0], dump_load_relay_timer[0]); 
-		hprintf255(request,"<font size=2>- Storage Charger A: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[1], dump_load_relay_timer[1]); 
-		hprintf255(request,"<font size=2>- Storage Charger B: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[3], dump_load_relay_timer[2]); 
-		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
-		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 
 		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
 		
@@ -656,7 +651,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
 			       last_dump_load_relay[output_index] = dump_load_relay[output_index];
 			
 			       char output_command[64] = "";
-			       const char *ip_start = "SendGet http://192.168.5.";
+			       const char *ip_start = "SendGet http://192.168.8.";
 			       const char *ip_middle = "/cm?cmnd=Power%20"; 
 
 			       if (dump_load_relay_ip[output_index] == charger_c_ip) 
