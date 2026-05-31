@@ -150,35 +150,42 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     else if(DRV_IsRunning("RN8209")) { mode = "RN8209"; } 
     else { mode = "PWR"; }
 
-   // ====================================================================
+    // ====================================================================
     // UI DASHBOARD & CSS
     // ====================================================================
     poststr(request, "<style>");
+    // Pull dashboard to top
     poststr(request, "#state { display: flex; flex-direction: column; }");
     poststr(request, "#my-dash { order: -1; width: 100%; }"); 
     
+    // Top Horizontal Table
     poststr(request, ".my-tbl { width:100%; text-align:center; font-size:16px; margin:10px 0; table-layout:fixed; }");
     poststr(request, ".my-tbl th { color:#aaa; font-weight:normal; padding-bottom:5px; border-bottom:1px solid #444; }");
     poststr(request, ".my-tbl td { padding-top:10px; padding-bottom:10px; }");
     
-    poststr(request, ".dash-row { display:flex; justify-content:space-between; flex-wrap:wrap; margin-top:20px; text-align:left; gap:20px;}");
+    // Middle Layout
+    poststr(request, ".dash-row { display:flex; flex-wrap:nowrap; gap:20px; margin-top:20px; }");
     
-    // Graph CSS: Exactly 480x201. 32 bars * 15px = 480px.
-    poststr(request, ".g-wrap { display:flex; height:201px; width:480px; background:#222; border-radius:4px; font-family:sans-serif; margin-top:10px; overflow:hidden;}");
-    poststr(request, ".g-b { width:15px; height:100%; display:flex; flex-direction:column; }");
+    // Bulletproof Graph CSS (300px total height. 90px top / 210px bottom)
+    poststr(request, ".g-wrap { display:flex; height:300px; width:100%; background:#222; border-radius:4px; margin-top:10px; overflow:hidden; }");
+    poststr(request, ".g-b { flex:1; display:flex; flex-direction:column; }");
+    poststr(request, ".g-top { height:90px; border-bottom:1px solid #999; box-sizing:border-box; display:flex; flex-direction:column; justify-content:flex-end; }");
+    poststr(request, ".g-bot { height:210px; display:flex; flex-direction:column; justify-content:flex-start; }");
     
-    // The perfect 1px zero line is created safely by a bottom border on the top half
-    poststr(request, ".g-top { height:61px; position:relative; border-bottom:1px solid #999; box-sizing:border-box; }");
-    poststr(request, ".g-bot { height:140px; position:relative; }");
+    // Colored Bars
+    poststr(request, ".bar-up { width:100%; background:#2ecc71; display:flex; justify-content:center; align-items:flex-start; overflow:hidden; }");
+    poststr(request, ".bar-dn { width:100%; background:#e74c3c; display:flex; justify-content:center; align-items:flex-end; overflow:hidden; }");
     
-    // Overflow:hidden stops the text from breaking the bar widths
-    poststr(request, ".g-up { position:absolute; bottom:0; width:100%; background:#2ecc71; overflow:hidden; display:flex; align-items:flex-end; justify-content:center; }");
-    poststr(request, ".g-dn { position:absolute; top:0; width:100%; background:#e74c3c; overflow:hidden; display:flex; align-items:flex-start; justify-content:center; }");
-    poststr(request, ".b-txt { color:#fff; font-size:9px; font-weight:bold; writing-mode:vertical-rl; transform:rotate(180deg); padding:2px 0; }");
+    // Vertical Text
+    poststr(request, ".b-txt { color:#fff; font-size:10px; font-weight:bold; writing-mode:vertical-rl; transform:rotate(180deg); padding:3px 0; }");
+    
+    // Detailed Sensors Table (Prevents text wrapping)
+    poststr(request, ".sens-tbl { width:100%; text-align:left; font-size:14px; line-height:1.8; white-space:nowrap; }");
+    poststr(request, ".sens-tbl td { border-bottom:1px solid #333; }");
     poststr(request, "</style>");
     
-    poststr(request, "<div id='my-dash'>"); // Open Dashboard Wrapper
-  
+    poststr(request, "<div id='my-dash'>"); // Open Dashboard
+
     // ====================================================================
     // 1. HORIZONTAL DASHBOARD (Top Row)
     // ====================================================================
@@ -193,16 +200,16 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
         int current_interval_of_day = minutes_since_midnight / net_metering_period;
         
-poststr(request, "<div class='dash-row'>");
+        poststr(request, "<div class='dash-row'>");
 
         // ====================================================================
-        // 2. THE 480x201 BAR GRAPH (LAST 8 HOURS / 32 BARS) - Left Column
+        // 2. THE 300px BAR GRAPH (LAST 8 HOURS / 32 BARS) - Left Column
         // ====================================================================
-        poststr(request, "<div style='flex:0 0 480px;'>");
+        poststr(request, "<div style='flex:1; min-width:0;'>"); // min-width:0 allows flexbox to shrink safely
         poststr(request, "<h2 style='font-size:18px; margin:0;'>Energy Stats (Last 8 Hours)</h2>");
         poststr(request, "<div class='g-wrap'>");
-
-        // Draw 32 vertical slots (15px each = 480px total)
+        
+        // Draw 32 vertical slots
         for (int i = 31; i >= 0; i--) {
             int interval_of_day = current_interval_of_day - i;
             if (interval_of_day < 0) { interval_of_day += 96; } 
@@ -214,17 +221,17 @@ poststr(request, "<div class='dash-row'>");
             poststr(request, "<div class='g-b'>");
             
             if (v < 0) {
-                // Export (Green, grows UP). Math: (value * 60px max) / 300W scale
-                int h = (abs(v) * 60) / 300;
-                if (h > 60) h = 60;
+                // Export (Green, UP). Scale: 90px max / 300W
+                int h = (abs(v) * 90) / 300;
+                if (h > 90) h = 90;
                 if (h < 1) h = 1;
-                hprintf255(request, "<div class='g-top'><div class='g-up' style='height:%dpx;'><span class='b-txt'>%d</span></div></div><div class='g-bot'></div>", h, abs(v));
+                hprintf255(request, "<div class='g-top'><div class='bar-up' style='height:%dpx;'><span class='b-txt'>%d</span></div></div><div class='g-bot'></div>", h, abs(v));
             } else if (v > 0) {
-                // Import (Red, grows DOWN). Math: (value * 140px max) / 700W scale
-                int h = (v * 140) / 700;
-                if (h > 140) h = 140;
+                // Import (Red, DOWN). Scale: 210px max / 700W
+                int h = (v * 210) / 700;
+                if (h > 210) h = 210;
                 if (h < 1) h = 1;
-                hprintf255(request, "<div class='g-top'></div><div class='g-bot'><div class='g-dn' style='height:%dpx;'><span class='b-txt'>%d</span></div></div>", h, v);
+                hprintf255(request, "<div class='g-top'></div><div class='g-bot'><div class='bar-dn' style='height:%dpx;'><span class='b-txt'>%d</span></div></div>", h, v);
             } else {
                 // Zero
                 poststr(request, "<div class='g-top'></div><div class='g-bot'></div>");
@@ -236,9 +243,9 @@ poststr(request, "<div class='dash-row'>");
         // ====================================================================
         // 3. DETAILED SENSORS - Right Column
         // ====================================================================
-        poststr(request, "<div style='flex:1; min-width:250px;'>");
+        poststr(request, "<div style='width:260px; flex-shrink:0;'>"); // Fixed width, won't squish
         poststr(request, "<h3 style='font-size:16px; margin:0 0 10px 0;'>Detailed Sensor Data</h3>");
-        poststr(request, "<table style='width:100%; text-align:left; font-size:14px; line-height:1.5;'>");
+        poststr(request, "<table class='sens-tbl'>");
 
         for (int i = (OBK__FIRST); i <= (OBK_CONSUMPTION__DAILY_LAST); i++) {
             if (i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))){i++;}
@@ -246,9 +253,9 @@ poststr(request, "<div class='dash-row'>");
                 
                 if (i == OBK_VOLTAGE || i == OBK_POWER) continue; // Skip redundant items
 
-                poststr(request, "<tr><td style='border-bottom:1px solid #333;'><b>");
+                poststr(request, "<tr><td><b>");
                 poststr(request, sensors[i].names.name_friendly);
-                poststr(request, "</b></td><td style='text-align:right; border-bottom:1px solid #333;'>");
+                poststr(request, "</b></td><td style='text-align:right;'>");
                 
                 if ((i == OBK_CONSUMPTION_TOTAL) || (i == OBK_GENERATION_TOTAL)) {
                     hprintf255(request, "%.*f kWh</td></tr>", sensors[i].rounding_decimals, (0.001*sensors[i].lastReading));
