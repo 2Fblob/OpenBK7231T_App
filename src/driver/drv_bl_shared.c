@@ -150,11 +150,10 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     else if(DRV_IsRunning("RN8209")) { mode = "RN8209"; } 
     else { mode = "PWR"; }
 
-    // ====================================================================
+   // ====================================================================
     // UI DASHBOARD & CSS
     // ====================================================================
     poststr(request, "<style>");
-    // Pure CSS Flexbox trick to pull the custom dashboard above the OpenBeken default toggles natively
     poststr(request, "#state { display: flex; flex-direction: column; }");
     poststr(request, "#my-dash { order: -1; width: 100%; }"); 
     
@@ -162,23 +161,24 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, ".my-tbl th { color:#aaa; font-weight:normal; padding-bottom:5px; border-bottom:1px solid #444; }");
     poststr(request, ".my-tbl td { padding-top:10px; padding-bottom:10px; }");
     
-    // Graph CSS Setup (300px total height, zero line at 90px)
     poststr(request, ".dash-row { display:flex; justify-content:space-between; flex-wrap:wrap; margin-top:20px; text-align:left; gap:20px;}");
-    poststr(request, ".g-wrap { display:flex; height:300px; width:100%; font-family:sans-serif; margin-top:10px; }");
-    poststr(request, ".g-y { position:relative; width:45px; font-size:10px; color:#aaa; text-align:right; padding-right:8px; }");
-    poststr(request, ".g-box { flex-grow:1; display:flex; position:relative; background:#222; border-radius:4px; border-bottom:1px solid #444; }");
-    poststr(request, ".g-line { position:absolute; top:90px; width:100%; height:1px; background:#999; z-index:5; }"); // 1px line
-    poststr(request, ".g-b { width:3.125%; height:100%; position:relative; border-right:1px solid #333; box-sizing:border-box; }");
     
-    // Export (Grows UPwards from 90px mark, Max 90px height)
-    poststr(request, ".g-up { position:absolute; bottom:210px; width:100%; background:#2ecc71; display:flex; align-items:center; justify-content:center; border-radius:2px 2px 0 0; }");
-    // Import (Grows DOWNwards from 90px mark, Max 210px height)
-    poststr(request, ".g-dn { position:absolute; top:90px; width:100%; background:#e74c3c; display:flex; align-items:center; justify-content:center; border-radius:0 0 2px 2px; }");
-    poststr(request, ".b-txt { color:#fff; font-size:10px; font-weight:bold; writing-mode:vertical-rl; transform:rotate(180deg); padding:2px; }");
+    // Graph CSS: Exactly 480x201. 32 bars * 15px = 480px.
+    poststr(request, ".g-wrap { display:flex; height:201px; width:480px; background:#222; border-radius:4px; font-family:sans-serif; margin-top:10px; overflow:hidden;}");
+    poststr(request, ".g-b { width:15px; height:100%; display:flex; flex-direction:column; }");
+    
+    // The perfect 1px zero line is created safely by a bottom border on the top half
+    poststr(request, ".g-top { height:61px; position:relative; border-bottom:1px solid #999; box-sizing:border-box; }");
+    poststr(request, ".g-bot { height:140px; position:relative; }");
+    
+    // Overflow:hidden stops the text from breaking the bar widths
+    poststr(request, ".g-up { position:absolute; bottom:0; width:100%; background:#2ecc71; overflow:hidden; display:flex; align-items:flex-end; justify-content:center; }");
+    poststr(request, ".g-dn { position:absolute; top:0; width:100%; background:#e74c3c; overflow:hidden; display:flex; align-items:flex-start; justify-content:center; }");
+    poststr(request, ".b-txt { color:#fff; font-size:9px; font-weight:bold; writing-mode:vertical-rl; transform:rotate(180deg); padding:2px 0; }");
     poststr(request, "</style>");
     
     poststr(request, "<div id='my-dash'>"); // Open Dashboard Wrapper
-
+  
     // ====================================================================
     // 1. HORIZONTAL DASHBOARD (Top Row)
     // ====================================================================
@@ -193,26 +193,16 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
         int current_interval_of_day = minutes_since_midnight / net_metering_period;
         
-        poststr(request, "<div class='dash-row'>");
+poststr(request, "<div class='dash-row'>");
 
         // ====================================================================
-        // 2. THE 300px BAR GRAPH (LAST 8 HOURS / 32 BARS) - Left Column
+        // 2. THE 480x201 BAR GRAPH (LAST 8 HOURS / 32 BARS) - Left Column
         // ====================================================================
-        poststr(request, "<div style='flex:2; min-width:350px;'>");
+        poststr(request, "<div style='flex:0 0 480px;'>");
         poststr(request, "<h2 style='font-size:18px; margin:0;'>Energy Stats (Last 8 Hours)</h2>");
         poststr(request, "<div class='g-wrap'>");
-        
-        // Y-Axis Scale
-        poststr(request, "<div class='g-y'>");
-        poststr(request, "<span style='position:absolute; top:0; right:8px;'>-300W</span>");
-        poststr(request, "<span style='position:absolute; top:85px; right:8px;'>0W</span>");
-        poststr(request, "<span style='position:absolute; bottom:0; right:8px;'>+700W</span>");
-        poststr(request, "</div>");
-        
-        // Graph Canvas
-        poststr(request, "<div class='g-box'><div class='g-line'></div>");
 
-        // Draw 32 vertical slots (8 Hours)
+        // Draw 32 vertical slots (15px each = 480px total)
         for (int i = 31; i >= 0; i--) {
             int interval_of_day = current_interval_of_day - i;
             if (interval_of_day < 0) { interval_of_day += 96; } 
@@ -221,25 +211,27 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             int v = net_matrix[c_index];
             if (i == 0) { v += (int)(real_consumption - real_export); } // Add live
             
+            poststr(request, "<div class='g-b'>");
+            
             if (v < 0) {
-                // Export (Green, grows UP). Math: (value * 90px max) / 300W scale
-                int h = (abs(v) * 90) / 300;
-                if (h > 90) h = 90;
+                // Export (Green, grows UP). Math: (value * 60px max) / 300W scale
+                int h = (abs(v) * 60) / 300;
+                if (h > 60) h = 60;
                 if (h < 1) h = 1;
-                // Consolidated output protects memory buffer
-                hprintf255(request, "<div class='g-b'><div class='g-up' style='height:%dpx;'><span class='b-txt'>%d</span></div></div>", h, abs(v));
+                hprintf255(request, "<div class='g-top'><div class='g-up' style='height:%dpx;'><span class='b-txt'>%d</span></div></div><div class='g-bot'></div>", h, abs(v));
             } else if (v > 0) {
-                // Import (Red, grows DOWN). Math: (value * 210px max) / 700W scale
-                int h = (v * 210) / 700;
-                if (h > 210) h = 210;
+                // Import (Red, grows DOWN). Math: (value * 140px max) / 700W scale
+                int h = (v * 140) / 700;
+                if (h > 140) h = 140;
                 if (h < 1) h = 1;
-                hprintf255(request, "<div class='g-b'><div class='g-dn' style='height:%dpx;'><span class='b-txt'>%d</span></div></div>", h, v);
+                hprintf255(request, "<div class='g-top'></div><div class='g-bot'><div class='g-dn' style='height:%dpx;'><span class='b-txt'>%d</span></div></div>", h, v);
             } else {
                 // Zero
-                poststr(request, "<div class='g-b'></div>");
+                poststr(request, "<div class='g-top'></div><div class='g-bot'></div>");
             }
+            poststr(request, "</div>");
         }
-        poststr(request, "</div></div></div>");
+        poststr(request, "</div></div>");
 
         // ====================================================================
         // 3. DETAILED SENSORS - Right Column
