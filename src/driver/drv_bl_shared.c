@@ -151,36 +151,23 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     else { mode = "PWR"; }
 
     // ====================================================================
-    // UI DASHBOARD & CSS
+    // UI DASHBOARD & MINIMAL CSS
     // ====================================================================
     poststr(request, "<style>");
-    // Pull dashboard to top
+    // Safely pull dashboard to the top
     poststr(request, "#state { display: flex; flex-direction: column; }");
-    poststr(request, "#my-dash { order: -1; width: 100%; }"); 
+    poststr(request, "#my-dash { order: -1; width: 100%; box-sizing: border-box; }"); 
     
     // Top Horizontal Table
-    poststr(request, ".my-tbl { width:100%; text-align:center; font-size:16px; margin:10px 0; table-layout:fixed; }");
+    poststr(request, ".my-tbl { width:100%; text-align:center; font-size:16px; margin:10px 0; table-layout:fixed; border-collapse:collapse; }");
     poststr(request, ".my-tbl th { color:#aaa; font-weight:normal; padding-bottom:5px; border-bottom:1px solid #444; }");
     poststr(request, ".my-tbl td { padding-top:10px; padding-bottom:10px; }");
     
-    // Middle Layout
-    poststr(request, ".dash-row { display:flex; flex-wrap:nowrap; gap:20px; margin-top:20px; }");
+    // Middle Layout (Allows wrapping if screen is too small, otherwise side-by-side)
+    poststr(request, ".dash-row { display:flex; flex-wrap:wrap; gap:20px; margin-top:20px; align-items:flex-start; }");
     
-    // Bulletproof Graph CSS (300px total height. 90px top / 210px bottom)
-    poststr(request, ".g-wrap { display:flex; height:300px; width:100%; background:#222; border-radius:4px; margin-top:10px; overflow:hidden; }");
-    poststr(request, ".g-b { flex:1; display:flex; flex-direction:column; }");
-    poststr(request, ".g-top { height:90px; border-bottom:1px solid #999; box-sizing:border-box; display:flex; flex-direction:column; justify-content:flex-end; }");
-    poststr(request, ".g-bot { height:210px; display:flex; flex-direction:column; justify-content:flex-start; }");
-    
-    // Colored Bars
-    poststr(request, ".bar-up { width:100%; background:#2ecc71; display:flex; justify-content:center; align-items:flex-start; overflow:hidden; }");
-    poststr(request, ".bar-dn { width:100%; background:#e74c3c; display:flex; justify-content:center; align-items:flex-end; overflow:hidden; }");
-    
-    // Vertical Text
-    poststr(request, ".b-txt { color:#fff; font-size:10px; font-weight:bold; writing-mode:vertical-rl; transform:rotate(180deg); padding:3px 0; }");
-    
-    // Detailed Sensors Table (Prevents text wrapping)
-    poststr(request, ".sens-tbl { width:100%; text-align:left; font-size:14px; line-height:1.8; white-space:nowrap; }");
+    // Detailed Sensors Table (Fixed spacing)
+    poststr(request, ".sens-tbl { width:100%; text-align:left; font-size:14px; line-height:1.8; white-space:nowrap; border-collapse:collapse; }");
     poststr(request, ".sens-tbl td { border-bottom:1px solid #333; }");
     poststr(request, "</style>");
     
@@ -203,13 +190,18 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "<div class='dash-row'>");
 
         // ====================================================================
-        // 2. THE 300px BAR GRAPH (LAST 8 HOURS / 32 BARS) - Left Column
+        // 2. THE SVG BAR GRAPH (LAST 8 HOURS / 32 BARS) - Left Column
         // ====================================================================
-        poststr(request, "<div style='flex:1; min-width:0;'>"); // min-width:0 allows flexbox to shrink safely
-        poststr(request, "<h2 style='font-size:18px; margin:0;'>Energy Stats (Last 8 Hours)</h2>");
-        poststr(request, "<div class='g-wrap'>");
+        poststr(request, "<div style='flex:1; min-width:300px; overflow-x:auto;'>"); 
+        poststr(request, "<h2 style='font-size:18px; margin:0 0 10px 0;'>Energy Stats (Last 8 Hours)</h2>");
         
-        // Draw 32 vertical slots
+        // Open the SVG Canvas (480px wide, 300px tall)
+        poststr(request, "<svg width='480' height='300' viewBox='0 0 480 300' style='background:#222; border-radius:4px; font-family:sans-serif;'>");
+        
+        // Draw the precise 1-pixel Zero Line at exactly y=90
+        poststr(request, "<line x1='0' y1='90' x2='480' y2='90' stroke='#999' stroke-width='1' />");
+
+        // Draw 32 vertical slots (15px each = 480px total)
         for (int i = 31; i >= 0; i--) {
             int interval_of_day = current_interval_of_day - i;
             if (interval_of_day < 0) { interval_of_day += 96; } 
@@ -218,32 +210,43 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             int v = net_matrix[c_index];
             if (i == 0) { v += (int)(real_consumption - real_export); } // Add live
             
-            poststr(request, "<div class='g-b'>");
+            // X coordinate (Oldest is left, Newest is right)
+            int x_pos = (31 - i) * 15;
             
             if (v < 0) {
-                // Export (Green, UP). Scale: 90px max / 300W
+                // Export (Green, grows UP). Scale: 90px max / 300W
                 int h = (abs(v) * 90) / 300;
                 if (h > 90) h = 90;
                 if (h < 1) h = 1;
-                hprintf255(request, "<div class='g-top'><div class='bar-up' style='height:%dpx;'><span class='b-txt'>%d</span></div></div><div class='g-bot'></div>", h, abs(v));
+                
+                // Draw Rectangle
+                hprintf255(request, "<rect x='%d' y='%d' width='13' height='%d' fill='#2ecc71' />", x_pos + 1, 90 - h, h);
+                
+                // Draw Vertical Text (Rotated up)
+                if (h > 15) { 
+                    hprintf255(request, "<text x='%d' y='88' fill='#fff' font-size='9' transform='rotate(-90 %d 88)'>%d</text>", x_pos + 10, x_pos + 10, abs(v));
+                }
             } else if (v > 0) {
-                // Import (Red, DOWN). Scale: 210px max / 700W
+                // Import (Red, grows DOWN). Scale: 210px max / 700W
                 int h = (v * 210) / 700;
                 if (h > 210) h = 210;
                 if (h < 1) h = 1;
-                hprintf255(request, "<div class='g-top'></div><div class='g-bot'><div class='bar-dn' style='height:%dpx;'><span class='b-txt'>%d</span></div></div>", h, v);
-            } else {
-                // Zero
-                poststr(request, "<div class='g-top'></div><div class='g-bot'></div>");
+                
+                // Draw Rectangle
+                hprintf255(request, "<rect x='%d' y='90' width='13' height='%d' fill='#e74c3c' />", x_pos + 1, h);
+                
+                // Draw Vertical Text (Rotated down)
+                if (h > 15) {
+                    hprintf255(request, "<text x='%d' y='92' fill='#fff' font-size='9' transform='rotate(90 %d 92)'>%d</text>", x_pos + 4, x_pos + 4, v);
+                }
             }
-            poststr(request, "</div>");
         }
-        poststr(request, "</div></div>");
+        poststr(request, "</svg></div>");
 
         // ====================================================================
         // 3. DETAILED SENSORS - Right Column
         // ====================================================================
-        poststr(request, "<div style='width:260px; flex-shrink:0;'>"); // Fixed width, won't squish
+        poststr(request, "<div style='width:260px; flex-shrink:0;'>"); 
         poststr(request, "<h3 style='font-size:16px; margin:0 0 10px 0;'>Detailed Sensor Data</h3>");
         poststr(request, "<table class='sens-tbl'>");
 
