@@ -8,7 +8,7 @@
 #define CHARGER_MIN_PWM   10      // lowest useful duty for the supply
 #define CHARGER_MAX_PWM  100
 
-// Set to 32 slots (8-hour circular buffer to match the new 8-hour graph)
+// Set to 32 slots (8-hour circular buffer)
 static int consumption_matrix [32] = {0}; 
 static int export_matrix[32] = {0};
 static int net_matrix[32] = {0};
@@ -163,7 +163,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, ".my-tbl th { color:#aaa; font-weight:normal; padding-bottom:5px; border-bottom:1px solid #444; }");
     poststr(request, ".my-tbl td { padding-top:10px; padding-bottom:10px; }");
     
-    // Middle Layout (Allows wrapping if screen is too small, otherwise side-by-side)
+    // Middle Layout
     poststr(request, ".dash-row { display:flex; flex-wrap:wrap; gap:20px; margin-top:20px; align-items:flex-start; }");
     
     // Detailed Sensors Table (Fixed spacing)
@@ -195,11 +195,11 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "<div style='flex:1; min-width:300px; overflow-x:auto;'>"); 
         poststr(request, "<h2 style='font-size:18px; margin:0 0 10px 0;'>Energy Stats (Last 8 Hours)</h2>");
         
-        // Open the SVG Canvas (480px wide, 300px tall)
-        poststr(request, "<svg width='480' height='300' viewBox='0 0 480 300' style='background:#222; border-radius:4px; font-family:sans-serif;'>");
+        // Open the SVG Canvas (480px wide, 250px tall - Transparent Background)
+        poststr(request, "<svg width='480' height='250' viewBox='0 0 480 250' style='font-family:sans-serif;'>");
         
-        // Draw the precise 1-pixel Zero Line at exactly y=90
-        poststr(request, "<line x1='0' y1='90' x2='480' y2='90' stroke='#999' stroke-width='1' />");
+        // Draw the precise 1-pixel Zero Line at exactly y=180
+        poststr(request, "<line x1='0' y1='180' x2='480' y2='180' stroke='#999' stroke-width='1' />");
 
         // Draw 32 vertical slots (15px each = 480px total)
         for (int i = 31; i >= 0; i--) {
@@ -213,32 +213,29 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             // X coordinate (Oldest is left, Newest is right)
             int x_pos = (31 - i) * 15;
             
-            if (v < 0) {
-                // Export (Green, grows UP). Scale: 90px max / 300W
-                int h = (abs(v) * 90) / 300;
-                if (h > 90) h = 90;
+            if (v > 0) {
+                // Import (Red, grows UP). Scale: 150px max / 700W
+                int h = (v * 150) / 700;
+                if (h > 150) h = 150;
                 if (h < 1) h = 1;
                 
-                // Draw Rectangle
-                hprintf255(request, "<rect x='%d' y='%d' width='13' height='%d' fill='#2ecc71' />", x_pos + 1, 90 - h, h);
+                // Draw Rectangle UPWARDS from y=180
+                hprintf255(request, "<rect x='%d' y='%d' width='13' height='%d' fill='#e74c3c' />", x_pos + 1, 180 - h, h);
                 
-                // Draw Vertical Text (Rotated up)
-                if (h > 15) { 
-                    hprintf255(request, "<text x='%d' y='88' fill='#fff' font-size='9' transform='rotate(-90 %d 88)'>%d</text>", x_pos + 10, x_pos + 10, abs(v));
-                }
-            } else if (v > 0) {
-                // Import (Red, grows DOWN). Scale: 210px max / 700W
-                int h = (v * 210) / 700;
-                if (h > 210) h = 210;
+                // Draw Vertical Text ABOVE the bar
+                hprintf255(request, "<text x='%d' y='%d' fill='#fff' font-size='9' transform='rotate(-90 %d %d)'>%d</text>", x_pos + 10, 180 - h - 4, x_pos + 10, 180 - h - 4, v);
+                
+            } else if (v < 0) {
+                // Export (Green, grows DOWN). Scale: 60px max / 300W
+                int h = (abs(v) * 60) / 300;
+                if (h > 60) h = 60;
                 if (h < 1) h = 1;
                 
-                // Draw Rectangle
-                hprintf255(request, "<rect x='%d' y='90' width='13' height='%d' fill='#e74c3c' />", x_pos + 1, h);
+                // Draw Rectangle DOWNWARDS from y=180
+                hprintf255(request, "<rect x='%d' y='180' width='13' height='%d' fill='#2ecc71' />", x_pos + 1, h);
                 
-                // Draw Vertical Text (Rotated down)
-                if (h > 15) {
-                    hprintf255(request, "<text x='%d' y='92' fill='#fff' font-size='9' transform='rotate(90 %d 92)'>%d</text>", x_pos + 4, x_pos + 4, v);
-                }
+                // Draw Vertical Text BELOW the bar
+                hprintf255(request, "<text x='%d' y='%d' fill='#fff' font-size='9' transform='rotate(-90 %d %d)'>%d</text>", x_pos + 10, 180 + h + 18, x_pos + 10, 180 + h + 18, abs(v));
             }
         }
         poststr(request, "</svg></div>");
@@ -269,6 +266,30 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         };
         poststr(request, "</table></div>");
         poststr(request, "</div>"); // Close dash-row
+
+        // ====================================================================
+        // 4. LAST HOUR BREAKDOWN (4 Rows)
+        // ====================================================================
+        poststr(request, "<h3 style='font-size:16px; margin:20px 0 10px 0;'>Last Hour Breakdown</h3>");
+        poststr(request, "<table class='my-tbl' style='width:100%; text-align:center;'>");
+        poststr(request, "<tr><th style='text-align:left;'>Time</th><th>Import</th><th>Export</th><th>Net</th></tr>");
+        
+        for (int i = 0; i < 4; i++) {
+            int interval_of_day = current_interval_of_day - i;
+            if (interval_of_day < 0) { interval_of_day += 96; } 
+            
+            int c_index = interval_of_day % 32;
+            int h_time = interval_of_day / 4;
+            int m_time = (interval_of_day % 4) * 15;
+            
+            int disp_cons = consumption_matrix[c_index] + (i == 0 ? (int)real_consumption : 0);
+            int disp_exp = export_matrix[c_index] + (i == 0 ? (int)real_export : 0);
+            int disp_net = net_matrix[c_index] + (i == 0 ? (int)(real_consumption - real_export) : 0);
+            
+            hprintf255(request, "<tr><td style='text-align:left;'><b>%02i:%02i</b></td><td><b>%dW</b></td><td><b>%dW</b></td><td><b>%dW</b></td></tr>", 
+                       h_time, m_time, disp_cons, disp_exp, disp_net);
+        }
+        poststr(request, "</table>");
     }
     
     poststr(request, "</div><br>"); // Close my-dash
