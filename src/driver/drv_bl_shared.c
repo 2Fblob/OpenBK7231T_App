@@ -175,7 +175,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	{
         poststr(request, "<table style='width:100%'>");
         poststr(request, "<table style='text-align: center'></style>");
-        poststr(request, " <h2>Energy Stats</h2>");
+        poststr(request, " <h2>Energy Stats (Last 3 Hours)</h2>");
                 
         poststr(request, "<table>");
         poststr(request, "<th>Time </th>");
@@ -187,17 +187,32 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
             check_interval = minutes_since_midnight / net_metering_period;
 
-            for (int q = 0; q < 96; q++) { 
+            // FIX: Only render the last 12 intervals (3 hours) to prevent RAM overflow!
+            int start_interval = check_interval - 11;
+            if (start_interval < 0) { start_interval = 0; } // Prevent negative indices if just past midnight
+
+            for (int q = start_interval; q <= check_interval; q++) { 
                 const char* start_tag = (q == check_interval) ? "<b>" : "";
                 const char* end_tag = (q == check_interval) ? "</b>" : "";
                 
                 int hour = q / 4;
                 int minute = (q % 4) * 15;
                 
+                int disp_cons = consumption_matrix[q];
+                int disp_exp = export_matrix[q];
+                int disp_net = net_matrix[q];
+
+                // Inject live active data into the current interval row
+                if (q == check_interval) {
+                    disp_cons += (int)real_consumption;
+                    disp_exp += (int)real_export;
+                    disp_net += (int)(real_consumption - real_export);
+                }
+                
                 hprintf255(request, "<tr><td> %s%i:%02i%s </td> ", start_tag, hour, minute, end_tag);
-                hprintf255(request, "<td> %s%dW%s </td> ", start_tag, (int)consumption_matrix[q], end_tag);
-                hprintf255(request, "<td> %s%dW%s </td>", start_tag, (int)export_matrix[q], end_tag);
-                hprintf255(request, "<td> %s%dW%s </td> </tr>", start_tag, net_matrix[q], end_tag);
+                hprintf255(request, "<td> %s%dW%s </td> ", start_tag, disp_cons, end_tag);
+                hprintf255(request, "<td> %s%dW%s </td>", start_tag, disp_exp, end_tag);
+                hprintf255(request, "<td> %s%dW%s </td> </tr>", start_tag, disp_net, end_tag);
             }
         }
 	}
