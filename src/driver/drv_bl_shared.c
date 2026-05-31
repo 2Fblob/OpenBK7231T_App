@@ -150,7 +150,136 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     else if(DRV_IsRunning("RN8209")) { mode = "RN8209"; } 
     else { mode = "PWR"; }
 
-    poststr(request, "<hr><table style='width:100%'>");
+    // ====================================================================
+    // 1. TOP SECTION: Unified Horizontal Dashboard
+    // ====================================================================
+    poststr(request, "<hr>");
+    poststr(request, "<table style='width:100%; text-align:center; font-size:16px; margin-top:10px; margin-bottom:15px;'>");
+    
+    // Row 1: Headers
+    poststr(request, "<tr><th style='color:#aaa; font-weight:normal; padding-bottom:5px;'>Voltage</th>");
+    poststr(request, "<th style='color:#aaa; font-weight:normal; padding-bottom:5px;'>Power</th>");
+    poststr(request, "<th style='color:#aaa; font-weight:normal; padding-bottom:5px;'>Status</th></tr>");
+    
+    // Row 1: Data
+    hprintf255(request, "<tr><td style='padding-bottom:15px;'><b>%.0f V</b></td>", sensors[OBK_VOLTAGE].lastReading);
+    hprintf255(request, "<td style='padding-bottom:15px;'><b>%.0f W</b></td>", sensors[OBK_POWER].lastReading);
+    hprintf255(request, "<td style='padding-bottom:15px;'><b>%s</b></td></tr>", solar_available ? "Exporting" : "Importing");
+
+    // Row 2: Headers
+    poststr(request, "<tr><th style='color:#aaa; font-weight:normal; padding-bottom:5px;'>15-Min Est.</th>");
+    poststr(request, "<th style='color:#aaa; font-weight:normal; padding-bottom:5px;'>Charger C</th>");
+    poststr(request, "<th style='color:#aaa; font-weight:normal; padding-bottom:5px;'>NetMetering</th></tr>");
+
+    // Row 2: Data
+    hprintf255(request, "<tr><td><b>%i Wh</b></td>", estimated_energy_period);
+    hprintf255(request, "<td><b style='color:#0099FF;'>%i%%</b></td>", dump_load_relay[5]);
+    hprintf255(request, "<td><b>%.2f Wh</b></td></tr>", net_energy);
+               
+    poststr(request, "</table><hr>");
+
+    // ====================================================================
+    // 2. MIDDLE SECTION: The Graph and 6-Hour Matrix
+    // ====================================================================
+	if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
+	{
+        poststr(request, "<h2>Energy Stats (Last 6 Hours)</h2>");
+
+        if (NTP_IsTimeSynced()) {
+            minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
+            int current_interval_of_day = minutes_since_midnight / net_metering_period;
+
+            // Baseline bounds set to 700W Import / 300W Export
+            int max_import = 700; 
+            int max_export = 300;
+            
+            for (int i = 0; i < 24; i++) {
+                int interval_of_day = current_interval_of_day - i;
+                if (interval_of_day < 0) { interval_of_day += 96; } 
+                int buffer_index = interval_of_day % 24;
+                
+                int v = net_matrix[buffer_index];
+                if (i == 0) { v += (int)(real_consumption - real_export); } 
+                
+                if (v > max_import) { max_import = v; }
+                if (v < 0 && abs(v) > max_export) { max_export = abs(v); }
+            }
+
+            // Draw Outer Container and Y-Axis Scale
+            poststr(request, "<div style='display:flex; height:120px; font-family:sans-serif;'>");
+            hprintf255(request, "<div style='width:45px; display:flex; flex-direction:column; justify-content:space-between; font-size:10px; color:#aaa; text-align:right; padding-right:8px; padding-top:10px; padding-bottom:10px;'><span>+%dW</span><span>0W</span><span>-%dW</span></div>", max_import, max_export);
+
+            // Draw Graph Container
+            poststr(request, "<div style='flex-grow:1; display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-radius:4px; background: linear-gradient(to bottom, transparent 49%, #555 49%, #555 51%, transparent 51%);'>");
+
+            // Draw the bars
+            for (int i = 23; i >= 0; i--) {
+                int interval_of_day = current_interval_of_day - i;
+                if (interval_of_day < 0) { interval_of_day += 96; } 
+                int buffer_index = interval_of_day % 24;
+                
+                int v = net_matrix[buffer_index];
+                if (i == 0) { v += (int)(real_consumption - real_export); }
+
+                int height_pct = 0;
+                poststr(request, "<div style='width:3.5%; height:100%;'>");
+                
+                if (v >= 0) {
+                    height_pct = (v * 100) / max_import;
+                    if (height_pct > 100) height_pct = 100;
+                    if (height_pct < 2 && v != 0) height_pct = 2; 
+
+                    hprintf255(request, "<div style='height:50%%; position:relative;'><div style='position:absolute; bottom:0; width:100%%; height:%d%%; background:#e74c3c; border-radius:2px 2px 0 0;'></div></div>", height_pct);
+                    poststr(request, "<div style='height:50%;'></div>"); 
+                } else {
+                    height_pct = (abs(v) * 100) / max_export;
+                    if (height_pct > 100) height_pct = 100;
+                    if (height_pct < 2 && v != 0) height_pct = 2;
+
+                    poststr(request, "<div style='height:50%;'></div>"); 
+                    hprintf255(request, "<div style='height:50%%;'><div style='width:100%%; height:%d%%; background:#2ecc71; border-radius:0 0 2px 2px;'></div></div>", height_pct);
+                }
+                
+                poststr(request, "</div>");
+            }
+            poststr(request, "</div></div><br>");
+
+            // Matrix Table
+            poststr(request, "<table style='width:100%; text-align: center;'>");
+            poststr(request, "<tr><th style='text-align: left;'>Time </th><th>Import </th><th>Export </th><th>Net </th></tr><hr>");
+
+            for (int i = 0; i < 24; i++) { 
+                int interval_of_day = current_interval_of_day - i;
+                if (interval_of_day < 0) { interval_of_day += 96; } 
+                int buffer_index = interval_of_day % 24;
+
+                const char* start_tag = (i == 0) ? "<b>" : "";
+                const char* end_tag = (i == 0) ? "</b>" : "";
+                
+                int hour = interval_of_day / 4;
+                int minute = (interval_of_day % 4) * 15;
+                
+                if (i == 0) {
+                    int disp_cons = consumption_matrix[buffer_index] + (int)real_consumption;
+                    int disp_exp = export_matrix[buffer_index] + (int)real_export;
+                    int disp_net = net_matrix[buffer_index] + (int)(real_consumption - real_export);
+                    
+                    hprintf255(request, "<tr><td style='text-align: left;'> %s%02i:%02i%s </td><td> %s%dW%s </td><td> %s%dW%s </td><td> %s%dW%s </td></tr>", 
+                               start_tag, hour, minute, end_tag, start_tag, disp_cons, end_tag, start_tag, disp_exp, end_tag, start_tag, disp_net, end_tag);
+                } else {
+                    int disp_net = net_matrix[buffer_index];
+                    hprintf255(request, "<tr><td style='text-align: left;'> %02i:%02i </td><td> - </td><td> - </td><td> %dW </td></tr>", 
+                               hour, minute, disp_net);
+                }
+            }
+            poststr(request, "</table>");
+        }
+	}
+
+    // ====================================================================
+    // 3. BOTTOM SECTION: Detailed Sensor Data Array
+    // ====================================================================
+    poststr(request, "<hr><h3>Detailed Sensor Data</h3><table style='width:100%'>");
 
 	for (int i = (OBK__FIRST); i <= (OBK_CONSUMPTION__DAILY_LAST); i++) {
 		if (i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))){i++;}
@@ -171,71 +300,6 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 	
 	poststr(request, "</table>");
 	hprintf255(request, "<font size=1>Saving Interval: %.2fW</font>", changeSavedThresholdEnergy);
-
-	if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
-	{
-        poststr(request, "<table style='width:100%; text-align: center;'>");
-        poststr(request, "<h2>Energy Stats (Last 6 Hours)</h2>");
-        poststr(request, "<tr><th>Time </th><th>Import </th><th>Export </th><th>Net </th></tr><hr>");
-
-        if (NTP_IsTimeSynced()) {
-            minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
-            int current_interval_of_day = minutes_since_midnight / net_metering_period;
-
-            // Loop 24 intervals (6 hours). i=0 is current live interval.
-            for (int i = 0; i < 24; i++) { 
-                
-                int interval_of_day = current_interval_of_day - i;
-                
-                // Wrap around to yesterday's intervals seamlessly
-                if (interval_of_day < 0) { interval_of_day += 96; } 
-                
-                // Maps the interval of the day to our 24-slot circular buffer
-                int buffer_index = interval_of_day % 24;
-
-                const char* start_tag = (i == 0) ? "<b>" : "";
-                const char* end_tag = (i == 0) ? "</b>" : "";
-                
-                int hour = interval_of_day / 4;
-                int minute = (interval_of_day % 4) * 15;
-                
-                if (i == 0) {
-                    // Active Row: Show full data
-                    int disp_cons = consumption_matrix[buffer_index] + (int)real_consumption;
-                    int disp_exp = export_matrix[buffer_index] + (int)real_export;
-                    int disp_net = net_matrix[buffer_index] + (int)(real_consumption - real_export);
-                    
-                    hprintf255(request, "<tr><td> %s%02i:%02i%s </td><td> %s%dW%s </td><td> %s%dW%s </td><td> %s%dW%s </td></tr>", 
-                               start_tag, hour, minute, end_tag, start_tag, disp_cons, end_tag, start_tag, disp_exp, end_tag, start_tag, disp_net, end_tag);
-                } else {
-                    // History Rows: Show time and net only
-                    int disp_net = net_matrix[buffer_index];
-                    hprintf255(request, "<tr><td> %02i:%02i </td><td> - </td><td> - </td><td> %dW </td></tr>", 
-                               hour, minute, disp_net);
-                }
-            }
-        }
-        poststr(request, "</table>");
-	}
-
-    if (energyCounterStatsEnable == true)
-	{	
-		poststr(request," <hr> <h4>Current system status: </h4></font>");
-
-		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
-		
-		if (net_energy_equivalent < 0)
-		{
-		    hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
-		}
-
-        hprintf255(request,"<font size=2>- 15-Min Estimation: <b>%i Wh</b><br></font>", estimated_energy_period);
-        hprintf255(request,"<font size=2 color=#0099FF>- Charger C PWM: <b>%i%%</b><br></font>", dump_load_relay[5]);
-	
-        int minutes_since_last_interval = minutes_since_midnight % net_metering_period;
-        int minutes_till_next_interval = 15-minutes_since_last_interval;
-		hprintf255(request,"<h5>NetMetering (Last %d min out of %d): %.3f Wh with %d min to next cycle </h5><hr>", minutes_since_last_interval , net_metering_period, net_energy, minutes_till_next_interval); 
-    }	
 }
 
 void BL09XX_SaveEmeteringStatistics()
