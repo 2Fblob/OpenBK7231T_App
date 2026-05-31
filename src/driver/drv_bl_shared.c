@@ -7,11 +7,12 @@
 // Charger C mapping constants
 #define CHARGER_MIN_PWM   10      // lowest useful duty for the supply
 #define CHARGER_MAX_PWM  100
-int charger_c_pwm_debug = 0;      // holds last commanded PWM for Charger C
 
-static int consumption_matrix [96] = {0}; 
-static int export_matrix[96] = {0};
-static int net_matrix[96] = {0};
+// Reduced to 24 slots (6-hour circular buffer)
+static int consumption_matrix [24] = {0}; 
+static int export_matrix[24] = {0};
+static int net_matrix[24] = {0};
+
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
 static int net_energy_equivalent = 0;
@@ -25,8 +26,8 @@ static int last_run_calc = 0;
 int current_minute = 0;
 int last_minute = 0;
 int output_index = 0;
-int estimated_energy_hour = 0;
-int estimated_energy_interval = 0;
+
+int estimated_energy_period = 0;
 
 // Initialize temp variables
 int total_net_consumption = 0;
@@ -173,48 +174,48 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 
 	if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
 	{
-        poststr(request, "<table style='width:100%'>");
-        poststr(request, "<table style='text-align: center'></style>");
-        poststr(request, " <h2>Energy Stats (Last 3 Hours)</h2>");
-                
-        poststr(request, "<table>");
-        poststr(request, "<th>Time </th>");
-        poststr(request, "<th>Consumption </th>");	
-        poststr(request, "<th>Export </th>");
-        poststr(request, "<th>Net Metering </th></tr><hr>");
+        poststr(request, "<table style='width:100%; text-align: center;'>");
+        poststr(request, "<h2>Energy Stats (Last 6 Hours)</h2>");
+        poststr(request, "<tr><th>Time </th><th>Import </th><th>Export </th><th>Net </th></tr><hr>");
 
         if (NTP_IsTimeSynced()) {
             minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
-            check_interval = minutes_since_midnight / net_metering_period;
+            int current_interval_of_day = minutes_since_midnight / net_metering_period;
 
-            // FIX: Only render the last 12 intervals (3 hours) to prevent RAM overflow!
-            int start_interval = check_interval - 11;
-            if (start_interval < 0) { start_interval = 0; } // Prevent negative indices if just past midnight
-
-            for (int q = start_interval; q <= check_interval; q++) { 
-                const char* start_tag = (q == check_interval) ? "<b>" : "";
-                const char* end_tag = (q == check_interval) ? "</b>" : "";
+            // Loop 24 intervals (6 hours). i=0 is current live interval.
+            for (int i = 0; i < 24; i++) { 
                 
-                int hour = q / 4;
-                int minute = (q % 4) * 15;
+                int interval_of_day = current_interval_of_day - i;
                 
-                int disp_cons = consumption_matrix[q];
-                int disp_exp = export_matrix[q];
-                int disp_net = net_matrix[q];
+                // Wrap around to yesterday's intervals seamlessly
+                if (interval_of_day < 0) { interval_of_day += 96; } 
+                
+                // Maps the interval of the day to our 24-slot circular buffer
+                int buffer_index = interval_of_day % 24;
 
-                // Inject live active data into the current interval row
-                if (q == check_interval) {
-                    disp_cons += (int)real_consumption;
-                    disp_exp += (int)real_export;
-                    disp_net += (int)(real_consumption - real_export);
+                const char* start_tag = (i == 0) ? "<b>" : "";
+                const char* end_tag = (i == 0) ? "</b>" : "";
+                
+                int hour = interval_of_day / 4;
+                int minute = (interval_of_day % 4) * 15;
+                
+                if (i == 0) {
+                    // Active Row: Show full data
+                    int disp_cons = consumption_matrix[buffer_index] + (int)real_consumption;
+                    int disp_exp = export_matrix[buffer_index] + (int)real_export;
+                    int disp_net = net_matrix[buffer_index] + (int)(real_consumption - real_export);
+                    
+                    hprintf255(request, "<tr><td> %s%02i:%02i%s </td><td> %s%dW%s </td><td> %s%dW%s </td><td> %s%dW%s </td></tr>", 
+                               start_tag, hour, minute, end_tag, start_tag, disp_cons, end_tag, start_tag, disp_exp, end_tag, start_tag, disp_net, end_tag);
+                } else {
+                    // History Rows: Show time and net only
+                    int disp_net = net_matrix[buffer_index];
+                    hprintf255(request, "<tr><td> %02i:%02i </td><td> - </td><td> - </td><td> %dW </td></tr>", 
+                               hour, minute, disp_net);
                 }
-                
-                hprintf255(request, "<tr><td> %s%i:%02i%s </td> ", start_tag, hour, minute, end_tag);
-                hprintf255(request, "<td> %s%dW%s </td> ", start_tag, disp_cons, end_tag);
-                hprintf255(request, "<td> %s%dW%s </td>", start_tag, disp_exp, end_tag);
-                hprintf255(request, "<td> %s%dW%s </td> </tr>", start_tag, disp_net, end_tag);
             }
         }
+        poststr(request, "</table>");
 	}
 
     if (energyCounterStatsEnable == true)
@@ -223,15 +224,18 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 		hprintf255(request,"<font size=2>- Storage Inverter: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[0], dump_load_relay_timer[0]); 
 		hprintf255(request,"<font size=2>- Storage Charger A: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[1], dump_load_relay_timer[1]); 
 		hprintf255(request,"<font size=2>- Storage Charger B: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[3], dump_load_relay_timer[2]); 
-		hprintf255(request,"<font size=2>- Storage Charger C: <b>%i</b> <br></font>", old_output); 
 		hprintf255(request,"<font size=2>- Washer/Dishwasher: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[2], dump_load_relay_timer[3]); 
 		hprintf255(request,"<font size=2>- Basement Dehumidifier: <b>%i</b>, Total time: <b>%i</b> <br></font>", dump_load_relay[4], dump_load_relay_timer[4]); 
 
 		hprintf255(request,"<font size=2>- Solar available: <b>%i</b><br></font>", solar_available); 
+		
 		if (net_energy_equivalent < 0)
 		{
 		    hprintf255(request,"<font size=2>- Net energy equivalent: <b>%i</b><br></font>", net_energy_equivalent); 
 		}
+
+        hprintf255(request,"<font size=2>- 15-Min Estimation: <b>%i Wh</b><br></font>", estimated_energy_period);
+        hprintf255(request,"<font size=2 color=#0099FF>- Charger C PWM: <b>%i%%</b><br></font>", dump_load_relay[5]);
 	
         int minutes_since_last_interval = minutes_since_midnight % net_metering_period;
         int minutes_till_next_interval = 15-minutes_since_last_interval;
@@ -477,31 +481,33 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
 		check_hour = NTP_GetHour();
 
         // ------------------------------------------------------------------------------------------------------
-        // THE 15-MINUTE RESET & MATRIX LOGIC 
+        // THE 15-MINUTE RESET & CIRCULAR MATRIX LOGIC 
         // ------------------------------------------------------------------------------------------------------
-        int current_matrix_index = (check_hour * 4) + (check_time / 15); 
+        int minutes_since_midnight_tracker = (check_hour * 60) + check_time;
+        int interval_of_day_tracker = minutes_since_midnight_tracker / 15;
+        
+        // Maps the interval to our small 24-slot circular buffer
+        int current_matrix_index = interval_of_day_tracker % 24; 
 
-        // Initialize on first boot
         if (last_matrix_index == -1) {
             last_matrix_index = current_matrix_index;
         }
 
-        // Execute exactly once when the 15-minute period changes
         if (current_matrix_index != last_matrix_index) {
             
-            // 1. Write the final accumulated values of the ending period to the matrices
+            // 1. Write the final accumulated values to the outgoing slot
             consumption_matrix[last_matrix_index] = (int)real_consumption;
             export_matrix[last_matrix_index] = (int)real_export;
             net_matrix[last_matrix_index] = (int)real_consumption - (int)real_export;
 
-            // 2. Clear the variables for the fresh new 15-minute period
+            // 2. Clear variables for the new period
             real_export = 0;
             real_consumption = 0;
             net_energy = 0;
             energyCounterMinutesIndex = 0;
             lastsync = 0; 
             
-            // Wipe the current incoming block just in case it holds garbage from yesterday
+            // Wipe the incoming block to destroy data from 6 hours ago
             consumption_matrix[current_matrix_index] = 0;
             export_matrix[current_matrix_index] = 0;
             net_matrix[current_matrix_index] = 0;
@@ -527,7 +533,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
 			lastsync++;
 		}
 			
-		// Calculate Net Energy (since the start of the 15-minute period)
 		net_energy = (real_consumption - real_export);			
 
 		// ** Storage inverter control (Index 0)**
@@ -560,10 +565,10 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             int min_in_block = current_minute % 15; 
             int check_time_estimate_mins = 15 - min_in_block; 
             
-            // Instantaneous period projection
-            int estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
-        
-            // Average rate period projection
+            estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
+            int projected_power_w = estimated_energy_period * 4;
+            int current_net_power_w = ((int)net_energy) * 4;
+
             if (min_in_block > 0) {
                 net_energy_equivalent = (int)((float)net_energy * (15.0f / min_in_block));					
             } else {
@@ -572,27 +577,28 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
 
             // ** Charger C PWM (Index 5) **
 			int scaled_power;
-			if (estimated_energy_period > 50) { 
+			
+			if (projected_power_w > 50) { 
 			    scaled_power = -5; 
 			} 
-			else if (estimated_energy_period < -950) { 
+			else if (projected_power_w < -950) { 
 			    scaled_power = 100; 
 			} 
 			else { 
-			    scaled_power = ((50 - estimated_energy_period) * 100) / 1000; 	
+			    scaled_power = ((50 - projected_power_w) * 100) / 1000; 	
 			    if (scaled_power >= 1 && scaled_power <= 10) {scaled_power = 10;} 
 			}
 			
 			int change = scaled_power - 5;
 
-			if (net_energy > 0) {
-			    dump_load_relay[5] = (net_energy / 10 > 5) ? 5 : net_energy / 10;  
+			if (current_net_power_w > 0) {
+			    dump_load_relay[5] = (current_net_power_w / 10 > 5) ? 5 : (current_net_power_w / 10);  
 			} 
-			else if (net_energy == 0) {
+			else if (current_net_power_w == 0) {
 			    dump_load_relay[5] = 0;  
 			} 
 			else if (change != 0) { 
-			    if (net_energy <= -50 || (dump_load_relay[5] > 5 && change < 0)) {
+			    if (current_net_power_w <= -50 || (dump_load_relay[5] > 5 && change < 0)) {
 			        dump_load_relay[5] += change;
 			    }
 				if (dump_load_relay[5] < 10) {dump_load_relay[5] = 10;}
@@ -600,43 +606,42 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
 			
 			dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
 
-			if (net_energy < 0 && net_energy > -51) {
+			if (current_net_power_w < 0 && current_net_power_w > -51) {
 			    dump_load_relay[5] = 10;  
 			}
 		
             // ** External Relays (Indices 1, 2, 3, 4) **
-            if (min_in_block > 3) 
+            if (min_in_block > 13) 
             {
                 // Primary Charger (Index 1)
-                dump_load_relay[1] = (net_energy_equivalent <= -200 && check_hour >= 8 && check_hour <= 17) ? 1 : 
-                                     ((net_energy >= -50) ? 0 : dump_load_relay[1]);
+                dump_load_relay[1] = (net_energy_equivalent <= -50 && check_hour >= 8 && check_hour <= 17) ? 1 : 
+                                     ((net_energy >= -12) ? 0 : dump_load_relay[1]);
                 
                 // Secondary Charger (Index 3)
-                dump_load_relay[3] = (net_energy_equivalent <= -500 && check_hour >= 9 && check_hour <= 15) ? 1 : 
-                                     (( net_energy >= -100) ? 0 : dump_load_relay[3]);			   
+                dump_load_relay[3] = (net_energy_equivalent <= -125 && check_hour >= 9 && check_hour <= 15) ? 1 : 
+                                     (( net_energy >= -25) ? 0 : dump_load_relay[3]);			   
         
                 // Basement Dehumidifier (Index 4)
-                if (((check_time >= 40 && check_time <= 58 && net_energy_equivalent <= -200) && (check_hour >= 8 && check_hour <= 13))||(check_hour == 14 || check_hour == 16)) {
+                if (((check_time >= 40 && check_time <= 58 && net_energy_equivalent <= -50) && (check_hour >= 8 && check_hour <= 13))||(check_hour == 14 || check_hour == 16)) {
                     dump_load_relay[4] = 1; 
-                } else if (min_in_block == 14 || net_energy >= -10) {
+                } else if (min_in_block == 14 || net_energy >= -2) {
                     dump_load_relay[4] = 0; 
                 }
         
                 // Dishwasher (Index 2)
-                if ((net_energy_equivalent <= -700) && (check_hour >= 9 && check_hour <= 18)) {
+                if ((net_energy_equivalent <= -175) && (check_hour >= 9 && check_hour <= 18)) {
                     dump_load_relay[2] = 1; 
-                } else if (net_energy >= 300) {
+                } else if (net_energy >= 75) {
                     dump_load_relay[2] = 0; 
                 }
             }
 			
 			for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
 			{
-			    // At midnight, reset timers
 			    if ((check_hour == 0) && (check_time == 0)) {
 				    dump_load_relay_timer[output_index] = 0;
 				} else {
-			        if (dump_load_relay[output_index] == 1) {
+			        if (dump_load_relay[output_index] > 0) { 
 			            dump_load_relay_timer[output_index]++;
 			        }
 			    }
@@ -650,7 +655,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
 			       update_number = output_index;
 			       last_dump_load_relay[output_index] = dump_load_relay[output_index];
 			
-			       // Safe Buffer Size
 			       char output_command[64] = "";
 			       const char *ip_start = "SendGet http://192.168.5.";
 			       const char *ip_middle = "/cm?cmnd=Power%20"; 
