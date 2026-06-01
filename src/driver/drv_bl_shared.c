@@ -154,24 +154,20 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     // UI DASHBOARD & MINIMAL CSS
     // ====================================================================
     poststr(request, "<style>");
-    // Safely pull dashboard to the top
     poststr(request, "#state { display: flex; flex-direction: column; }");
     poststr(request, "#my-dash { order: -1; width: 100%; box-sizing: border-box; }"); 
     
-    // Top Horizontal Table
     poststr(request, ".my-tbl { width:100%; text-align:center; font-size:16px; margin:10px 0; table-layout:fixed; border-collapse:collapse; }");
     poststr(request, ".my-tbl th { color:#aaa; font-weight:normal; padding-bottom:5px; border-bottom:1px solid #444; }");
     poststr(request, ".my-tbl td { padding-top:10px; padding-bottom:10px; }");
     
-    // Middle Layout (Allows wrapping if screen is too small, otherwise side-by-side)
     poststr(request, ".dash-row { display:flex; flex-wrap:wrap; gap:20px; margin-top:20px; align-items:flex-start; }");
     
-    // Detailed Sensors Table (Fixed spacing)
     poststr(request, ".sens-tbl { width:100%; text-align:left; font-size:14px; line-height:1.8; white-space:nowrap; border-collapse:collapse; }");
     poststr(request, ".sens-tbl td { border-bottom:1px solid #333; }");
     poststr(request, "</style>");
     
-    poststr(request, "<div id='my-dash'>"); // Open Dashboard
+    poststr(request, "<div id='my-dash'>"); 
 
     // ====================================================================
     // 1. HORIZONTAL DASHBOARD (Top Row)
@@ -195,50 +191,31 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "<div style='flex:1; min-width:300px; overflow-x:auto;'>"); 
         poststr(request, "<h2 style='font-size:18px; margin:0 0 10px 0;'>Energy Stats (Last 8 Hours)</h2>");
         
-        // Open the SVG Canvas (480px wide, 300px tall)
-        poststr(request, "<svg width='480' height='300' viewBox='0 0 480 300' style='background:#222; border-radius:4px; font-family:sans-serif;'>");
-        
-        // Draw the precise 1-pixel Zero Line at exactly y=90
+        poststr(request, "<svg width='480' height='300' viewBox='0 0 480 300' style='background:#222; border-radius:4px;'>");
         poststr(request, "<line x1='0' y1='90' x2='480' y2='90' stroke='#999' stroke-width='1' />");
 
-        // Draw 32 vertical slots (15px each = 480px total)
         for (int i = 31; i >= 0; i--) {
             int interval_of_day = current_interval_of_day - i;
             if (interval_of_day < 0) { interval_of_day += 96; } 
             int c_index = interval_of_day % 32;
             
             int v = net_matrix[c_index];
-            if (i == 0) { v += (int)(real_consumption - real_export); } // Add live
+            if (i == 0) { v += (int)(real_consumption - real_export); } 
             
-            // X coordinate (Oldest is left, Newest is right)
             int x_pos = (31 - i) * 15;
             
             if (v < 0) {
-                // Export (Green, grows UP). Scale: 90px max / 300W
                 int h = (abs(v) * 90) / 300;
                 if (h > 90) h = 90;
                 if (h < 1) h = 1;
-                
-                // Draw Rectangle
-                hprintf255(request, "<rect x='%d' y='%d' width='13' height='%d' fill='#2ecc71' />", x_pos + 1, 90 - h, h);
-                
-                // Draw Vertical Text (Rotated up)
-                if (h > 15) { 
-                    hprintf255(request, "<text x='%d' y='88' fill='#fff' font-size='9' transform='rotate(-90 %d 88)'>%d</text>", x_pos + 10, x_pos + 10, abs(v));
-                }
+                // Add <title> Tooltip to Export Rectangles
+                hprintf255(request, "<rect x='%d' y='%d' width='13' height='%d' fill='#2ecc71'><title>Export: %dW</title></rect>", x_pos + 1, 90 - h, h, abs(v));
             } else if (v > 0) {
-                // Import (Red, grows DOWN). Scale: 210px max / 700W
                 int h = (v * 210) / 700;
                 if (h > 210) h = 210;
                 if (h < 1) h = 1;
-                
-                // Draw Rectangle
-                hprintf255(request, "<rect x='%d' y='90' width='13' height='%d' fill='#e74c3c' />", x_pos + 1, h);
-                
-                // Draw Vertical Text (Rotated down)
-                if (h > 15) {
-                    hprintf255(request, "<text x='%d' y='92' fill='#fff' font-size='9' transform='rotate(90 %d 92)'>%d</text>", x_pos + 4, x_pos + 4, v);
-                }
+                // Add <title> Tooltip to Import Rectangles
+                hprintf255(request, "<rect x='%d' y='90' width='13' height='%d' fill='#e74c3c'><title>Import: %dW</title></rect>", x_pos + 1, h, v);
             }
         }
         poststr(request, "</svg></div>");
@@ -268,10 +245,10 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             }
         };
         poststr(request, "</table></div>");
-        poststr(request, "</div>"); // Close dash-row
+        poststr(request, "</div>"); 
     }
     
-    poststr(request, "</div><br>"); // Close my-dash
+    poststr(request, "</div><br>"); 
 }
 
 void BL09XX_SaveEmeteringStatistics()
@@ -517,7 +494,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         int minutes_since_midnight_tracker = (check_hour * 60) + check_time;
         int interval_of_day_tracker = minutes_since_midnight_tracker / 15;
         
-        // Maps the interval to our expanded 32-slot circular buffer
         int current_matrix_index = interval_of_day_tracker % 32; 
 
         if (last_matrix_index == -1) {
