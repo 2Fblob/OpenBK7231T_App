@@ -87,8 +87,8 @@ static byte old_time = 0;
 #define dump_load_hysteresis 1 
 #define max_export -3300
 
-int lastsync = 0;               
-byte check_time = 0;                   
+int lastsync = 0;                
+byte check_time = 0;                    
 byte check_hour = 0;                    
               
 const char UNIT_WH[] = "Wh";
@@ -154,15 +154,35 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     // UI DASHBOARD & MINIMAL CSS
     // ====================================================================
     poststr(request, "<style>");
+    // Safely pull dashboard to the top
     poststr(request, "#state { display: flex; flex-direction: column; }");
     poststr(request, "#my-dash { order: -1; width: 100%; box-sizing: border-box; }"); 
     
+    // Top Horizontal Table
     poststr(request, ".my-tbl { width:100%; text-align:center; font-size:16px; margin:10px 0; table-layout:fixed; border-collapse:collapse; }");
     poststr(request, ".my-tbl th { color:#aaa; font-weight:normal; padding-bottom:5px; border-bottom:1px solid #444; }");
     poststr(request, ".my-tbl td { padding-top:10px; padding-bottom:10px; }");
     
+    // Middle Layout (Allows wrapping if screen is too small, otherwise side-by-side)
     poststr(request, ".dash-row { display:flex; flex-wrap:wrap; gap:20px; margin-top:20px; align-items:flex-start; }");
     
+    // Detailed Sensors Table (Fixed spacing)
     poststr(request, ".sens-tbl { width:100%; text-align:left; font-size:14px; line-height:1.8; white-space:nowrap; border-collapse:collapse; }");
     poststr(request, ".sens-tbl td { border-bottom:1px solid #333; }");
+    
+    // Historical Data Table (Replaces Graph)
+    poststr(request, ".hist-tbl { width:100%; text-align:center; font-size:14px; border-collapse:collapse; }");
+    poststr(request, ".hist-tbl th { color:#aaa; font-weight:normal; padding:8px 5px; border-bottom:1px solid #444; background:#222; position:sticky; top:0; z-index:1; }");
+    poststr(request, ".hist-tbl td { padding:5px; border-bottom:1px solid #333; }");
     poststr(request, "</style>");
+    
+    poststr(request, "<div id='my-dash'>"); // Open Dashboard
+
+    // ====================================================================
+    // 1. HORIZONTAL DASHBOARD (Top Row)
+    // ====================================================================
+    poststr(request, "<table class='my-tbl'><tr>");
+    poststr(request, "<th>Voltage</th><th>Power</th><th>15-Min Est.</th><th>Charger C</th><th>Status</th></tr><tr>");
+    
+    hprintf255(request, "<td><b>%.0f V</b></td><td><b>%.0f W</b></td><td><b>%i Wh</b></td><td><b style='color:#0099FF;'>%i%%</b></td><td><b>%s</b></td></tr></table>", 
+               sensors[OBK_VOLTAGE].lastReading, sensors[OBK_POWER].lastReading, estimated_energy_period, dump_
