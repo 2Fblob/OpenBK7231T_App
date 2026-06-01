@@ -151,34 +151,17 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     else { mode = "PWR"; }
 
     // ====================================================================
-    // UI DASHBOARD & MINIMAL CSS
+    // 1. MINIFIED CSS & DASHBOARD WRAPPER
     // ====================================================================
-    poststr(request, "<style>");
-    // Safely pull dashboard to the top
-    poststr(request, "#state { display: flex; flex-direction: column; }");
-    poststr(request, "#my-dash { order: -1; width: 100%; box-sizing: border-box; }"); 
-    
-    // Top Horizontal Table
-    poststr(request, ".my-tbl { width:100%; text-align:center; font-size:16px; margin:10px 0; table-layout:fixed; border-collapse:collapse; }");
-    poststr(request, ".my-tbl th { color:#aaa; font-weight:normal; padding-bottom:5px; border-bottom:1px solid #444; }");
-    poststr(request, ".my-tbl td { padding-top:10px; padding-bottom:10px; }");
-    
-    // Middle Layout (Allows wrapping if screen is too small, otherwise side-by-side)
-    poststr(request, ".dash-row { display:flex; flex-wrap:wrap; gap:20px; margin-top:20px; align-items:flex-start; }");
-    
-    // Detailed Sensors Table (Fixed spacing)
-    poststr(request, ".sens-tbl { width:100%; text-align:left; font-size:14px; line-height:1.8; white-space:nowrap; border-collapse:collapse; }");
-    poststr(request, ".sens-tbl td { border-bottom:1px solid #333; }");
-    poststr(request, "</style>");
-    
-    poststr(request, "<div id='my-dash'>"); // Open Dashboard
+    // Compressed into massive blocks to reduce function call overhead
+    poststr(request, "<style>#state{display:flex;flex-direction:column}#my-dash{order:-1;width:100%;box-sizing:border-box}.my-tbl{width:100%;text-align:center;font-size:16px;margin:10px 0;table-layout:fixed;border-collapse:collapse}.my-tbl th{color:#aaa;font-weight:normal;padding-bottom:5px;border-bottom:1px solid #444}.my-tbl td{padding:10px 0}.dash-row{display:flex;flex-wrap:wrap;gap:20px;margin-top:20px;align-items:flex-start}.sens-tbl{width:100%;text-align:left;font-size:14px;line-height:1.8;white-space:nowrap;border-collapse:collapse}.sens-tbl td{border-bottom:1px solid #333}");
+    // Minified SVG Classes (r=red/import, g=green/export, t=text)
+    poststr(request, ".r{fill:#e74c3c}.g{fill:#2ecc71}.t{fill:#fff;font-size:9px}</style><div id='my-dash'>");
 
     // ====================================================================
-    // 1. HORIZONTAL DASHBOARD (Top Row)
+    // 2. HORIZONTAL DASHBOARD (Top Row)
     // ====================================================================
-    poststr(request, "<table class='my-tbl'><tr>");
-    poststr(request, "<th>Voltage</th><th>Power</th><th>15-Min Est.</th><th>Charger C</th><th>Status</th></tr><tr>");
-    
+    poststr(request, "<table class='my-tbl'><tr><th>Voltage</th><th>Power</th><th>15-Min Est.</th><th>Charger C</th><th>Status</th></tr><tr>");
     hprintf255(request, "<td><b>%.0f V</b></td><td><b>%.0f W</b></td><td><b>%i Wh</b></td><td><b style='color:#0099FF;'>%i%%</b></td><td><b>%s</b></td></tr></table>", 
                sensors[OBK_VOLTAGE].lastReading, sensors[OBK_POWER].lastReading, estimated_energy_period, dump_load_relay[5], solar_available ? "Exporting" : "Importing");
 
@@ -187,68 +170,54 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
         int current_interval_of_day = minutes_since_midnight / net_metering_period;
         
-        poststr(request, "<div class='dash-row'>");
+        poststr(request, "<div class='dash-row'><div style='flex:1;min-width:300px;overflow-x:auto;'>");
+        poststr(request, "<h2 style='font-size:18px;margin:0 0 10px'>Energy Stats (Last 8 Hours)</h2>");
 
         // ====================================================================
-        // 2. THE SVG BAR GRAPH (LAST 8 HOURS / 32 BARS) - Left Column
+        // 3. OPTIMIZED SVG GRAPH 
         // ====================================================================
-        poststr(request, "<div style='flex:1; min-width:300px; overflow-x:auto;'>"); 
-        poststr(request, "<h2 style='font-size:18px; margin:0 0 10px 0;'>Energy Stats (Last 8 Hours)</h2>");
-        
-        // Open the SVG Canvas (480px wide, 300px tall)
-        poststr(request, "<svg width='480' height='300' viewBox='0 0 480 300' style='background:#222; border-radius:4px; font-family:sans-serif;'>");
-        
-        // Draw the precise 1-pixel Zero Line at exactly y=90
-        poststr(request, "<line x1='0' y1='90' x2='480' y2='90' stroke='#999' stroke-width='1' />");
+        poststr(request, "<svg width='480' height='250' viewBox='0 0 480 250' style='font-family:sans-serif'>");
+        poststr(request, "<line x1='0' y1='180' x2='480' y2='180' stroke='#999' stroke-width='1'/>");
 
-        // Draw 32 vertical slots (15px each = 480px total)
+        // 32-slot loop. Memory payload highly compressed.
         for (int i = 31; i >= 0; i--) {
             int interval_of_day = current_interval_of_day - i;
             if (interval_of_day < 0) { interval_of_day += 96; } 
             int c_index = interval_of_day % 32;
             
             int v = net_matrix[c_index];
-            if (i == 0) { v += (int)(real_consumption - real_export); } // Add live
+            if (i == 0) { v += (int)(real_consumption - real_export); } 
             
-            // X coordinate (Oldest is left, Newest is right)
             int x_pos = (31 - i) * 15;
             
-            if (v < 0) {
-                // Export (Green, grows UP). Scale: 90px max / 300W
-                int h = (abs(v) * 90) / 300;
-                if (h > 90) h = 90;
+            if (v > 0) {
+                // Import (Red/Up)
+                int h = (v * 150) / 700;
+                if (h > 150) h = 150;
                 if (h < 1) h = 1;
                 
-                // Draw Rectangle
-                hprintf255(request, "<rect x='%d' y='%d' width='13' height='%d' fill='#2ecc71' />", x_pos + 1, 90 - h, h);
-                
-                // Draw Vertical Text (Rotated up)
-                if (h > 15) { 
-                    hprintf255(request, "<text x='%d' y='88' fill='#fff' font-size='9' transform='rotate(-90 %d 88)'>%d</text>", x_pos + 10, x_pos + 10, abs(v));
-                }
-            } else if (v > 0) {
-                // Import (Red, grows DOWN). Scale: 210px max / 700W
-                int h = (v * 210) / 700;
-                if (h > 210) h = 210;
-                if (h < 1) h = 1;
-                
-                // Draw Rectangle
-                hprintf255(request, "<rect x='%d' y='90' width='13' height='%d' fill='#e74c3c' />", x_pos + 1, h);
-                
-                // Draw Vertical Text (Rotated down)
+                hprintf255(request, "<rect x='%d' y='%d' width='13' height='%d' class='r'/>", x_pos + 1, 180 - h, h);
                 if (h > 15) {
-                    hprintf255(request, "<text x='%d' y='92' fill='#fff' font-size='9' transform='rotate(90 %d 92)'>%d</text>", x_pos + 4, x_pos + 4, v);
+                    hprintf255(request, "<text x='%d' y='%d' class='t' transform='rotate(-90 %d %d)'>%d</text>", x_pos + 10, 180 - h - 4, x_pos + 10, 180 - h - 4, v);
+                }
+            } else if (v < 0) {
+                // Export (Green/Down)
+                int h = (abs(v) * 60) / 300;
+                if (h > 60) h = 60;
+                if (h < 1) h = 1;
+                
+                hprintf255(request, "<rect x='%d' y='180' width='13' height='%d' class='g'/>", x_pos + 1, h);
+                if (h > 15) {
+                    hprintf255(request, "<text x='%d' y='%d' class='t' transform='rotate(-90 %d %d)'>%d</text>", x_pos + 10, 180 + h + 18, x_pos + 10, 180 + h + 18, abs(v));
                 }
             }
         }
         poststr(request, "</svg></div>");
 
         // ====================================================================
-        // 3. DETAILED SENSORS - Right Column
+        // 4. DETAILED SENSORS - Right Column
         // ====================================================================
-        poststr(request, "<div style='width:260px; flex-shrink:0;'>"); 
-        poststr(request, "<h3 style='font-size:16px; margin:0 0 10px 0;'>Detailed Sensor Data</h3>");
-        poststr(request, "<table class='sens-tbl'>");
+        poststr(request, "<div style='width:260px;flex-shrink:0'><h3 style='font-size:16px;margin:0 0 10px'>Detailed Sensor Data</h3><table class='sens-tbl'>");
 
         for (int i = (OBK__FIRST); i <= (OBK_CONSUMPTION__DAILY_LAST); i++) {
             if (i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))){i++;}
@@ -258,7 +227,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 
                 poststr(request, "<tr><td><b>");
                 poststr(request, sensors[i].names.name_friendly);
-                poststr(request, "</b></td><td style='text-align:right;'>");
+                poststr(request, "</b></td><td style='text-align:right'>");
                 
                 if ((i == OBK_CONSUMPTION_TOTAL) || (i == OBK_GENERATION_TOTAL)) {
                     hprintf255(request, "%.*f kWh</td></tr>", sensors[i].rounding_decimals, (0.001*sensors[i].lastReading));
@@ -267,11 +236,32 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
                 }
             }
         };
-        poststr(request, "</table></div>");
-        poststr(request, "</div>"); // Close dash-row
+        poststr(request, "</table></div></div>");
+
+        // ====================================================================
+        // 5. LAST HOUR BREAKDOWN (4 Rows)
+        // ====================================================================
+        poststr(request, "<h3 style='font-size:16px;margin:20px 0 10px'>Last Hour Breakdown</h3><table class='my-tbl'><tr><th style='text-align:left'>Time</th><th>Import</th><th>Export</th><th>Net</th></tr>");
+        
+        for (int i = 0; i < 4; i++) {
+            int interval_of_day = current_interval_of_day - i;
+            if (interval_of_day < 0) { interval_of_day += 96; } 
+            
+            int c_index = interval_of_day % 32;
+            int h_time = interval_of_day / 4;
+            int m_time = (interval_of_day % 4) * 15;
+            
+            int disp_cons = consumption_matrix[c_index] + (i == 0 ? (int)real_consumption : 0);
+            int disp_exp = export_matrix[c_index] + (i == 0 ? (int)real_export : 0);
+            int disp_net = net_matrix[c_index] + (i == 0 ? (int)(real_consumption - real_export) : 0);
+            
+            hprintf255(request, "<tr><td style='text-align:left'><b>%02i:%02i</b></td><td><b>%dW</b></td><td><b>%dW</b></td><td><b>%dW</b></td></tr>", 
+                       h_time, m_time, disp_cons, disp_exp, disp_net);
+        }
+        poststr(request, "</table>");
     }
     
-    poststr(request, "</div><br>"); // Close my-dash
+    poststr(request, "</div><br>"); // Close my-dash wrapper
 }
 
 void BL09XX_SaveEmeteringStatistics()
