@@ -159,15 +159,21 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, "#my-dash { position: absolute; top: 0; left: 0; width: 100%; min-height: 100vh; background-color: #121212; z-index: 99999; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"); 
     
     // Top Statistics Bar
-    poststr(request, ".top-stats { display: flex; justify-content: space-between; background: #222; padding: 10px 15px; border-radius: 8px; text-align: center; }");
+    poststr(request, ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 10px; border-radius: 8px; text-align: center; gap: 5px; }");
     poststr(request, ".top-stats div { display: flex; flex-direction: column; justify-content: center; }");
-    poststr(request, ".top-stats span { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }");
+    poststr(request, ".top-stats span { color: #888; font-size: 10px; text-transform: uppercase; margin-bottom: 4px; white-space: nowrap; }");
     poststr(request, ".top-stats b { font-size: 16px; font-weight: 600; }");
     
+    // Dynamic Color Classes (Export = Green, Import = Red, Larger Font)
+    poststr(request, ".c-exp { color: #4caf50; font-size: 18px !important; }");
+    poststr(request, ".c-imp { color: #f44336; font-size: 18px !important; }");
+
     // Middle Row (Table + SVG)
     poststr(request, ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 260px; align-items: stretch; }");
     poststr(request, ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; }");
-    poststr(request, ".right-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }");
+    
+    // Changed right-col to flex-column to support the new title
+    poststr(request, ".right-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; overflow: hidden; }");
     
     // Tables
     poststr(request, ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }");
@@ -192,11 +198,26 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     // 1. HORIZONTAL DASHBOARD (Top Row Flexbox)
     // ====================================================================
     poststr(request, "<div class='top-stats'>");
-    hprintf255(request, "<div><span>Voltage</span><b>%.0f V</b></div>", sensors[OBK_VOLTAGE].lastReading);
-    hprintf255(request, "<div><span>Power</span><b>%.0f W</b></div>", sensors[OBK_POWER].lastReading);
-    hprintf255(request, "<div><span>15-Min Est.</span><b>%i Wh</b></div>", estimated_energy_period);
+    
+    // Volts / Amps
+    hprintf255(request, "<div><span>V / A</span><b>%.0f V / %.2f A</b></div>", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
+    
+    // Power (Colored)
+    const char* pwr_cls = (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp";
+    hprintf255(request, "<div><span>Power</span><b class='%s'>%.0f W</b></div>", pwr_cls, sensors[OBK_POWER].lastReading);
+    
+    // 15-Min Est (Colored)
+    const char* est_cls = (estimated_energy_period < 0) ? "c-exp" : "c-imp";
+    hprintf255(request, "<div><span>15-Min Est.</span><b class='%s'>%i Wh</b></div>", est_cls, estimated_energy_period);
+    
+    // Energy Balance (Colored)
+    const char* bal_cls = (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp";
+    hprintf255(request, "<div><span>Balance</span><b class='%s'>%.0f Wh</b></div>", bal_cls, sensors[OBK_POWER_REACTIVE].lastReading);
+
+    // Charger & Status
     hprintf255(request, "<div><span>Charger C</span><b style='color:#0099FF;'>%i%%</b></div>", dump_load_relay[5]);
     hprintf255(request, "<div><span>Status</span><b style='color:%s;'>%s</b></div>", solar_available ? "#4caf50" : "#f44336", solar_available ? "Exporting" : "Importing");
+    
     poststr(request, "</div>");
 
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced())
@@ -217,7 +238,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             if (i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))){i++;}
             if (i <= OBK__NUM_MEASUREMENTS || NTP_IsTimeSynced()) {
                 
-                if (i == OBK_VOLTAGE || i == OBK_POWER) continue; 
+                // Skip V, A, W, VA, and Reactive (Balance) since they are now in the top bar
+                if (i == OBK_VOLTAGE || i == OBK_POWER || i == OBK_CURRENT || i == OBK_POWER_APPARENT || i == OBK_POWER_REACTIVE) continue; 
 
                 poststr(request, "<tr><td><b>");
                 poststr(request, sensors[i].names.name_friendly);
@@ -237,8 +259,11 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         // ====================================================================
         poststr(request, "<div class='right-col'>");
         
-        // Viewbox height 260px. 32 bars * 11px = 352px width.
-        poststr(request, "<svg viewBox=\"0 0 352 260\" style=\"width:100%; max-width:352px; height:100%; max-height:260px; overflow:visible;\" xmlns=\"http://www.w3.org/2000/svg\">");
+        // Added the matching Title
+        poststr(request, "<div style='font-size:12px; color:#888; width:100%; margin-bottom:8px; text-transform:uppercase;'>Quarter-Hour Net Energy Balance</div>");
+        
+        // Viewbox height 260px. 32 bars * 11px = 352px width. margin-top:auto pins it to the bottom.
+        poststr(request, "<svg viewBox=\"0 0 352 260\" style=\"width:100%; max-width:352px; height:100%; max-height:220px; overflow:visible; margin-top:auto;\" xmlns=\"http://www.w3.org/2000/svg\">");
         
         // Zero line fixed at y=170. 
         // Leaves 150px for Import (300W max * 0.5) and 75px for Export (150W max * 0.5)
