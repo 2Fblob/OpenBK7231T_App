@@ -690,16 +690,16 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                         dump_load_relay[5] = 18;
                     }
                 } 
-                else if (net_energy <= -10.0f && net_energy > -30.0f) {
+                else if (net_energy <= -10.0f && net_energy > -20.0f) {
                     // Exactly -10.0 down to -29.99 Wh
                     dump_load_relay[5] = 18;
                 } 
-                else if (net_energy <= -30.0f) {
+                else if (net_energy <= -20.0f) {
                     // -30.0 Wh or lower
                     int calculated_pwr = (abs((int)net_energy) * 60 / check_time_estimate_mins) / 10;
                     
                     if (calculated_pwr > 100) calculated_pwr = 100;
-                    if (calculated_pwr < 30) calculated_pwr = 30;
+                    if (calculated_pwr < 20) calculated_pwr = 20;
                     
                     dump_load_relay[5] = calculated_pwr;
                 }
