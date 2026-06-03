@@ -138,8 +138,16 @@ time_t ConsumptionResetTime = 0;
 int changeSendAlwaysFrames = 60;
 int changeDoNotSendMinFrames = 5;
 
+static int last_render_time = 0;
+
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 {
+    // Throttle UI updates to once every 5 seconds to protect the Wi-Fi chip
+    if (g_secondsElapsed - last_render_time < 5) {
+        return;
+    }
+    last_render_time = g_secondsElapsed;
+
     const char *mode;
     struct tm *ltm;
 
@@ -610,71 +618,50 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             int min_in_block = current_minute % 15; 
             int check_time_estimate_mins = 15 - min_in_block; 
             
+            // 1. Predict total Wh accumulated by the end of the 15-minute period
             estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
-            int projected_power_w = estimated_energy_period * 4;
             
-            // Extrapolate the immediate equivalent energy
+            // 2. Extrapolate immediate equivalent energy
             if (min_in_block > 0) {
                 net_energy_equivalent = (int)((float)net_energy * (15.0f / min_in_block));                                               
             } else {
                 net_energy_equivalent = (int)net_energy; 
             }
-            
-            // Calculate live power (Watts)
-            int current_net_power_w = net_energy_equivalent * 4;
 
-            // ** Charger C PWM (Index 5) Base Charging Math **
-            int scaled_power;
-            if (projected_power_w > 50) { scaled_power = -5; } 
-            else if (projected_power_w < -950) { scaled_power = 100; } 
-            else { 
-                scaled_power = ((50 - projected_power_w) * 100) / 1000;         
-                if (scaled_power >= 1 && scaled_power <= 10) {scaled_power = 10;} 
+            // ====================================================================
+            // ** 3. NEW SOLAR STATUS LOGIC **
+            // ====================================================================
+            if (net_energy <= -26) {
+                solar_available = 1;
+            } else if (net_energy >= 16) {
+                solar_available = 0;
             }
-            int change = scaled_power - 5;
 
             // ====================================================================
-            // ** CORRECTED MAPPING: 0 = Idle, 5 = Inverter ON, 10+ = Export **
+            // ** 4. NEW CHARGER C LOGIC **
             // ====================================================================
-            
-            // 1. If the inverter is currently forced ON (5)
-            if (dump_load_relay[5] == 5) {
-                // Hold at 5 until equivalent export reaches -2Wh (-8W real)
-                if (net_energy_equivalent <= -2) {
-                    dump_load_relay[5] = 0; // Safe to turn OFF (Idle)
-                } 
-            } 
-            // 2. If the inverter is currently OFF or in Solar Charge mode
-            else {
-                if (current_net_power_w > 0) {
-                    // We are importing. Exceeds 40W threshold?
-                    if ((current_net_power_w / 10) >= 4) {
-                        dump_load_relay[5] = 5; // Jump to Inverter ON
-                    } else {
-                        dump_load_relay[5] = 0; // Load too small, stay Idle
-                    }
-                } 
-                else if (current_net_power_w == 0) {
-                    dump_load_relay[5] = 0; // Perfect balance, stay Idle
-                } 
-                else {
-                    // We are exporting. Run normal Solar Charge logic.
-                    if (change != 0) { 
-                        if (current_net_power_w <= -50 || (dump_load_relay[5] >= 0 && change < 0)) {
-                            dump_load_relay[5] += change;
-                        }
-                        if (dump_load_relay[5] > 0 && dump_load_relay[5] < 10) {
-                            dump_load_relay[5] = 10;
-                        }
-                    }
+            if (solar_available == 0) {
+                if (net_energy >= 6) {
+                    dump_load_relay[5] = 5;
+                } else if (net_energy <= -6) {
+                    dump_load_relay[5] = 0;
                 }
-            }
-            
-            // Safety boundaries 
-            dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
-
-            if (current_net_power_w < 0 && current_net_power_w > -51) {
-                if (dump_load_relay[5] > 0) dump_load_relay[5] = 10;  
+                // If between -5 and 5 Wh, do nothing (keep previous state)
+            } 
+            else {
+                if (net_energy <= -10 && net_energy >= -29) {
+                    dump_load_relay[5] = 18;
+                } 
+                else if (net_energy <= -30) {
+                    // Calculate power requirement based on remaining time
+                    int calculated_pwr = (abs((int)net_energy) * 60 / check_time_estimate_mins) / 10;
+                    
+                    // Cap bounds between 30 and 100
+                    if (calculated_pwr > 100) calculated_pwr = 100;
+                    if (calculated_pwr < 30) calculated_pwr = 30;
+                    
+                    dump_load_relay[5] = calculated_pwr;
+                }
             }
 
             // ====================================================================
@@ -687,7 +674,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             char fallback_cmd[64];
             snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
             CMD_ExecuteCommand(fallback_cmd, 0);
-
         }
     } // end of negative flag loop
 
