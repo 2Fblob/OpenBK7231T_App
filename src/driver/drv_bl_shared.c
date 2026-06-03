@@ -216,15 +216,15 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "</table></div>");
         
         // ====================================================================
-        // 3. SVG BAR GRAPH 8-HOURS (Right Column)
+        // 3. SVG BAR GRAPH 8-HOURS (Right Column) - Now Compressed
         // ====================================================================
         poststr(request, "<div style='flex:1; min-width:300px; margin-right:20px; display:flex; align-items:flex-end;'>");
         
-        // Setup Native SVG Canvas (480x300 pixel grid mapped inside container)
-        poststr(request, "<svg viewBox=\"0 0 480 300\" style=\"width:100%; max-width:480px; height:auto; background:transparent; border:1px solid #fff;\" xmlns=\"http://www.w3.org/2000/svg\">");
+        // Canvas is 320px tall to add 20px depth. Width reduced to 352px (32 bars * 11px).
+        poststr(request, "<svg viewBox=\"0 0 352 320\" style=\"width:100%; max-width:352px; height:auto; background:transparent; border:1px solid #000;\" xmlns=\"http://www.w3.org/2000/svg\">");
         
-        // Central Zero line fixed at y=90
-        poststr(request, "<line x1=\"0\" y1=\"90\" x2=\"480\" y2=\"90\" stroke=\"#fff\" stroke-width=\"1\"/>");
+        // Inverted axes: Central Zero line fixed near the bottom at y=230.
+        poststr(request, "<line x1=\"0\" y1=\"230\" x2=\"352\" y2=\"230\" stroke=\"#fff\" stroke-width=\"1\"/>");
 
         // Iterate backwards to plot left-to-right (oldest to newest)
         for (int i = 31; i >= 0; i--) {
@@ -233,32 +233,37 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             int net = net_matrix[c_index];
             if (i == 0) net += (int)(real_consumption - real_export);
             
-            // Fixed scaling limits (visual cap, actual text remains accurate)
             int display_net = net;
             if (display_net > 700) display_net = 700;
             if (display_net < -300) display_net = -300;
             
-            // Each slot gets 15px (14px width + 1px spacing)
-            int x = (31 - i) * 15;
+            // X positioning perfectly touching across 352px (11px width, no gap)
+            int x = (31 - i) * 11; 
 
-            if (display_net > 0) {
-                // Import (Positive) -> Red bar growing DOWN from y=90
-                int h = (display_net * 210) / 700;
+            // Text color is blue for the active current interval, white for historical
+            const char* text_color = (i == 0) ? "#0099FF" : "#fff";
+
+            if (display_net >= 0) { 
+                // IMPORT (Positive) -> Red bar facing UP. 700W max scales to 190px height.
+                int h = (display_net * 190) / 700;
                 if (h < 1 && display_net != 0) h = 1;     
                 
-                hprintf255(request, "<rect x=\"%d\" y=\"90\" width=\"14\" height=\"%d\" fill=\"#f44336\"/>", x, h);
-                if (h >= 18) {
-                    hprintf255(request, "<text transform=\"translate(%d, 95) rotate(90)\" fill=\"#fff\" font-size=\"10\" font-family=\"sans-serif\" dominant-baseline=\"middle\" text-anchor=\"start\">%dW</text>", x + 7, net);
+                hprintf255(request, "<rect x=\"%d\" y=\"%d\" width=\"11\" height=\"%d\" fill=\"#f44336\"/>", x, 230 - h, h);
+                
+                // Print Value > 0: Anchored ABOVE the bar going UP. No "W", font size 8.
+                if (net > 0) {
+                    hprintf255(request, "<text transform=\"translate(%d, %d) rotate(-90)\" fill=\"%s\" font-size=\"8\" font-family=\"sans-serif\" dominant-baseline=\"middle\" text-anchor=\"start\">%d</text>", x + 5, 230 - h - 3, text_color, net);
                 }
-            } else if (display_net < 0) {
-                // Export (Negative) -> Green bar growing UP from y=90
-                int h = (abs(display_net) * 90) / 300;
-                if (h < 1 && display_net != 0) h = 1;     
-                int y = 90 - h;
+            } else {
+                // EXPORT (Negative) -> Green bar facing DOWN. 300W max scales to 60px height.
+                int h = (abs(display_net) * 60) / 300;
+                if (h < 1) h = 1;     
                 
-                hprintf255(request, "<rect x=\"%d\" y=\"%d\" width=\"14\" height=\"%d\" fill=\"#4caf50\"/>", x, y, h);
-                if (h >= 18) {
-                    hprintf255(request, "<text transform=\"translate(%d, 85) rotate(-90)\" fill=\"#fff\" font-size=\"10\" font-family=\"sans-serif\" dominant-baseline=\"middle\" text-anchor=\"start\">%dW</text>", x + 7, net);
+                hprintf255(request, "<rect x=\"%d\" y=\"230\" width=\"11\" height=\"%d\" fill=\"#4caf50\"/>", x, h);
+                
+                // Print Value < 0: Anchored BELOW the bar going DOWN. No "W", font size 8.
+                if (net < 0) {
+                    hprintf255(request, "<text transform=\"translate(%d, %d) rotate(-90)\" fill=\"%s\" font-size=\"8\" font-family=\"sans-serif\" dominant-baseline=\"middle\" text-anchor=\"end\">%d</text>", x + 5, 230 + h + 3, text_color, net);
                 }
             }
         }
@@ -282,19 +287,24 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             int exp = export_matrix[c_index];
             int net = net_matrix[c_index];
             
-            // Add live running values for the current active interval block
             if (i == 0) { 
+                // Active Row (Now) -> Colored Blue, Bold, dynamic "Now (-Xmin)"
                 cons += (int)real_consumption;
                 exp += (int)real_export;
                 net += (int)(real_consumption - real_export); 
-            } 
-            
-            int row_mins = interval_of_day * 15;
-            int row_h = row_mins / 60;
-            int row_m = row_mins % 60;
-            
-            hprintf255(request, "<tr><td>%02dh%02d</td><td>%dW</td><td>%dW</td><td>%dW</td></tr>", 
-                       row_h, row_m, cons, exp, net);
+                
+                int mins_left = 15 - (minutes_since_midnight % 15);
+                hprintf255(request, "<tr style='color:#0099FF; font-weight:bold;'><td>Now (-%dmin)</td><td>%dW</td><td>%dW</td><td>%dW</td></tr>", 
+                           mins_left, cons, exp, net);
+            } else {
+                // Historical Rows (Standard Style)
+                int row_mins = interval_of_day * 15;
+                int row_h = row_mins / 60;
+                int row_m = row_mins % 60;
+                
+                hprintf255(request, "<tr><td>%02dh%02d</td><td>%dW</td><td>%dW</td><td>%dW</td></tr>", 
+                           row_h, row_m, cons, exp, net);
+            }
         }
         poststr(request, "</table></div>");
     }
@@ -575,13 +585,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             last_matrix_index = current_matrix_index;
             savetoflash = 1;
 
-            // Reset loop commands
-            last_dump_load_relay[0] = 2;
-            last_dump_load_relay[1] = 2;
-            last_dump_load_relay[2] = 2;
-            last_dump_load_relay[3] = 2;
-            last_dump_load_relay[4] = 2;
-            last_dump_load_relay[5] = 2;
+            // Charger C reset handled in calculation
         }
         // ------------------------------------------------------------------------------------------------------
 
@@ -594,29 +598,11 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                                                  
         net_energy = (real_consumption - real_export);                               
 
-        // ** Storage inverter control (Index 0)**
-        if (net_energy < -25) {
-            solar_available = 1; 
-        } else if (net_energy > 10) {
-            solar_available = 0; 
-        }
-        
-        if (solar_available == 0) {
-            if (net_energy > 0) {
-                dump_load_relay[0] = 1; 
-            } else if (net_energy <= -10) {
-                dump_load_relay[0] = 0; 
-            }
-        } else if (solar_available == 1) {
-            if (net_energy > 50) {
-                dump_load_relay[0] = 1; 
-            } else if (net_energy <= 0) {
-                dump_load_relay[0] = 0; 
-            }
-        }
-        
         current_minute = check_time;
         
+        // ======================================================================================================
+        // THE 1-MINUTE CALCULATION LOOP (Cleaned and Simplified)
+        // ======================================================================================================
         if (current_minute != last_minute) 
         {
             last_minute = current_minute;
@@ -624,118 +610,68 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             int min_in_block = current_minute % 15; 
             int check_time_estimate_mins = 15 - min_in_block; 
             
+            // 1. Predict total Wh accumulated by the end of the 15-minute period
             estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
-            int projected_power_w = estimated_energy_period * 4;
-            int current_net_power_w = ((int)net_energy) * 4;
-
+            
+            // 2. Extrapolate immediate equivalent energy
             if (min_in_block > 0) {
                 net_energy_equivalent = (int)((float)net_energy * (15.0f / min_in_block));                                               
             } else {
                 net_energy_equivalent = (int)net_energy; 
             }
 
-            // ** Charger C PWM (Index 5) **
-            int scaled_power;
-            
-            if (projected_power_w > 50) { 
-                scaled_power = -5; 
-            } 
-            else if (projected_power_w < -950) { 
-                scaled_power = 100; 
-            } 
-            else { 
-                scaled_power = ((50 - projected_power_w) * 100) / 1000;         
-                if (scaled_power >= 1 && scaled_power <= 10) {scaled_power = 10;} 
+            // ====================================================================
+            // ** 3. NEW SOLAR STATUS LOGIC **
+            // ====================================================================
+            if (net_energy <= -26.0f) {
+                solar_available = 1;
+            } else if (net_energy > 14.0f) {
+                solar_available = 0;
             }
-            
-            int change = scaled_power - 5;
 
-            if (current_net_power_w > 0) {
-                dump_load_relay[5] = (current_net_power_w / 10 > 5) ? 5 : (current_net_power_w / 10);  
-            } 
-            else if (current_net_power_w == 0) {
-                dump_load_relay[5] = 0;  
-            } 
-            else if (change != 0) { 
-                if (current_net_power_w <= -50 || (dump_load_relay[5] > 5 && change < 0)) {
-                    dump_load_relay[5] += change;
+            // ====================================================================
+            // ** 4. NEW CHARGER C LOGIC (Strict Float Boundaries) **
+            // ====================================================================
+            if (solar_available == 0) {
+                if (net_energy >= 6.0f) {
+                    dump_load_relay[5] = 5;
+                } else if (net_energy <= -6.0f) {
+                    dump_load_relay[5] = 0;
                 }
-                if (dump_load_relay[5] < 10) {dump_load_relay[5] = 10;}
+                // Between -5.99 and 5.99 Wh, do nothing (keep previous state)
+            } 
+            else {
+                if (net_energy > -10.0f) {
+                    // Timer reset boundary (-9.99 to 14.00 Wh)
+                    if (dump_load_relay[5] > 18) {
+                        dump_load_relay[5] = 18;
+                    }
+                } 
+                else if (net_energy <= -10.0f && net_energy > -30.0f) {
+                    // Exactly -10.0 down to -29.99 Wh
+                    dump_load_relay[5] = 18;
+                } 
+                else if (net_energy <= -30.0f) {
+                    // -30.0 Wh or lower
+                    int calculated_pwr = (abs((int)net_energy) * 60 / check_time_estimate_mins) / 10;
+                    
+                    if (calculated_pwr > 100) calculated_pwr = 100;
+                    if (calculated_pwr < 30) calculated_pwr = 30;
+                    
+                    dump_load_relay[5] = calculated_pwr;
+                }
             }
-            
-            dump_load_relay[5] = (dump_load_relay[5] > 100) ? 100 : (dump_load_relay[5] < 0 ? 0 : dump_load_relay[5]);
 
-            if (current_net_power_w < 0 && current_net_power_w > -51) {
-                dump_load_relay[5] = 10;  
-            }
-        
-            // NEW: Fire UDP Broadcast for Charger C immediately in the 1-minute loop
+            // ====================================================================
+            // ** UNCONDITIONAL SEND: Every minute, ONLY to Charger C **
+            // ====================================================================
             char dgr_cmd[64];
             snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
             CMD_ExecuteCommand(dgr_cmd, 0);
 
-            // ** External Relays (Indices 1, 2, 3, 4) **
-            if (min_in_block > 13) 
-            {
-                // Primary Charger (Index 1)
-                dump_load_relay[1] = (net_energy_equivalent <= -50 && check_hour >= 8 && check_hour <= 17) ? 1 : 
-                                     ((net_energy >= -12) ? 0 : dump_load_relay[1]);
-                
-                // Secondary Charger (Index 3)
-                dump_load_relay[3] = (net_energy_equivalent <= -125 && check_hour >= 9 && check_hour <= 15) ? 1 : 
-                                     (( net_energy >= -25) ? 0 : dump_load_relay[3]);                                 
-        
-                // Basement Dehumidifier (Index 4)
-                if (((check_time >= 40 && check_time <= 58 && net_energy_equivalent <= -50) && (check_hour >= 8 && check_hour <= 13))||(check_hour == 14 || check_hour == 16)) {
-                    dump_load_relay[4] = 1; 
-                } else if (min_in_block == 14 || net_energy >= -2) {
-                    dump_load_relay[4] = 0; 
-                }
-        
-                // Dishwasher (Index 2)
-                if ((net_energy_equivalent <= -175) && (check_hour >= 9 && check_hour <= 18)) {
-                    dump_load_relay[2] = 1; 
-                } else if (net_energy >= 75) {
-                    dump_load_relay[2] = 0; 
-                }
-            }
-                                                             
-            for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
-            {
-                if ((check_hour == 0) && (check_time == 0)) {
-                    dump_load_relay_timer[output_index] = 0;
-                } else {
-                    if (dump_load_relay[output_index] > 0) { 
-                        dump_load_relay_timer[output_index]++;
-                    }
-                }
-            }
-
-            // Command Execution Block
-            for (int output_index = 0; output_index < dump_load_relay_number; output_index++) 
-            {
-                if (dump_load_relay[output_index] != last_dump_load_relay[output_index]) 
-                {
-                    update_number = output_index;
-                    last_dump_load_relay[output_index] = dump_load_relay[output_index];
-            
-                    char output_command[64] = "";
-                    const char *ip_start = "SendGet http://192.168.8.";
-                    const char *ip_middle = "/cm?cmnd=Power%20"; 
-
-                    if (dump_load_relay_ip[output_index] == charger_c_ip) 
-                    {
-                        ip_middle = "/cm?cmnd=Channel3%20";  
-                        if (dump_load_relay[output_index] < 5) { old_output = -dump_load_relay[output_index]; } 
-                        else { old_output = dump_load_relay[output_index]; } 
-                    }
-            
-                    snprintf(output_command, sizeof(output_command), "%s%d%s%d", ip_start, dump_load_relay_ip[output_index], ip_middle, dump_load_relay[output_index]);
-                    CMD_ExecuteCommand(output_command, 0);
-                    
-                    break;
-                }
-            }
+            char fallback_cmd[64];
+            snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
+            CMD_ExecuteCommand(fallback_cmd, 0);
         }
     } // end of negative flag loop
 
