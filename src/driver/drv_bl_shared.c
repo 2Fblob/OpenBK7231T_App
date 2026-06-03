@@ -138,16 +138,8 @@ time_t ConsumptionResetTime = 0;
 int changeSendAlwaysFrames = 60;
 int changeDoNotSendMinFrames = 5;
 
-static int last_render_time = 0;
-
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 {
-    // Throttle UI updates to once every 5 seconds to protect the Wi-Fi chip
-    if (g_secondsElapsed - last_render_time < 5) {
-        return;
-    }
-    last_render_time = g_secondsElapsed;
-
     const char *mode;
     struct tm *ltm;
 
@@ -661,6 +653,12 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                     if (calculated_pwr < 30) calculated_pwr = 30;
                     
                     dump_load_relay[5] = calculated_pwr;
+                }
+                else if (net_energy > -10) {
+                    // Safety catch: Timer reset boundary. Throttle down previous high states.
+                    if (dump_load_relay[5] > 18) {
+                        dump_load_relay[5] = 18;
+                    }
                 }
             }
 
