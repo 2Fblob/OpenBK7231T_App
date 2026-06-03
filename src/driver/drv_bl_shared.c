@@ -151,74 +151,41 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     else { mode = "PWR"; }
 
     // ====================================================================
-    // FULLSCREEN MOBILE CSS DASHBOARD
+    // UI DASHBOARD & MINIMAL CSS
     // ====================================================================
     poststr(request, "<style>");
+    poststr(request, "#state { display: flex; flex-direction: column; }");
+    poststr(request, "#my-dash { order: -1; width: 100%; box-sizing: border-box; }"); 
     
-    // The main overlay container
-    poststr(request, "#my-dash { position: absolute; top: 0; left: 0; width: 100%; min-height: 100vh; background-color: #121212; z-index: 99999; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"); 
+    poststr(request, ".my-tbl { width:100%; text-align:center; font-size:16px; margin:10px 0; table-layout:fixed; border-collapse:collapse; }");
+    poststr(request, ".my-tbl th { color:#aaa; font-weight:normal; padding-bottom:5px; border-bottom:1px solid #444; }");
+    poststr(request, ".my-tbl td { padding-top:10px; padding-bottom:10px; }");
     
-    // Top Statistics Bar
-    poststr(request, ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 10px; border-radius: 8px; text-align: center; gap: 5px; }");
-    poststr(request, ".top-stats div { display: flex; flex-direction: column; justify-content: center; }");
-    poststr(request, ".top-stats span { color: #888; font-size: 10px; text-transform: uppercase; margin-bottom: 4px; white-space: nowrap; }");
-    poststr(request, ".top-stats b { font-size: 16px; font-weight: 600; }");
+    poststr(request, ".dash-row { display:flex; flex-wrap:wrap; gap:20px; margin-top:20px; align-items:flex-start; }");
     
-    // Dynamic Color Classes (Export = Green, Import = Red, Larger Font)
-    poststr(request, ".c-exp { color: #4caf50; font-size: 18px !important; }");
-    poststr(request, ".c-imp { color: #f44336; font-size: 18px !important; }");
+    poststr(request, ".sens-tbl { width:100%; text-align:left; font-size:14px; line-height:1.8; white-space:nowrap; border-collapse:collapse; }");
+    poststr(request, ".sens-tbl td { border-bottom:1px solid #333; }");
+    
+    poststr(request, ".hist-tbl { width:100%; text-align:center; font-size:14px; border-collapse:collapse; }");
+    poststr(request, ".hist-tbl th { color:#aaa; font-weight:normal; padding:8px 5px; border-bottom:1px solid #444; background:#222; position:sticky; top:0; z-index:1; }");
+    poststr(request, ".hist-tbl td { padding:5px; border-bottom:1px solid #333; }");
 
-    // Middle Row (Table + SVG)
-    poststr(request, ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 260px; align-items: stretch; }");
-    poststr(request, ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; }");
-    
-    // Changed right-col to flex-column to support the new title
-    poststr(request, ".right-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; overflow: hidden; }");
-    
-    // Tables
-    poststr(request, ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }");
-    poststr(request, ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }");
-    
-    poststr(request, ".hist-tbl-wrapper { margin-top: 15px; background: #222; padding: 10px; border-radius: 8px; }");
-    poststr(request, ".hist-tbl { width: 100%; text-align: center; font-size: 13px; border-collapse: collapse; }");
-    poststr(request, ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 6px; border-bottom: 1px solid #444; }");
-    poststr(request, ".hist-tbl td { padding: 8px 2px; border-bottom: 1px solid #333; }");
-    
-    // Close button (failsafe)
-    poststr(request, ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; font-weight: bold; cursor: pointer; }");
-    
+    // NEW CSS: Wrapper and Emojis for the Graph
+    poststr(request, ".svg-wrap { position:relative; width:100%; max-width:352px; display:flex; }");
+    poststr(request, ".icon-sun { position:absolute; top:10px; right:10px; font-size:24px; z-index:10; pointer-events:none; }");
+    poststr(request, ".icon-plug { position:absolute; bottom:10px; right:10px; font-size:24px; z-index:10; pointer-events:none; }");
     poststr(request, "</style>");
     
     poststr(request, "<div id='my-dash'>"); // Open Dashboard
 
-    // Hidden close button to return to standard OBK UI
-    poststr(request, "<div class='close-btn' onclick='document.getElementById(\"my-dash\").style.display=\"none\"'>✕</div>");
-
     // ====================================================================
-    // 1. HORIZONTAL DASHBOARD (Top Row Flexbox)
+    // 1. HORIZONTAL DASHBOARD (Top Row)
     // ====================================================================
-    poststr(request, "<div class='top-stats'>");
+    poststr(request, "<table class='my-tbl'><tr>");
+    poststr(request, "<th>Voltage</th><th>Power</th><th>15-Min Est.</th><th>Charger C</th><th>Status</th></tr><tr>");
     
-    // Volts / Amps
-    hprintf255(request, "<div><span>V / A</span><b>%.0f V / %.2f A</b></div>", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
-    
-    // Power (Colored)
-    const char* pwr_cls = (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp";
-    hprintf255(request, "<div><span>Power</span><b class='%s'>%.0f W</b></div>", pwr_cls, sensors[OBK_POWER].lastReading);
-    
-    // 15-Min Est (Colored)
-    const char* est_cls = (estimated_energy_period < 0) ? "c-exp" : "c-imp";
-    hprintf255(request, "<div><span>15-Min Est.</span><b class='%s'>%i Wh</b></div>", est_cls, estimated_energy_period);
-    
-    // Energy Balance (Colored)
-    const char* bal_cls = (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp";
-    hprintf255(request, "<div><span>Balance</span><b class='%s'>%.0f Wh</b></div>", bal_cls, sensors[OBK_POWER_REACTIVE].lastReading);
-
-    // Charger & Status
-    hprintf255(request, "<div><span>Charger C</span><b style='color:#0099FF;'>%i%%</b></div>", dump_load_relay[5]);
-    hprintf255(request, "<div><span>Status</span><b style='color:%s;'>%s</b></div>", solar_available ? "#4caf50" : "#f44336", solar_available ? "Exporting" : "Importing");
-    
-    poststr(request, "</div>");
+    hprintf255(request, "<td><b>%.0f V</b></td><td><b>%.0f W</b></td><td><b>%i Wh</b></td><td><b style='color:#0099FF;'>%i%%</b></td><td><b>%s</b></td></tr></table>", 
+               sensors[OBK_VOLTAGE].lastReading, sensors[OBK_POWER].lastReading, estimated_energy_period, dump_load_relay[5], solar_available ? "Exporting" : "Importing");
 
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced())
     {
@@ -230,16 +197,15 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         // ====================================================================
         // 2. DETAILED SENSORS (Left Column)
         // ====================================================================
-        poststr(request, "<div class='left-col'>"); 
-        poststr(request, "<div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>");
+        poststr(request, "<div style='width:260px; flex-shrink:0;'>"); 
+        poststr(request, "<h3 style='font-size:16px; margin:0 0 10px 0;'>Detailed Sensor Data</h3>");
         poststr(request, "<table class='sens-tbl'>");
 
         for (int i = (OBK__FIRST); i <= (OBK_CONSUMPTION__DAILY_LAST); i++) {
             if (i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))){i++;}
             if (i <= OBK__NUM_MEASUREMENTS || NTP_IsTimeSynced()) {
                 
-                // Skip V, A, W, VA, and Reactive (Balance) since they are now in the top bar
-                if (i == OBK_VOLTAGE || i == OBK_POWER || i == OBK_CURRENT || i == OBK_POWER_APPARENT || i == OBK_POWER_REACTIVE) continue; 
+                if (i == OBK_VOLTAGE || i == OBK_POWER) continue; 
 
                 poststr(request, "<tr><td><b>");
                 poststr(request, sensors[i].names.name_friendly);
@@ -255,19 +221,21 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "</table></div>");
         
         // ====================================================================
-        // 3. SVG BAR GRAPH (Right Column) - Scaled 300W / -150W
+        // 3. SVG BAR GRAPH 8-HOURS (Right Column) - Now With Emojis
         // ====================================================================
-        poststr(request, "<div class='right-col'>");
+        poststr(request, "<div style='flex:1; min-width:300px; margin-right:20px; display:flex; align-items:flex-end;'>");
         
-        // Added the matching Title
-        poststr(request, "<div style='font-size:12px; color:#888; width:100%; margin-bottom:8px; text-transform:uppercase;'>Quarter-Hour Net Energy Balance</div>");
+        // NEW: Add the relative wrapper and the HTML Entity Emojis
+        poststr(request, "<div class='svg-wrap'>");
+        poststr(request, "<div class='icon-sun'>&#x2600;&#xFE0F;</div>"); // ☀️
+        poststr(request, "<div class='icon-plug'>&#x1F50C;</div>");      // 🔌
         
-        // Viewbox height 260px. 32 bars * 11px = 352px width. margin-top:auto pins it to the bottom.
-        poststr(request, "<svg viewBox=\"0 0 352 260\" style=\"width:100%; max-width:352px; height:100%; max-height:220px; overflow:visible; margin-top:auto;\" xmlns=\"http://www.w3.org/2000/svg\">");
+        // Canvas is 320px tall to add 20px depth. Width reduced to 352px (32 bars * 11px).
+        // Removed max-width from SVG as it is now handled by the svg-wrap div
+        poststr(request, "<svg viewBox=\"0 0 352 320\" style=\"width:100%; height:auto; background:transparent; border:1px solid #000;\" xmlns=\"http://www.w3.org/2000/svg\">");
         
-        // Zero line fixed at y=170. 
-        // Leaves 150px for Import (300W max * 0.5) and 75px for Export (150W max * 0.5)
-        poststr(request, "<line x1=\"0\" y1=\"170\" x2=\"352\" y2=\"170\" stroke=\"#666\" stroke-width=\"1\" stroke-dasharray=\"4 4\"/>");
+        // Inverted axes: Central Zero line fixed near the bottom at y=230.
+        poststr(request, "<line x1=\"0\" y1=\"230\" x2=\"352\" y2=\"230\" stroke=\"#fff\" stroke-width=\"1\"/>");
 
         // Iterate backwards to plot left-to-right (oldest to newest)
         for (int i = 31; i >= 0; i--) {
@@ -276,49 +244,49 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             int net = net_matrix[c_index];
             if (i == 0) net += (int)(real_consumption - real_export);
             
-            // Fixed visual scaling limits
             int display_net = net;
-            if (display_net > 300) display_net = 300;
-            if (display_net < -150) display_net = -150;
+            if (display_net > 700) display_net = 700;
+            if (display_net < -300) display_net = -300;
             
-            // X positioning seamlessly touching (11px width)
+            // X positioning perfectly touching across 352px (11px width, no gap)
             int x = (31 - i) * 11; 
 
-            const char* text_color = (i == 0) ? "#0099FF" : "#ddd";
+            // Text color is blue for the active current interval, white for historical
+            const char* text_color = (i == 0) ? "#0099FF" : "#fff";
 
             if (display_net >= 0) { 
-                // IMPORT (Positive) -> Red bar facing UP. Multiplier 0.5
-                int h = display_net / 2;
+                // IMPORT (Positive) -> Red bar facing UP. 700W max scales to 190px height.
+                int h = (display_net * 190) / 700;
                 if (h < 1 && display_net != 0) h = 1;     
                 
-                hprintf255(request, "<rect x=\"%d\" y=\"%d\" width=\"11\" height=\"%d\" fill=\"#d32f2f\"/>", x, 170 - h, h);
+                hprintf255(request, "<rect x=\"%d\" y=\"%d\" width=\"11\" height=\"%d\" fill=\"#f44336\"/>", x, 230 - h, h);
                 
-                // Actual text value anchored ABOVE the bar (no "W")
+                // Print Value > 0: Anchored ABOVE the bar going UP. No "W", font size 8.
                 if (net > 0) {
-                    hprintf255(request, "<text transform=\"translate(%d, %d) rotate(-90)\" fill=\"%s\" font-size=\"8\" font-family=\"sans-serif\" font-weight=\"bold\" dominant-baseline=\"middle\" text-anchor=\"start\">%d</text>", x + 5, 170 - h - 3, text_color, net);
+                    hprintf255(request, "<text transform=\"translate(%d, %d) rotate(-90)\" fill=\"%s\" font-size=\"8\" font-family=\"sans-serif\" dominant-baseline=\"middle\" text-anchor=\"start\">%d</text>", x + 5, 230 - h - 3, text_color, net);
                 }
             } else {
-                // EXPORT (Negative) -> Green bar facing DOWN. Multiplier 0.5
-                int h = abs(display_net) / 2;
+                // EXPORT (Negative) -> Green bar facing DOWN. 300W max scales to 60px height.
+                int h = (abs(display_net) * 60) / 300;
                 if (h < 1) h = 1;     
                 
-                hprintf255(request, "<rect x=\"%d\" y=\"170\" width=\"11\" height=\"%d\" fill=\"#388e3c\"/>", x, h);
+                hprintf255(request, "<rect x=\"%d\" y=\"230\" width=\"11\" height=\"%d\" fill=\"#4caf50\"/>", x, h);
                 
-                // Actual text value anchored BELOW the bar
+                // Print Value < 0: Anchored BELOW the bar going DOWN. No "W", font size 8.
                 if (net < 0) {
-                    hprintf255(request, "<text transform=\"translate(%d, %d) rotate(-90)\" fill=\"%s\" font-size=\"8\" font-family=\"sans-serif\" font-weight=\"bold\" dominant-baseline=\"middle\" text-anchor=\"end\">%d</text>", x + 5, 170 + h + 3, text_color, net);
+                    hprintf255(request, "<text transform=\"translate(%d, %d) rotate(-90)\" fill=\"%s\" font-size=\"8\" font-family=\"sans-serif\" dominant-baseline=\"middle\" text-anchor=\"end\">%d</text>", x + 5, 230 + h + 3, text_color, net);
                 }
             }
         }
-        poststr(request, "</svg></div>");
+        poststr(request, "</svg></div></div>"); // NEW: Added an extra </div> to close svg-wrap
 
         poststr(request, "</div>"); // Close dash-row
 
         // ====================================================================
-        // 4. HOURLY DATA TABLE (Last 4 Results)
+        // 4. HOURLY DATA TABLE (Last 4 Results) - Full Width Below
         // ====================================================================
-        poststr(request, "<div class='hist-tbl-wrapper'>");
-        poststr(request, "<table class='hist-tbl'>");
+        poststr(request, "<div style='width:100%; margin-top:20px;'>");
+        poststr(request, "<table class='hist-tbl' style='width:100%; table-layout:fixed;'>");
         poststr(request, "<tr><th>Time</th><th>Import</th><th>Export</th><th>Net</th></tr>");
 
         for (int i = 0; i < 4; i++) {
@@ -331,7 +299,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             int net = net_matrix[c_index];
             
             if (i == 0) { 
-                // Active Row (Now)
+                // Active Row (Now) -> Colored Blue, Bold, dynamic "Now (-Xmin)"
                 cons += (int)real_consumption;
                 exp += (int)real_export;
                 net += (int)(real_consumption - real_export); 
@@ -340,7 +308,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
                 hprintf255(request, "<tr style='color:#0099FF; font-weight:bold;'><td>Now (-%dmin)</td><td>%dW</td><td>%dW</td><td>%dW</td></tr>", 
                            mins_left, cons, exp, net);
             } else {
-                // Historical Rows
+                // Historical Rows (Standard Style)
                 int row_mins = interval_of_day * 15;
                 int row_h = row_mins / 60;
                 int row_m = row_mins % 60;
@@ -352,7 +320,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "</table></div>");
     }
     
-    poststr(request, "</div>"); // Close my-dash
+    poststr(request, "</div><br>"); // Close my-dash
 }
 
 void BL09XX_SaveEmeteringStatistics()
