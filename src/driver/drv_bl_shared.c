@@ -255,70 +255,51 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "</table></div>");
         
         // ====================================================================
-        // 3. SVG BAR GRAPH (Right Column) - Scaled 300W / -150W
+        // 3. CANVAS BAR GRAPH (Right Column) - CLIENT SIDE RENDERED
         // ====================================================================
         poststr(request, "<div class='right-col'>");
         
         // Added the matching Title
         poststr(request, "<div style='font-size:12px; color:#888; width:100%; margin-bottom:8px; text-transform:uppercase;'>Quarter-Hour Net Energy Balance</div>");
         
-        // Viewbox height 260px. 32 bars * 11px = 352px width. margin-top:auto pins it to the bottom.
-        poststr(request, "<svg viewBox=\"0 0 352 260\" style=\"width:100%; max-width:352px; height:100%; max-height:220px; overflow:visible; margin-top:auto;\" xmlns=\"http://www.w3.org/2000/svg\">");
+        // Output a blank Canvas element matching the old 352x260 viewbox
+        poststr(request, "<canvas id='chart' width='352' height='260' style='width:100%; max-width:352px; height:100%; max-height:220px; overflow:visible; margin-top:auto;'></canvas>");
         
-        // Zero line fixed at y=170. 
-        // Leaves 150px for Import (300W max * 0.5) and 75px for Export (150W max * 0.5)
-        poststr(request, "<line x1=\"0\" y1=\"170\" x2=\"352\" y2=\"170\" stroke=\"#666\" stroke-width=\"1\" stroke-dasharray=\"4 4\"/>");
-
-        // Iterate backwards to plot left-to-right (oldest to newest)
+        // Output ONLY the raw data as a JavaScript array
+        poststr(request, "<script>const d=[");
         for (int i = 31; i >= 0; i--) {
             int interval_of_day = (current_interval_of_day - i + 96) % 96;
             int c_index = interval_of_day % 32;
             int net = net_matrix[c_index];
             if (i == 0) net += (int)(real_consumption - real_export);
             
-            // Fixed visual scaling limits
-            int display_net = net;
-            if (display_net > 300) display_net = 300;
-            if (display_net < -150) display_net = -150;
-            
-            // X positioning seamlessly touching (11px width)
-            int x = (31 - i) * 11; 
-
-            const char* text_color = (i == 0) ? "#0099FF" : "#ddd";
-
-            if (display_net >= 0) { 
-                // IMPORT (Positive) -> Red bar facing UP. Multiplier 0.5
-                int h = display_net / 2;
-                if (h < 1 && display_net != 0) h = 1;     
-                
-                hprintf255(request, "<rect x=\"%d\" y=\"%d\" width=\"11\" height=\"%d\" fill=\"#d32f2f\"/>", x, 170 - h, h);
-                
-                // Actual text value anchored ABOVE the bar (no "W")
-                if (net > 0) {
-                    hprintf255(request, "<text transform=\"translate(%d, %d) rotate(-90)\" fill=\"%s\" font-size=\"8\" font-family=\"sans-serif\" font-weight=\"bold\" dominant-baseline=\"middle\" text-anchor=\"start\">%d</text>", x + 5, 170 - h - 3, text_color, net);
-                }
-            } else {
-                // EXPORT (Negative) -> Green bar facing DOWN. Multiplier 0.5
-                int h = abs(display_net) / 2;
-                if (h < 1) h = 1;     
-                
-                hprintf255(request, "<rect x=\"%d\" y=\"170\" width=\"11\" height=\"%d\" fill=\"#388e3c\"/>", x, h);
-                
-                // Actual text value anchored BELOW the bar
-                if (net < 0) {
-                    hprintf255(request, "<text transform=\"translate(%d, %d) rotate(-90)\" fill=\"%s\" font-size=\"8\" font-family=\"sans-serif\" font-weight=\"bold\" dominant-baseline=\"middle\" text-anchor=\"end\">%d</text>", x + 5, 170 + h + 3, text_color, net);
-                }
-            }
+            hprintf255(request, "%d%s", net, (i == 0) ? "" : ",");
         }
-        poststr(request, "</svg></div>");
+        poststr(request, "];");
+
+        // Minified script to draw the scaled canvas replacing the SVG
+        poststr(request, "const c=document.getElementById('chart').getContext('2d');"
+                         "c.beginPath();c.setLineDash([4,4]);c.moveTo(0,170);c.lineTo(352,170);c.strokeStyle='#666';c.stroke();"
+                         "c.font='bold 8px sans-serif';c.textAlign='start';c.textBaseline='middle';"
+                         "d.forEach((v,i)=>{ let x=(31-i)*11; let d_net=Math.max(Math.min(v,300),-150); "
+                         "if(v>=0){ let h=Math.max(d_net/2, 1); c.fillStyle='#d32f2f'; c.fillRect(x, 170-h, 11, h); "
+                         "if(v>0){ c.save(); c.translate(x+5, 170-h-3); c.rotate(-Math.PI/2); c.fillStyle=i===31?'#0099FF':'#ddd'; c.fillText(v,0,0); c.restore(); } }"
+                         "else { let h=Math.max(Math.abs(d_net)/2, 1); c.fillStyle='#388e3c'; c.fillRect(x, 170, 11, h); "
+                         "if(v<0){ c.save(); c.translate(x+5, 170+h+3); c.rotate(-Math.PI/2); c.textAlign='end'; c.fillStyle=i===31?'#0099FF':'#ddd'; c.fillText(v,0,0); c.restore(); } }"
+                         "});</script>");
+                         
+        poststr(request, "</div>");
 
         poststr(request, "</div>"); // Close dash-row
 
         // ====================================================================
-        // 4. HOURLY DATA TABLE (Last 4 Results)
+        // 4. HOURLY DATA TABLE & MCU CLOCK
         // ====================================================================
-        poststr(request, "<div class='hist-tbl-wrapper'>");
-        poststr(request, "<table class='hist-tbl'>");
+        poststr(request, "<div style='display:flex; flex-wrap:wrap; width:100%; margin-top:15px; gap:15px; align-items:stretch;'>");
+        
+        // --- Table Section ---
+        poststr(request, "<div class='hist-tbl-wrapper' style='flex:1; min-width:300px; margin-top:0;'>");
+        poststr(request, "<table class='hist-tbl' style='height:100%;'>");
         poststr(request, "<tr><th>Time</th><th>Import</th><th>Export</th><th>Net</th></tr>");
 
         for (int i = 0; i < 4; i++) {
@@ -350,6 +331,14 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             }
         }
         poststr(request, "</table></div>");
+
+        // --- Big Clock Section ---
+        poststr(request, "<div style='width:210px; display:flex; flex-direction:column; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:10px;'>");
+        hprintf255(request, "<div style='font-size:56px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:2px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
+        poststr(request, "<div style='font-size:12px; color:#888; margin-top:8px; text-transform:uppercase; letter-spacing:2px;'>Device Time</div>");
+        poststr(request, "</div>");
+
+        poststr(request, "</div>"); // Close bottom flex-row
     }
     
     poststr(request, "</div>"); // Close my-dash
