@@ -158,7 +158,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, "body { margin: 0; background-color: #000; }");
     poststr(request, "#my-dash { position: absolute; top: 0; left: 0; width: 100%; min-height: 100vh; background-color: #121212; z-index: 99999; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"); 
     
-    // Top Stats Bar (Font size 20% larger than stock)
+    // Top Stats Bar
     poststr(request, ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; gap: 5px; }");
     poststr(request, ".top-stats div { display: flex; flex-direction: column; justify-content: center; }");
     poststr(request, ".top-stats span { color: #888; font-size: 18px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }");
@@ -178,7 +178,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, ".ctrl-col { flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 10px; box-sizing: border-box; }");
     poststr(request, ".btn-tgl { width: 100%; border: none; color: white; padding: 8px 0; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; text-align: center; line-height: 1.1; }");
     
-    // Bottom Section Layout Rules (Font size 50% larger than stock)
+    // Bottom Section Layout Rules
     poststr(request, ".hist-tbl-wrapper { flex: 1; min-width: 180px; }");
     poststr(request, ".hist-tbl { width: 100%; text-align: center; font-size: 20px; border-collapse: collapse; }");
     poststr(request, ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 6px; border-bottom: 1px solid #444; }");
@@ -195,9 +195,6 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     // ====================================================================
     poststr(request, "<div class='top-stats'>");
     
-    // Charger C Tracker Display
-    hprintf255(request, "<div><span>Charger C</span><b id='c-v' style='color:#0099FF;'>%d%%</b></div>", dump_load_relay[5]);
-    
     // Volts & Amps
     hprintf255(request, "<div><span>V / A</span><b id='d-va'>%.0f V<br>%.2f A</b></div>", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
     
@@ -213,8 +210,17 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     const char* bal_cls = (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp";
     hprintf255(request, "<div><span>Balance</span><b id='d-bal' class='%s'>%.0f Wh</b></div>", bal_cls, sensors[OBK_POWER_REACTIVE].lastReading);
 
-    // Contextual Status
-    hprintf255(request, "<div><span>Status</span><b id='d-stat' style='color:%s;'>%s</b></div>", solar_available ? "#4caf50" : "#f44336", solar_available ? "Exporting" : "Importing");
+    // Dynamic Charger Display Logic
+    poststr(request, "<div id='d-chg-box'>");
+    if (dump_load_relay[5] == 0) {
+        poststr(request, "<span id='c-lbl'>Charger</span><b id='c-v' style='color:#888;'>Idle</b>");
+    } else if (dump_load_relay[5] == 5) {
+        poststr(request, "<span id='c-lbl'>Charger</span><b id='c-v' style='color:#4caf50;'>Battery</b>");
+    } else {
+        hprintf255(request, "<span id='c-lbl'>Charging</span><b id='c-v' style='color:#0099FF;'>%d%%</b>", dump_load_relay[5]);
+    }
+    poststr(request, "</div>");
+    
     poststr(request, "</div>");
 
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced())
@@ -274,7 +280,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
                 int text_y = (v >= 0) ? (130 - h - 6) : (130 + h + 14);
                 
                 if (h > 0) {
-                    hprintf255(request, "<rect x='%d' y='%d' width='14' height='%d' fill='%s' rx='2'/>", x, rect_y, h, color);
+                    hprintf255(request, "<rect x='%d' y='%d' width='15' height='%d' fill='%s' rx='1'/>", x, rect_y, h, color);
                 }
                 hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='11' font-family='sans-serif' text-anchor='middle'>%d</text>", x + 7, text_y, v);
             } else {
@@ -290,9 +296,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         // ====================================================================
         int dmp = dump_load_relay[5];
         const char* inv_color = (dmp == 5) ? "#4caf50" : "#555555";
-        const char* chg_color = (dmp > 18) ? "#4caf50" : ((dmp >= 10) ? "#ffeb3b" : "#555555");
-        const char* chg_30_color = (dmp == 30) ? "#4caf50" : "#555555";
-        const char* chg_80_color = (dmp == 80) ? "#4caf50" : "#555555";
+        const char* chg_color = (dmp > 18) ? "#4caf50" : ((dmp >= 10 && dmp <= 18) ? "#ffeb3b" : "#555555");
+        const char* chg_30_color = (dmp >= 30) ? "#4caf50" : "#555555";
+        const char* chg_80_color = (dmp >= 80) ? "#4caf50" : "#555555";
         const char* auto_color = charger_c_auto ? "#0099FF" : "#f44336";
         const char* auto_text = charger_c_auto ? "AUTO" : "MANUAL";
 
@@ -303,18 +309,12 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         hprintf255(request, "<button id='inv-btn' class='btn-tgl' style='background:%s;' onclick='t_inv()'>INVERTER</button>", inv_color);
         hprintf255(request, "<button id='chg-btn' class='btn-tgl' style='background:%s;' onclick='t_chg()'>CHARGER</button>", chg_color);
         
-        poststr(request, "<div style='display:flex; gap:4px; width:100%%;'>");
+        poststr(request, "<div style='display:flex; gap:4px; width:100%%; margin-top:auto;'>");
         hprintf255(request, "<button id='chg-30-btn' class='btn-tgl' style='background:%s; flex:1; font-size:11px; padding:4px 0;' onclick='upd(30)'>30%%</button>", chg_30_color);
         hprintf255(request, "<button id='chg-80-btn' class='btn-tgl' style='background:%s; flex:1; font-size:11px; padding:4px 0;' onclick='upd(80)'>80%%</button>", chg_80_color);
         poststr(request, "</div>");
 
-        poststr(request, "<div style='width:100%%; background:#1a1a1a; padding:6px; border-radius:6px; box-sizing:border-box; margin-top:auto; text-align:center;'>");
-        poststr(request, "<div style='font-size:10px; color:#888; margin-bottom:4px; font-weight:bold;'>CHG C</div>");
-        hprintf255(request, "<input type='range' id='c-sld' style='width:100%%; margin:0;' min='10' max='100' value='%d' oninput='upd(this.value)'>", dmp);
-        hprintf255(request, "<div id='c-val' style='font-size:14px; font-weight:bold; color:#0099FF; margin-top:5px;'>%d%%</div>", dmp);
-        poststr(request, "</div>");
         poststr(request, "</div>"); // Close ctrl-col
-
         poststr(request, "</div>"); // Close dash-row layout boundary
 
         // ====================================================================
@@ -356,7 +356,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 
         // Display module wrapper clock frame
         poststr(request, "<div style='flex:0 0 340px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:10px; overflow:hidden;'>");
-        hprintf255(request, "<div id='d-clk' style='font-size:102px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
+        hprintf255(request, "<div id='d-clk' style='font-size:110px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
         poststr(request, "</div>");
         
         poststr(request, "</div>"); // Close historical data flex row layout boundary
@@ -367,29 +367,36 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "<script>");
         hprintf255(request, "var dmp=%d;", dmp);
         
-        // Command injection channels
+        // Command injection channels - Matches Progressive Color & Dynamic Text Thresholds
         poststr(request, "function upd(v){dmp=parseInt(v);fetch('/cm?cmnd=SetDumpLoad%20'+dmp);");
         poststr(request, "document.getElementById('inv-btn').style.background=(dmp===5)?'#4caf50':'#555555';");
-        poststr(request, "document.getElementById('chg-btn').style.background=(dmp>18)?'#4caf50':(dmp>=10?'#ffeb3b':'#555555');");
-        poststr(request, "document.getElementById('chg-30-btn').style.background=(dmp===30)?'#4caf50':'#555555';");
-        poststr(request, "document.getElementById('chg-80-btn').style.background=(dmp===80)?'#4caf50':'#555555';");
-        poststr(request, "document.getElementById('c-val').innerText=dmp+'%';");
-        poststr(request, "document.getElementById('c-sld').value=dmp;");
-        poststr(request, "var tc=document.getElementById('c-v');if(tc)tc.innerText=dmp+'%';}");
+        poststr(request, "document.getElementById('chg-btn').style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#ffeb3b':'#555555');");
+        poststr(request, "document.getElementById('chg-30-btn').style.background=(dmp>=30)?'#4caf50':'#555555';");
+        poststr(request, "document.getElementById('chg-80-btn').style.background=(dmp>=80)?'#4caf50':'#555555';");
+        
+        poststr(request, "var tc=document.getElementById('c-v'),tl=document.getElementById('c-lbl');");
+        poststr(request, "if(tc&&tl){if(dmp===0){tl.innerText='Charger';tc.innerText='Idle';tc.style.color='#888';}");
+        poststr(request, "else if(dmp===5){tl.innerText='Charger';tc.innerText='Battery';tc.style.color='#4caf50';}");
+        poststr(request, "else{tl.innerText='Charging';tc.innerText=dmp+'%';tc.style.color='#0099FF';}}}");
         
         poststr(request, "function t_inv(){upd(dmp===5?0:5);}function t_chg(){upd(dmp>=10?0:18);}");
         poststr(request, "function tm(){var b=document.getElementById('m-btn');if(b.innerText==='AUTO'){b.innerText='MANUAL';b.style.background='#f44336';}else{b.innerText='AUTO';b.style.background='#0099FF';}fetch('/cm?cmnd=ToggleAuto');}");
         
-        // Fragment parser background refresh mapping tree
-        poststr(request, "function rsh(){fetch('/index').then(r=>r.text()).then(html=>{");
-        poststr(request, "var parser=new DOMParser();var doc=parser.parseFromString(html,'text/html');");
-        poststr(request, "['d-va','d-pwr','d-est','d-bal','c-v','d-stat','d-sens-body','d-graph','d-hist-body','d-clk'].forEach(id=>{");
+        // Target list DOM parser loop
+        poststr(request, "function rsh(ids){fetch('/index').then(r=>r.text()).then(html=>{");
+        poststr(request, "var doc=new DOMParser().parseFromString(html,'text/html');");
+        poststr(request, "ids.forEach(id=>{");
         poststr(request, "var oldEl=document.getElementById(id),newEl=doc.getElementById(id);");
         poststr(request, "if(oldEl&&newEl&&oldEl.innerHTML!==newEl.innerHTML){");
         poststr(request, "oldEl.innerHTML=newEl.innerHTML;if(newEl.className)oldEl.className=newEl.className;if(newEl.style.color)oldEl.style.color=newEl.style.color;");
         poststr(request, "}});}).catch(e=>console.log(e));}");
         
-        poststr(request, "setInterval(rsh,4000);");
+        // 10-Second Refresh Cycle
+        poststr(request, "setInterval(function(){rsh(['d-va','d-pwr','d-est','d-bal','d-chg-box','d-sens-body','d-clk', 'inv-btn', 'chg-btn', 'chg-30-btn', 'chg-80-btn']);}, 10000);");
+        
+        // 30-Second Refresh Cycle
+        poststr(request, "setInterval(function(){rsh(['d-graph','d-hist-body']);}, 30000);");
+        
         poststr(request, "</script>");
     }
     
@@ -766,16 +773,19 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                         dump_load_relay[5] = calculated_pwr;
                     }
                 }
+            } // END OF AUTO MODE BLOCK
 
-                // Unconditional send every minute (Auto Mode Only)
-                char dgr_cmd[64];
-                snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
-                CMD_ExecuteCommand(dgr_cmd, 0);
+            // ====================================================================
+            // UNCONDITIONAL SEND: Runs every 1-minute regardless of Auto/Manual
+            // ====================================================================
+            char dgr_cmd[64];
+            snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
+            CMD_ExecuteCommand(dgr_cmd, 0);
 
-                char fallback_cmd[64];
-                snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
-                CMD_ExecuteCommand(fallback_cmd, 0);
-            }
+            char fallback_cmd[64];
+            snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
+            CMD_ExecuteCommand(fallback_cmd, 0);
+
         }
     } // end of negative flag loop
 
