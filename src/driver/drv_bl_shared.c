@@ -167,17 +167,18 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, ".c-exp { color: #4caf50; }");
     poststr(request, ".c-imp { color: #f44336; }");
 
-    // Layout Containers
+    // Main Row Containers
     poststr(request, ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 290px; align-items: stretch; }"); 
     poststr(request, ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; }");
     poststr(request, ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }");
     poststr(request, ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }");
 
+    // Graph Area & Control Column Designations
     poststr(request, ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }");
-    poststr(request, ".ctrl-col { flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 8px; box-sizing: border-box; }");
-    poststr(request, ".btn-tgl { width: 100%; border: none; color: white; padding: 6px 0; border-radius: 4px; font-weight: bold; cursor: pointer; line-height: 1.2rem; font-size: 0.9rem; text-align: center; box-sizing: border-box; }");
+    poststr(request, ".ctrl-col { flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 10px; box-sizing: border-box; }");
+    poststr(request, ".btn-tgl { width: 100%; border: none; color: white; padding: 8px 0; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; text-align: center; line-height: 1.1; }");
     
-    // Bottom Section Tables (Font size 50% larger than stock)
+    // Bottom Section Layout Rules (Font size 50% larger than stock)
     poststr(request, ".hist-tbl-wrapper { flex: 1; min-width: 180px; }");
     poststr(request, ".hist-tbl { width: 100%; text-align: center; font-size: 20px; border-collapse: collapse; }");
     poststr(request, ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 6px; border-bottom: 1px solid #444; }");
@@ -194,27 +195,26 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     // ====================================================================
     poststr(request, "<div class='top-stats'>");
     
-    // Charger C Combined Field
+    // Charger C Tracker Display
     hprintf255(request, "<div><span>Charger C</span><b id='c-v' style='color:#0099FF;'>%d%%</b></div>", dump_load_relay[5]);
     
-    // Volts / Amps
+    // Volts & Amps
     hprintf255(request, "<div><span>V / A</span><b id='d-va'>%.0f V<br>%.2f A</b></div>", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
     
-    // Live Power
+    // Power Matrix Tracker
     const char* pwr_cls = (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp";
     hprintf255(request, "<div><span>Power</span><b id='d-pwr' class='%s'>%.0f W</b></div>", pwr_cls, sensors[OBK_POWER].lastReading);
     
-    // 15-Min Estimate
+    // Period Approximations
     const char* est_cls = (estimated_energy_period < 0) ? "c-exp" : "c-imp";
     hprintf255(request, "<div><span>15-Min Est.</span><b id='d-est' class='%s'>%i Wh</b></div>", est_cls, estimated_energy_period);
     
-    // Energy Balance
+    // Active Balance
     const char* bal_cls = (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp";
     hprintf255(request, "<div><span>Balance</span><b id='d-bal' class='%s'>%.0f Wh</b></div>", bal_cls, sensors[OBK_POWER_REACTIVE].lastReading);
 
-    // Grid Status
+    // Contextual Status
     hprintf255(request, "<div><span>Status</span><b id='d-stat' style='color:%s;'>%s</b></div>", solar_available ? "#4caf50" : "#f44336", solar_available ? "Exporting" : "Importing");
-    
     poststr(request, "</div>");
 
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced())
@@ -222,10 +222,11 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
         int current_interval_of_day = minutes_since_midnight / net_metering_period;
         
+        // BEGINNING OF MAIN GRID MATRIX
         poststr(request, "<div class='dash-row'>");
 
         // ====================================================================
-        // 2. DETAILED SENSORS COLUMN (Left)
+        // 2. SENSOR COLUMN (Left Alignment Container)
         // ====================================================================
         poststr(request, "<div class='left-col'>"); 
         poststr(request, "<div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>");
@@ -250,14 +251,42 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "</tbody></table></div>");
         
         // ====================================================================
-        // 3. CANVAS GRAPH COLUMN (Center)
+        // 3. GRAPH COLUMN (Center Vector Block - 100% Pure HTML Server-Rendered)
         // ====================================================================
-        poststr(request, "<div class='graph-col'>");
-        poststr(request, "<canvas id='chart' width='512' height='260' style='width:100%%; max-height:100%%;'></canvas>");
+        poststr(request, "<div class='graph-col' id='d-graph'>");
+        poststr(request, "<svg viewBox='0 0 512 260' style='width:100%%; height:100%%; background:transparent;'>");
+        
+        // Center Baseline Split
+        poststr(request, "<line x1='0' y1='130' x2='512' y2='130' stroke='#333' stroke-width='1'/>");
+        
+        for (int i = 31; i >= 0; i--) {
+            int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
+            int v = net_matrix[interval_of_day % 32];
+            if (i == 0) { v += (int)(real_consumption - real_export); }
+            
+            int x = (31 - i) * 16;
+            int h = abs(v) / 2;
+            if (h > 120) h = 120; // Structural constraint map boundary
+            
+            if (v != 0 || i == 0) {
+                const char* color = (v >= 0) ? "#d32f2f" : "#388e3c";
+                int rect_y = (v >= 0) ? (130 - h) : 130;
+                int text_y = (v >= 0) ? (130 - h - 6) : (130 + h + 14);
+                
+                if (h > 0) {
+                    hprintf255(request, "<rect x='%d' y='%d' width='14' height='%d' fill='%s' rx='2'/>", x, rect_y, h, color);
+                }
+                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='11' font-family='sans-serif' text-anchor='middle'>%d</text>", x + 7, text_y, v);
+            } else {
+                // Ground elements directly along layout spine
+                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='11' font-family='sans-serif' text-anchor='middle'>0</text>", x + 7);
+            }
+        }
+        poststr(request, "</svg>");
         poststr(request, "</div>");
 
         // ====================================================================
-        // 4. CONTROLS COLUMN (Right - Max 100px width layout)
+        // 4. CONTROL INTERFACE ARRAY (Right Column Column Boundary)
         // ====================================================================
         int dmp = dump_load_relay[5];
         const char* inv_color = (dmp == 5) ? "#4caf50" : "#555555";
@@ -285,10 +314,11 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         hprintf255(request, "<div id='c-val' style='font-size:14px; font-weight:bold; color:#0099FF; margin-top:5px;'>%d%%</div>", dmp);
         poststr(request, "</div>");
         poststr(request, "</div>"); // Close ctrl-col
-        poststr(request, "</div>"); // Close dash-row
+
+        poststr(request, "</div>"); // Close dash-row layout boundary
 
         // ====================================================================
-        // 5. HOURLY DATA TABLE & LARGE MCU CLOCK ROW
+        // 5. HOURLY DATA TABLE & LARGE CLOCK SYSTEM
         // ====================================================================
         poststr(request, "<div style='display:flex; width:100%%; margin-top:20px; gap:20px; align-items:stretch;'>");
         
@@ -324,36 +354,20 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         }
         poststr(request, "</tbody></table></div>");
 
-        // Clock display area
+        // Display module wrapper clock frame
         poststr(request, "<div style='flex:0 0 340px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:10px; overflow:hidden;'>");
         hprintf255(request, "<div id='d-clk' style='font-size:102px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
         poststr(request, "</div>");
-        poststr(request, "</div>"); 
+        
+        poststr(request, "</div>"); // Close historical data flex row layout boundary
 
         // ====================================================================
-        // 6. HIDDEN DATA CONTAINER (Prevents String Memory Overflows)
-        // ====================================================================
-        poststr(request, "<div id='d-raw' style='display:none;'>");
-        char arr_buf[256] = {0}; 
-        int pos = 0;
-        for (int i = 31; i >= 0; i--) {
-            int interval_of_day = (current_interval_of_day - i + 96) % 96;
-            int net = net_matrix[interval_of_day % 32];
-            if (i == 0) net += (int)(real_consumption - real_export);
-            
-            int written = snprintf(arr_buf + pos, sizeof(arr_buf) - pos, "%d%s", net, (i == 0) ? "" : ",");
-            if (written > 0 && written < (sizeof(arr_buf) - pos)) { pos += written; }
-        }
-        poststr(request, arr_buf);
-        poststr(request, "</div>");
-
-        // ====================================================================
-        // 7. CLIENT INTERACTIVITY & RENDERING LOGIC ENGINE
+        // 6. ASYNCHRONOUS SWAP ENGINE
         // ====================================================================
         poststr(request, "<script>");
         hprintf255(request, "var dmp=%d;", dmp);
         
-        // Control Block Event Rules
+        // Command injection channels
         poststr(request, "function upd(v){dmp=parseInt(v);fetch('/cm?cmnd=SetDumpLoad%20'+dmp);");
         poststr(request, "document.getElementById('inv-btn').style.background=(dmp===5)?'#4caf50':'#555555';");
         poststr(request, "document.getElementById('chg-btn').style.background=(dmp>18)?'#4caf50':(dmp>=10?'#ffeb3b':'#555555');");
@@ -366,31 +380,20 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "function t_inv(){upd(dmp===5?0:5);}function t_chg(){upd(dmp>=10?0:18);}");
         poststr(request, "function tm(){var b=document.getElementById('m-btn');if(b.innerText==='AUTO'){b.innerText='MANUAL';b.style.background='#f44336';}else{b.innerText='AUTO';b.style.background='#0099FF';}fetch('/cm?cmnd=ToggleAuto');}");
         
-        // Dynamic Canvas Drawing Logic
-        poststr(request, "function drw(d){var canvas=document.getElementById('chart');if(!canvas)return;var c=canvas.getContext('2d');c.clearRect(0,0,512,260);");
-        poststr(request, "d.forEach(function(v,i){var x=(31-i)*16;var h=Math.abs(v)/2;if(h>120)h=120;");
-        poststr(request, "c.fillStyle=(v>=0)?'#d32f2f':'#388e3c';c.fillRect(x,130-(v>=0?h:0),16,h);");
-        poststr(request, "c.fillStyle='#ddd';c.font='12px sans-serif';c.textAlign='center';");
-        poststr(request, "c.fillText(v,x+8,130+(v>=0?-h-5:h+15));});}");
-        
-        // Dynamic Variable Asynchronous Injector Loop
-        poststr(request, "function rsh(){fetch('/index').then(function(r){return r.text();}).then(function(html){");
+        // Fragment parser background refresh mapping tree
+        poststr(request, "function rsh(){fetch('/index').then(r=>r.text()).then(html=>{");
         poststr(request, "var parser=new DOMParser();var doc=parser.parseFromString(html,'text/html');");
-        poststr(request, "['d-va','d-pwr','d-est','d-bal','c-v','d-stat'].forEach(function(id){");
-        poststr(request, "var o=document.getElementById(id),n=doc.getElementById(id);if(o&&n&&o.innerHTML!==n.innerHTML){");
-        poststr(request, "o.innerHTML=n.innerHTML;o.className=n.className;o.style.color=n.style.color;}});");
-        poststr(request, "['d-sens-body','d-hist-body','d-clk'].forEach(function(id){");
-        poststr(request, "var o=document.getElementById(id),n=doc.getElementById(id);if(o&&n&&o.innerHTML!==n.innerHTML)o.innerHTML=n.innerHTML;});");
-        poststr(request, "var raw=doc.getElementById('d-raw');if(raw){var arr=raw.innerText.split(',').map(Number);drw(arr);}");
-        poststr(request, "}).catch(function(e){console.log(e);});}");
+        poststr(request, "['d-va','d-pwr','d-est','d-bal','c-v','d-stat','d-sens-body','d-graph','d-hist-body','d-clk'].forEach(id=>{");
+        poststr(request, "var oldEl=document.getElementById(id),newEl=doc.getElementById(id);");
+        poststr(request, "if(oldEl&&newEl&&oldEl.innerHTML!==newEl.innerHTML){");
+        poststr(request, "oldEl.innerHTML=newEl.innerHTML;if(newEl.className)oldEl.className=newEl.className;if(newEl.style.color)oldEl.style.color=newEl.style.color;");
+        poststr(request, "}});}).catch(e=>console.log(e));}");
         
-        // Run loop on load, refresh every 4 seconds
-        poststr(request, "var rawInit=document.getElementById('d-raw');if(rawInit){drw(rawInit.innerText.split(',').map(Number));}");
         poststr(request, "setInterval(rsh,4000);");
         poststr(request, "</script>");
     }
     
-    poststr(request, "</div>"); 
+    poststr(request, "</div>"); // Close main interface container block (#my-dash)
 }
 
 void BL09XX_SaveEmeteringStatistics()
