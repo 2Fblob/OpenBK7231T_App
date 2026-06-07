@@ -29,6 +29,9 @@ int output_index = 0;
 
 int estimated_energy_period = 0;
 
+// Global Auto/Manual Tracker for Charger C (1 = Auto, 0 = Manual)
+int charger_auto_mode = 1;
+
 // Initialize temp variables
 int total_net_consumption = 0;
 int total_net_export = 0;
@@ -138,6 +141,15 @@ time_t ConsumptionResetTime = 0;
 int changeSendAlwaysFrames = 60;
 int changeDoNotSendMinFrames = 5;
 
+// Command to flip Auto/Manual state from the Web UI
+commandResult_t Cmd_SetChargerMode(const void *context, const char *cmd, const char *args, int cmdFlags)
+{
+    if (args != NULL && strlen(args) > 0) {
+        charger_auto_mode = atoi(args);
+    }
+    return CMD_RES_OK;
+}
+
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 {
     const char *mode;
@@ -153,19 +165,19 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, "<style>");
     poststr(request, "#my-dash { position: absolute; top: 0; left: 0; width: 100%; min-height: 100vh; background-color: #121212; z-index: 99999; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"); 
     
-    // Top Stats (Font size increased 20%)
+    // Top Stats
     poststr(request, ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; gap: 5px; }");
-    poststr(request, ".top-stats span { color: #888; font-size: 18px; text-transform: uppercase; margin-bottom: 6px; }"); // 20% larger
-    poststr(request, ".top-stats b { font-size: 29px; font-weight: 600; }"); // 20% larger
+    poststr(request, ".top-stats span { color: #888; font-size: 18px; text-transform: uppercase; margin-bottom: 6px; }");
+    poststr(request, ".top-stats b { font-size: 29px; font-weight: 600; }");
     
     // Controls & Graph Row
-    poststr(request, ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 290px; align-items: stretch; }"); // Increased height 30px
+    poststr(request, ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 290px; align-items: stretch; }"); 
     poststr(request, ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; }");
     poststr(request, ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; }");
     poststr(request, ".ctrl-col { flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; gap: 10px; }");
 
-    // Tables & Clock (Table Font increased 50%)
-    poststr(request, ".hist-tbl { width: 100%; text-align: center; font-size: 20px; border-collapse: collapse; }"); // 50% larger
+    // Tables & Clock (Table Font increased to 30px)
+    poststr(request, ".hist-tbl { width: 100%; text-align: center; font-size: 30px; border-collapse: collapse; }"); 
     poststr(request, ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 6px; border-bottom: 1px solid #444; }");
     poststr(request, ".hist-tbl td { padding: 10px 2px; border-bottom: 1px solid #333; }");
     poststr(request, ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; }");
@@ -183,14 +195,13 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, "</div>");
 
     // ====================================================================
-    // 2. GRAPH (16px bars, Font 12px)
+    // 2. GRAPH
     // ====================================================================
     poststr(request, "<div class='dash-row'>");
     // ... [Add left sensor column...]
     poststr(request, "<div class='graph-col'>");
     poststr(request, "<canvas id='chart' width='512' height='260' style='width:100%;'></canvas>");
     
-    // Explicit Data check
     poststr(request, "<script>const d=[");
     for (int i = 31; i >= 0; i--) {
         int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
@@ -198,7 +209,6 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     }
     poststr(request, "];");
     
-    // The drawing function - Ensure canvas exists before drawing
     poststr(request, "const c=document.getElementById('chart').getContext('2d');"
                      "d.forEach((v,i)=>{ let x=(31-i)*16; let h=Math.abs(v)/2; "
                      "c.fillStyle=(v>=0)?'#d32f2f':'#388e3c';"
@@ -206,43 +216,43 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
                      "c.fillStyle='#ddd';c.font='12px sans-serif';c.fillText(v, x, 130+(v>=0?-h-5:h+15)); });</script>");
     poststr(request, "</div>");
     
-    // ... [Add Controls Column...]
-    poststr(request, "</div>"); // Close row
-
-    // ====================================================================
-    // 3. TABLE & CLOCK (Clock 50% larger)
-    // ====================================================================
-    poststr(request, "<div style='display:flex; margin-top:20px; gap:20px;'>");
-    // ... [Add Table Section...]
-    hprintf255(request, "<div style='flex:0 0 450px; font-size:102px; color:#0099FF; font-family:monospace;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
-    poststr(request, "</div>");
-
-    poststr(request, "</div>");
         // ====================================================================
-        // 4. CONTROLS (Right Column - Max 100px width)
+        // 4. CONTROLS (Right Column)
         // ====================================================================
         poststr(request, "<div class='ctrl-col'>");
         poststr(request, "<div style='font-size:10px; color:#888; text-transform:uppercase;'>Controls</div>");
         
-        // Auto / Manual Toggle
-        poststr(request, "<button id='m-btn' class='btn-tgl' style='background:#0099FF;' onclick='tm()'>AUTO</button>");
+        // Auto / Manual Toggle 
+        const char* mode_color = charger_auto_mode ? "#0099FF" : "#f44336";
+        const char* mode_text = charger_auto_mode ? "AUTO" : "MANUAL";
+        hprintf255(request, "<button id='m-btn' class='btn-tgl' style='background:%s;' onclick='fetch(\"/cm?cmnd=SetChargerMode%%20%d\"); setTimeout(function(){location.reload();}, 300);'>%s</button>", mode_color, !charger_auto_mode, mode_text);
         
-        // Inverter Button (Dynamic Color: 5% = Green, Else = Grey)
+        // Inverter Button 
         const char* inv_color = (dump_load_relay[5] == 5) ? "#4caf50" : "#555555";
-        hprintf255(request, "<button class='btn-tgl' style='background:%s;'>INVERTER</button>", inv_color);
+        hprintf255(request, "<button class='btn-tgl' style='background:%s;' onclick='fetch(\"/cm?cmnd=DGR_SendDimmer%%20solar_dump%%205\"); fetch(\"/cm?cmnd=SendGet%%20http://192.168.8.%d/cm?cmnd=Channel3%%25205\");'>INVERTER</button>", inv_color, charger_c_ip);
 
-        // Combined Charger C Control Block (Nested container for combo effect)
+        // Combined Charger C Control Block 
         poststr(request, "<div style='width:100%; background:#1a1a1a; padding:6px; border-radius:6px; box-sizing:border-box; margin-top:auto;'>");
-        poststr(request, "<button class='btn-tgl' style='background:#444; padding:6px 0; margin-bottom:4px; font-size:10px;'>CHG C</button>");
-        hprintf255(request, "<input type='range' id='c-sld' class='slider' min='10' max='100' value='%d' oninput='document.getElementById(\"c-val\").innerText=this.value+\"%%\"'>", dump_load_relay[5]);
+        
+        // Charger Button Color Logic
+        const char* chg_color = "#555555";
+        const char* chg_txt_color = "#FFFFFF";
+        if (dump_load_relay[5] >= 10 && dump_load_relay[5] <= 18) { 
+            chg_color = "#ffeb3b"; 
+            chg_txt_color = "#000000";
+        } 
+        else if (dump_load_relay[5] > 18) { 
+            chg_color = "#4caf50"; 
+        }
+        hprintf255(request, "<button class='btn-tgl' style='background:%s; color:%s; padding:6px 0; margin-bottom:4px; font-size:10px;'>CHG C</button>", chg_color, chg_txt_color);
+        
+        // Advanced Slider Logic (min set to 0, sends 0 if under 10)
+        hprintf255(request, "<input type='range' id='c-sld' class='slider' min='0' max='100' value='%d' oninput='document.getElementById(\"c-val\").innerText=this.value+\"%%\"' onchange='let v=parseInt(this.value); let s=(v<10)?0:v; fetch(\"/cm?cmnd=DGR_SendDimmer%%20solar_dump%%20\"+s); fetch(\"/cm?cmnd=SendGet%%20http://192.168.8.%d/cm?cmnd=Channel3%%2520\"+s);'>", dump_load_relay[5], charger_c_ip);
+        
         hprintf255(request, "<div id='c-val' style='font-size:14px; font-weight:bold; color:#0099FF; margin-top:5px;'>%d%%</div>", dump_load_relay[5]);
         poststr(request, "</div>");
         
-        // JS handler for Auto toggle
-        poststr(request, "<script>function tm(){let b=document.getElementById('m-btn');if(b.innerText==='AUTO'){b.innerText='MANUAL';b.style.background='#f44336';}else{b.innerText='AUTO';b.style.background='#0099FF';}}</script>");
-        
         poststr(request, "</div>"); // Close ctrl-col
-
         poststr(request, "</div>"); // Close dash-row
 
         // ====================================================================
@@ -250,8 +260,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         // ====================================================================
         poststr(request, "<div style='display:flex; flex-wrap:wrap; width:100%; margin-top:15px; gap:15px; align-items:stretch;'>");
         
-        // --- Table Section (Reduced Width by 100px: min-width 180px) ---
-        poststr(request, "<div class='hist-tbl-wrapper' style='flex:1; min-width:180px; margin-top:0;'>");
+        // --- Table Section (Reduced Width by 20px, Height increased by 10px via padding) ---
+        poststr(request, "<div class='hist-tbl-wrapper' style='flex:1; min-width:160px; margin-top:0; padding:5px 0;'>");
         poststr(request, "<table class='hist-tbl' style='height:100%;'>");
         poststr(request, "<tr><th>Time</th><th>Import / Export</th><th>Net</th></tr>");
 
@@ -285,13 +295,12 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         }
         poststr(request, "</table></div>");
 
-        // --- Big Clock Section (Maximized 102px Font, Expanded Width) ---
-        poststr(request, "<div style='flex:0 0 340px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:10px; overflow:hidden;'>");
-        hprintf255(request, "<div style='font-size:102px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
+        // --- Big Clock Section (Width +20px, Height +10px via padding, Font +30%) ---
+        poststr(request, "<div style='flex:0 0 360px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:15px; overflow:hidden;'>");
+        hprintf255(request, "<div style='font-size:132px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
         poststr(request, "</div>");
 
         poststr(request, "</div>"); // Close bottom flex-row
-    }
     
     poststr(request, "</div>"); // Close my-dash
 }
@@ -585,7 +594,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         current_minute = check_time;
         
         // ======================================================================================================
-        // THE 1-MINUTE CALCULATION LOOP (Cleaned and Simplified)
+        // THE 1-MINUTE CALCULATION LOOP
         // ======================================================================================================
         if (current_minute != last_minute) 
         {
@@ -604,58 +613,61 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 net_energy_equivalent = (int)net_energy; 
             }
 
-            // ====================================================================
-            // ** 3. NEW SOLAR STATUS LOGIC **
-            // ====================================================================
-            if (net_energy <= -26.0f) {
-                solar_available = 1;
-            } else if (net_energy > 14.0f) {
-                solar_available = 0;
-            }
-
-            // ====================================================================
-            // ** 4. NEW CHARGER C LOGIC (Strict Float Boundaries) **
-            // ====================================================================
-            if (solar_available == 0) {
-                if (net_energy >= 6.0f) {
-                    dump_load_relay[5] = 5;
-                } else if (net_energy <= -6.0f) {
-                    dump_load_relay[5] = 0;
+            // Only run dynamic Charger logic if we are in AUTO Mode
+            if (charger_auto_mode == 1) {
+                // ====================================================================
+                // ** 3. NEW SOLAR STATUS LOGIC **
+                // ====================================================================
+                if (net_energy <= -26.0f) {
+                    solar_available = 1;
+                } else if (net_energy > 14.0f) {
+                    solar_available = 0;
                 }
-                // Between -5.99 and 5.99 Wh, do nothing (keep previous state)
-            } 
-            else {
-                if (net_energy > -10.0f) {
-                    // Timer reset boundary (-9.99 to 14.00 Wh)
-                    if (dump_load_relay[5] > 18) {
-                        dump_load_relay[5] = 18;
+
+                // ====================================================================
+                // ** 4. NEW CHARGER C LOGIC (Strict Float Boundaries) **
+                // ====================================================================
+                if (solar_available == 0) {
+                    if (net_energy >= 6.0f) {
+                        dump_load_relay[5] = 5;
+                    } else if (net_energy <= -6.0f) {
+                        dump_load_relay[5] = 0;
                     }
+                    // Between -5.99 and 5.99 Wh, do nothing (keep previous state)
                 } 
-                else if (net_energy <= -10.0f && net_energy > -20.0f) {
-                    // Exactly -10.0 down to -29.99 Wh
-                    dump_load_relay[5] = 18;
-                } 
-                else if (net_energy <= -20.0f) {
-                    // -30.0 Wh or lower
-                    int calculated_pwr = (abs((int)net_energy) * 60 / check_time_estimate_mins) / 10;
-                    
-                    if (calculated_pwr > 100) calculated_pwr = 100;
-                    if (calculated_pwr < 20) calculated_pwr = 20;
-                    
-                    dump_load_relay[5] = calculated_pwr;
+                else {
+                    if (net_energy > -10.0f) {
+                        // Timer reset boundary (-9.99 to 14.00 Wh)
+                        if (dump_load_relay[5] > 18) {
+                            dump_load_relay[5] = 18;
+                        }
+                    } 
+                    else if (net_energy <= -10.0f && net_energy > -20.0f) {
+                        // Exactly -10.0 down to -29.99 Wh
+                        dump_load_relay[5] = 18;
+                    } 
+                    else if (net_energy <= -20.0f) {
+                        // -30.0 Wh or lower
+                        int calculated_pwr = (abs((int)net_energy) * 60 / check_time_estimate_mins) / 10;
+                        
+                        if (calculated_pwr > 100) calculated_pwr = 100;
+                        if (calculated_pwr < 20) calculated_pwr = 20;
+                        
+                        dump_load_relay[5] = calculated_pwr;
+                    }
                 }
+
+                // ====================================================================
+                // ** UNCONDITIONAL SEND: Every minute, ONLY to Charger C **
+                // ====================================================================
+                char dgr_cmd[64];
+                snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
+                CMD_ExecuteCommand(dgr_cmd, 0);
+
+                char fallback_cmd[64];
+                snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
+                CMD_ExecuteCommand(fallback_cmd, 0);
             }
-
-            // ====================================================================
-            // ** UNCONDITIONAL SEND: Every minute, ONLY to Charger C **
-            // ====================================================================
-            char dgr_cmd[64];
-            snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
-            CMD_ExecuteCommand(dgr_cmd, 0);
-
-            char fallback_cmd[64];
-            snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
-            CMD_ExecuteCommand(fallback_cmd, 0);
         }
     } // end of negative flag loop
 
@@ -964,6 +976,7 @@ void BL_Shared_Init(void)
     CMD_RegisterCommand("VCPPublishThreshold", BL09XX_VCPPublishThreshold, NULL);
     CMD_RegisterCommand("VCPPrecision", BL09XX_VCPPrecision, NULL);
     CMD_RegisterCommand("VCPPublishIntervals", BL09XX_VCPPublishIntervals, NULL);
+    CMD_RegisterCommand("SetChargerMode", Cmd_SetChargerMode, NULL);
 }
 
 float DRV_GetReading(energySensor_t type) 
