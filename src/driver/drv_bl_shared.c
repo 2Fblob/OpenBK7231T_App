@@ -52,6 +52,7 @@ static int dump_load_relay_ip[dump_load_relay_number] = {23, 22, 29, 24, 27, cha
 int cmd_ctrl = dump_load_relay_number;
 
 static int last_matrix_index = -1; 
+int charger_c_auto = 1;
 
 #include "drv_bl_shared.h"
 
@@ -153,19 +154,19 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, "<style>");
     poststr(request, "#my-dash { position: absolute; top: 0; left: 0; width: 100%; min-height: 100vh; background-color: #121212; z-index: 99999; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"); 
     
-    // Top Stats (Font size increased 20%)
+    // Top Stats
     poststr(request, ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; gap: 5px; }");
-    poststr(request, ".top-stats span { color: #888; font-size: 18px; text-transform: uppercase; margin-bottom: 6px; }"); // 20% larger
-    poststr(request, ".top-stats b { font-size: 29px; font-weight: 600; }"); // 20% larger
+    poststr(request, ".top-stats span { color: #888; font-size: 18px; text-transform: uppercase; margin-bottom: 6px; }");
+    poststr(request, ".top-stats b { font-size: 29px; font-weight: 600; }");
     
     // Controls & Graph Row
-    poststr(request, ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 290px; align-items: stretch; }"); // Increased height 30px
+    poststr(request, ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 290px; align-items: stretch; }"); 
     poststr(request, ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; }");
     poststr(request, ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; }");
     poststr(request, ".ctrl-col { flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; gap: 10px; }");
 
-    // Tables & Clock (Table Font increased 50%)
-    poststr(request, ".hist-tbl { width: 100%; text-align: center; font-size: 20px; border-collapse: collapse; }"); // 50% larger
+    // Tables & Clock (+50% font size from 20px -> 30px)
+    poststr(request, ".hist-tbl { width: 100%; text-align: center; font-size: 30px; border-collapse: collapse; }"); 
     poststr(request, ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 6px; border-bottom: 1px solid #444; }");
     poststr(request, ".hist-tbl td { padding: 10px 2px; border-bottom: 1px solid #333; }");
     poststr(request, ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; }");
@@ -175,22 +176,19 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, "<div class='close-btn' onclick='document.getElementById(\"my-dash\").style.display=\"none\"'>✕</div>");
 
     // ====================================================================
-    // 1. TOP DASHBOARD (Slider Moved Here)
+    // 1. TOP DASHBOARD
     // ====================================================================
     poststr(request, "<div class='top-stats'>");
     hprintf255(request, "<div><span>Charger C</span><input type='range' min='10' max='100' value='%d' oninput='document.getElementById(\"c-v\").innerText=this.value+\"%%\"'><b id='c-v' style='color:#0099FF;'>%d%%</b></div>", dump_load_relay[5], dump_load_relay[5]);
-    // ... [Add remaining top stats here...]
     poststr(request, "</div>");
 
     // ====================================================================
-    // 2. GRAPH (16px bars, Font 12px)
+    // 2. GRAPH
     // ====================================================================
     poststr(request, "<div class='dash-row'>");
-    // ... [Add left sensor column...]
     poststr(request, "<div class='graph-col'>");
     poststr(request, "<canvas id='chart' width='512' height='260' style='width:100%;'></canvas>");
     
-    // Explicit Data check
     poststr(request, "<script>const d=[");
     for (int i = 31; i >= 0; i--) {
         int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
@@ -198,7 +196,6 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     }
     poststr(request, "];");
     
-    // The drawing function - Ensure canvas exists before drawing
     poststr(request, "const c=document.getElementById('chart').getContext('2d');"
                      "d.forEach((v,i)=>{ let x=(31-i)*16; let h=Math.abs(v)/2; "
                      "c.fillStyle=(v>=0)?'#d32f2f':'#388e3c';"
@@ -206,92 +203,94 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
                      "c.fillStyle='#ddd';c.font='12px sans-serif';c.fillText(v, x, 130+(v>=0?-h-5:h+15)); });</script>");
     poststr(request, "</div>");
     
-    // ... [Add Controls Column...]
-    poststr(request, "</div>"); // Close row
+    // ====================================================================
+    // 4. CONTROLS (Right Column)
+    // ====================================================================
+    poststr(request, "<div class='ctrl-col'>");
+    poststr(request, "<div style='font-size:10px; color:#888; text-transform:uppercase;'>Controls</div>");
+    
+    // Auto / Manual Toggle
+    const char* auto_bg = charger_c_auto ? "#0099FF" : "#f44336";
+    const char* auto_txt = charger_c_auto ? "AUTO" : "MANUAL";
+    hprintf255(request, "<button id='m-btn' class='btn-tgl' style='background:%s;' onclick='tm()'>%s</button>", auto_bg, auto_txt);
+    
+    // Inverter Button
+    const char* inv_color = (dump_load_relay[5] == 5) ? "#4caf50" : "#555555";
+    hprintf255(request, "<button class='btn-tgl' style='background:%s;' onclick='fetch(\"/cm?cmnd=DGR_SendDimmer%%20solar_dump%%205\"); fetch(\"/cm?cmnd=SendGet%%20http://192.168.8.21/cm?cmnd=Channel3%%25205\");'>INVERTER</button>", inv_color);
+
+    // Combined Charger C Control Block
+    poststr(request, "<div style='width:100%; background:#1a1a1a; padding:6px; border-radius:6px; box-sizing:border-box; margin-top:auto;'>");
+    
+    int d_val = dump_load_relay[5];
+    const char* chg_color = "#555555";
+    if (d_val >= 10 && d_val <= 18) { chg_color = "#ffeb3b"; }
+    else if (d_val > 18) { chg_color = "#4caf50"; }
+    hprintf255(request, "<button class='btn-tgl' style='background:%s; padding:6px 0; margin-bottom:4px; font-size:10px; color:#000;'>CHG C</button>", chg_color);
+    
+    poststr(request, "<input type='range' id='c-sld' class='slider' min='0' max='100' value='");
+    hprintf255(request, "%d", dump_load_relay[5]);
+    poststr(request, "' oninput='let v=parseInt(this.value);let txt=(v<10)?0:v;document.getElementById(\"c-val\").innerText=txt+\"%%\"' ");
+    poststr(request, "onchange='let v=parseInt(this.value);let c=(v<10)?0:v;");
+    poststr(request, "fetch(\"/cm?cmnd=DGR_SendDimmer%20solar_dump%20\"+c);");
+    hprintf255(request, "fetch(\"/cm?cmnd=SendGet%20http://192.168.8.%d/cm?cmnd=Channel3%%20\"+c);'>", charger_c_ip);
+
+    hprintf255(request, "<div id='c-val' style='font-size:14px; font-weight:bold; color:#0099FF; margin-top:5px;'>%d%%</div>", dump_load_relay[5]);
+    poststr(request, "</div>");
+    
+    // JS handler for Auto toggle via fetch
+    poststr(request, "<script>function tm(){let b=document.getElementById('m-btn');fetch('/cm?cmnd=ToggleAuto');");
+    poststr(request, "if(b.innerText==='AUTO'){b.innerText='MANUAL';b.style.background='#f44336';}");
+    poststr(request, "else{b.innerText='AUTO';b.style.background='#0099FF';}}</script>");
+    
+    poststr(request, "</div>"); // Close ctrl-col
+    poststr(request, "</div>"); // Close dash-row
 
     // ====================================================================
-    // 3. TABLE & CLOCK (Clock 50% larger)
+    // 5. HOURLY DATA TABLE & MCU CLOCK
     // ====================================================================
-    poststr(request, "<div style='display:flex; margin-top:20px; gap:20px;'>");
-    // ... [Add Table Section...]
-    hprintf255(request, "<div style='flex:0 0 450px; font-size:102px; color:#0099FF; font-family:monospace;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
-    poststr(request, "</div>");
+    poststr(request, "<div style='display:flex; flex-wrap:wrap; width:100%; margin-top:15px; gap:15px; align-items:stretch;'>");
+    
+    // --- Table Section (Reduced Width by 20px: min-width 160px, Increased Vertically 10px via padding) ---
+    poststr(request, "<div class='hist-tbl-wrapper' style='flex:1; min-width:160px; margin-top:0; padding: 5px 0;'>");
+    poststr(request, "<table class='hist-tbl' style='height:100%;'>");
+    poststr(request, "<tr><th>Time</th><th>Import / Export</th><th>Net</th></tr>");
 
-    poststr(request, "</div>");
-        // ====================================================================
-        // 4. CONTROLS (Right Column - Max 100px width)
-        // ====================================================================
-        poststr(request, "<div class='ctrl-col'>");
-        poststr(request, "<div style='font-size:10px; color:#888; text-transform:uppercase;'>Controls</div>");
+    for (int i = 0; i < 4; i++) {
+        int interval_of_day = current_interval_of_day - i;
+        if (interval_of_day < 0) { interval_of_day += 96; } 
+        int c_index = interval_of_day % 32;
         
-        // Auto / Manual Toggle
-        poststr(request, "<button id='m-btn' class='btn-tgl' style='background:#0099FF;' onclick='tm()'>AUTO</button>");
+        int cons = consumption_matrix[c_index];
+        int exp = export_matrix[c_index];
+        int net = net_matrix[c_index];
         
-        // Inverter Button (Dynamic Color: 5% = Green, Else = Grey)
-        const char* inv_color = (dump_load_relay[5] == 5) ? "#4caf50" : "#555555";
-        hprintf255(request, "<button class='btn-tgl' style='background:%s;'>INVERTER</button>", inv_color);
-
-        // Combined Charger C Control Block (Nested container for combo effect)
-        poststr(request, "<div style='width:100%; background:#1a1a1a; padding:6px; border-radius:6px; box-sizing:border-box; margin-top:auto;'>");
-        poststr(request, "<button class='btn-tgl' style='background:#444; padding:6px 0; margin-bottom:4px; font-size:10px;'>CHG C</button>");
-        hprintf255(request, "<input type='range' id='c-sld' class='slider' min='10' max='100' value='%d' oninput='document.getElementById(\"c-val\").innerText=this.value+\"%%\"'>", dump_load_relay[5]);
-        hprintf255(request, "<div id='c-val' style='font-size:14px; font-weight:bold; color:#0099FF; margin-top:5px;'>%d%%</div>", dump_load_relay[5]);
-        poststr(request, "</div>");
-        
-        // JS handler for Auto toggle
-        poststr(request, "<script>function tm(){let b=document.getElementById('m-btn');if(b.innerText==='AUTO'){b.innerText='MANUAL';b.style.background='#f44336';}else{b.innerText='AUTO';b.style.background='#0099FF';}}</script>");
-        
-        poststr(request, "</div>"); // Close ctrl-col
-
-        poststr(request, "</div>"); // Close dash-row
-
-        // ====================================================================
-        // 5. HOURLY DATA TABLE & MCU CLOCK
-        // ====================================================================
-        poststr(request, "<div style='display:flex; flex-wrap:wrap; width:100%; margin-top:15px; gap:15px; align-items:stretch;'>");
-        
-        // --- Table Section (Reduced Width by 100px: min-width 180px) ---
-        poststr(request, "<div class='hist-tbl-wrapper' style='flex:1; min-width:180px; margin-top:0;'>");
-        poststr(request, "<table class='hist-tbl' style='height:100%;'>");
-        poststr(request, "<tr><th>Time</th><th>Import / Export</th><th>Net</th></tr>");
-
-        for (int i = 0; i < 4; i++) {
-            int interval_of_day = current_interval_of_day - i;
-            if (interval_of_day < 0) { interval_of_day += 96; } 
-            int c_index = interval_of_day % 32;
+        if (i == 0) { 
+            // Active Row (Now)
+            cons += (int)real_consumption;
+            exp += (int)real_export;
+            net += (int)(real_consumption - real_export); 
             
-            int cons = consumption_matrix[c_index];
-            int exp = export_matrix[c_index];
-            int net = net_matrix[c_index];
+            int mins_left = 15 - (minutes_since_midnight % 15);
+            hprintf255(request, "<tr style='color:#0099FF; font-weight:bold;'><td>Now (-%dmin)</td><td>%dW / %dW</td><td>%dW</td></tr>", 
+                       mins_left, cons, exp, net);
+        } else {
+            // Historical Rows
+            int row_mins = interval_of_day * 15;
+            int row_h = row_mins / 60;
+            int row_m = row_mins % 60;
             
-            if (i == 0) { 
-                // Active Row (Now)
-                cons += (int)real_consumption;
-                exp += (int)real_export;
-                net += (int)(real_consumption - real_export); 
-                
-                int mins_left = 15 - (minutes_since_midnight % 15);
-                hprintf255(request, "<tr style='color:#0099FF; font-weight:bold;'><td>Now (-%dmin)</td><td>%dW / %dW</td><td>%dW</td></tr>", 
-                           mins_left, cons, exp, net);
-            } else {
-                // Historical Rows
-                int row_mins = interval_of_day * 15;
-                int row_h = row_mins / 60;
-                int row_m = row_mins % 60;
-                
-                hprintf255(request, "<tr><td>%02dh%02d</td><td>%dW / %dW</td><td>%dW</td></tr>", 
-                           row_h, row_m, cons, exp, net);
-            }
+            hprintf255(request, "<tr><td>%02dh%02d</td><td>%dW / %dW</td><td>%dW</td></tr>", 
+                       row_h, row_m, cons, exp, net);
         }
-        poststr(request, "</table></div>");
-
-        // --- Big Clock Section (Maximized 102px Font, Expanded Width) ---
-        poststr(request, "<div style='flex:0 0 340px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:10px; overflow:hidden;'>");
-        hprintf255(request, "<div style='font-size:102px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
-        poststr(request, "</div>");
-
-        poststr(request, "</div>"); // Close bottom flex-row
     }
+    poststr(request, "</table></div>");
+
+    // --- Big Clock Section (Maximized 132px Font, Expanded Width 360px, Height expanded via 15px padding) ---
+    poststr(request, "<div style='flex:0 0 360px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:15px 10px; overflow:hidden;'>");
+    hprintf255(request, "<div style='font-size:132px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
+    poststr(request, "</div>");
+
+    poststr(request, "</div>"); // Close bottom flex-row
     
     poststr(request, "</div>"); // Close my-dash
 }
@@ -358,6 +357,13 @@ commandResult_t BL09XX_ResetEnergyCounter(const void *context, const char *cmd, 
         BL09XX_SaveEmeteringStatistics();
         lastConsumptionSaveStamp = xTaskGetTickCount();
     }
+    return CMD_RES_OK;
+}
+
+// Toggle Auto Command Handler
+commandResult_t BL09XX_ToggleAuto(const void *context, const char *cmd, const char *args, int cmdFlags)
+{
+    charger_c_auto = !charger_c_auto;
     return CMD_RES_OK;
 }
 
@@ -649,13 +655,15 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             // ====================================================================
             // ** UNCONDITIONAL SEND: Every minute, ONLY to Charger C **
             // ====================================================================
-            char dgr_cmd[64];
-            snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
-            CMD_ExecuteCommand(dgr_cmd, 0);
+            if (charger_c_auto == 1) {
+                char dgr_cmd[64];
+                snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
+                CMD_ExecuteCommand(dgr_cmd, 0);
 
-            char fallback_cmd[64];
-            snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
-            CMD_ExecuteCommand(fallback_cmd, 0);
+                char fallback_cmd[64];
+                snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
+                CMD_ExecuteCommand(fallback_cmd, 0);
+            }
         }
     } // end of negative flag loop
 
@@ -959,6 +967,7 @@ void BL_Shared_Init(void)
     lastConsumptionSaveStamp = xTaskGetTickCount();
 
     CMD_RegisterCommand("EnergyCntReset", BL09XX_ResetEnergyCounter, NULL);
+    CMD_RegisterCommand("ToggleAuto", BL09XX_ToggleAuto, NULL);
     CMD_RegisterCommand("SetupEnergyStats", BL09XX_SetupEnergyStatistic, NULL);
     CMD_RegisterCommand("ConsumptionThreshold", BL09XX_SetupConsumptionThreshold, NULL);
     CMD_RegisterCommand("VCPPublishThreshold", BL09XX_VCPPublishThreshold, NULL);
