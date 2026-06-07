@@ -255,64 +255,72 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "</table></div>");
         
         // ====================================================================
-        // 3. CANVAS BAR GRAPH (Middle Column) - CLIENT-SIDE RENDERING
+        // 3. PURE CSS BAR GRAPH (Middle Column - Fixed Grid Layout)
         // ====================================================================
         poststr(request, "<div class='graph-col'>");
-        poststr(request, "<canvas id='chart' width='512' height='260' style='width:100%;'></canvas>");
         
-        poststr(request, "<script>");
-        // The try-catch ensures that if the MCU drops a packet and mangles the array, 
-        // the rest of the page (buttons/toggles) still functions.
-        poststr(request, "try {");
-        poststr(request, "var d = [");
+        // Render a dedicated container inside the grid column with fixed sizing
+        poststr(request, "<div style='position:relative; width:100%; height:240px; background:#1a1a1a; border-radius:6px; box-sizing:border-box; padding:20px 5px 20px 5px; display:flex; flex-direction:row; justify-content:space-between; align-items:stretch;'>");
         
-        // Server does minimum work: just prints the array numbers
+        // Exact 2/3 down Zero Baseline Marker (Top: 66.6% of 240px container)
+        poststr(request, "<div style='position:absolute; left:0; right:0; top:66.6%; height:1px; background:#444; z-index:1;'></div>");
+
+        // 1. Find the maximum absolute value for proper proportional scaling
+        int max_val = 0;
         for (int i = 31; i >= 0; i--) {
             int interval_of_day = (current_interval_of_day - i + 96) % 96;
             int c_index = interval_of_day % 32;
             int net = net_matrix[c_index];
             if (i == 0) net += (int)(real_consumption - real_export);
             
-            hprintf255(request, "%d%s", net, (i == 0) ? "" : ",");
+            int abs_net = (net < 0) ? -net : net;
+            if (abs_net > max_val) {
+                max_val = abs_net;
+            }
         }
-        poststr(request, "];");
+        
+        // Fallback constraint: Prevent division by zero if all matrix values are 0
+        if (max_val < 10) { max_val = 100; } 
 
-        // Client browser does the math and scaling
-        poststr(request, "var c = document.getElementById('chart');");
-        poststr(request, "if(c) {");
-        poststr(request, "  var ctx = c.getContext('2d');");
-        poststr(request, "  var mp = 1, mn = 1;"); 
-        poststr(request, "  for(var i=0; i<d.length; i++) {");
-        poststr(request, "    if(d[i] > mp) mp = d[i];");
-        poststr(request, "    if(d[i] < 0 && -d[i] > mn) mn = -d[i];");
-        poststr(request, "  }");
-        
-        // Total height 260px. Zero line roughly 2/3 down (173px)
-        poststr(request, "  var zY = 173;"); 
-        
-        // Draw the zero line
-        poststr(request, "  ctx.fillStyle = '#555'; ctx.fillRect(0, zY, 512, 1);"); 
-        
-        // Draw the bars
-        poststr(request, "  for(var i=0; i<d.length; i++) {");
-        poststr(request, "    var v = d[i];");
-        poststr(request, "    var x = i * 16;"); // 512px / 32 = 16px wide columns
-        
-        poststr(request, "    if(v >= 0) {");
-        poststr(request, "      var h = (v / mp) * 155;"); // Scale positive into the top 173px
-        poststr(request, "      ctx.fillStyle = '#d32f2f'; ctx.fillRect(x+1, zY - h, 14, h);");
-        poststr(request, "      ctx.fillStyle = '#ddd'; ctx.font = '10px sans-serif';");
-        poststr(request, "      ctx.fillText(v, x+1, zY - h - 4);");
-        poststr(request, "    } else {");
-        poststr(request, "      var h = (-v / mn) * 75;"); // Scale negative into the bottom 87px
-        poststr(request, "      ctx.fillStyle = '#388e3c'; ctx.fillRect(x+1, zY, 14, h);");
-        poststr(request, "      ctx.fillStyle = '#ddd'; ctx.font = '10px sans-serif';");
-        poststr(request, "      ctx.fillText(-v, x+1, zY + h + 10);");
-        poststr(request, "    }");
-        poststr(request, "  }");
-        poststr(request, "}");
-        poststr(request, "} catch(e) { console.error('Chart init failed'); }");
-        poststr(request, "</script></div>");
+        // 2. Loop to generate and place the vertical bars
+        for (int i = 31; i >= 0; i--) {
+            int interval_of_day = (current_interval_of_day - i + 96) % 96;
+            int c_index = interval_of_day % 32;
+            int net = net_matrix[c_index];
+            if (i == 0) net += (int)(real_consumption - real_export);
+
+            // Compute percentage fill relative to the active grid space limits
+            float pct = (float)((net < 0) ? -net : net) / max_val;
+            if (pct > 1.0f) pct = 1.0f; // Soft clamp limit
+            
+            float final_height = pct * ((net >= 0) ? 66.6f : 33.3f);
+            const char* bar_color = (net >= 0) ? "#d32f2f" : "#388e3c";
+            
+            // Flex column slice for each of the 32 intervals
+            poststr(request, "<div style='flex:1; position:relative; margin:0 1px; z-index:2;'>");
+            
+            if (net >= 0) {
+                // Positive generation / Import bar (grows upward from baseline)
+                hprintf255(request, "<div style='position:absolute; bottom:33.4%%; left:0; right:0; height:%.1f%%; background:%s; border-radius:2px 2px 0 0;'>", final_height, bar_color);
+                // Render labels conditionally (Now text + every 4th bar to avoid overlap)
+                if(i == 0 || i % 4 == 0) {
+                    hprintf255(request, "<span style='position:absolute; top:-14px; left:50%%; transform:translateX(-50%%); font-size:9px; color:#aaa; font-family:sans-serif;'>%d</span>", net);
+                }
+                poststr(request, "</div>");
+            } else {
+                // Negative exporting bar (hangs downward from baseline)
+                hprintf255(request, "<div style='position:absolute; top:66.6%%; left:0; right:0; height:%.1f%%; background:%s; border-radius:0 0 2px 2px;'>", final_height, bar_color);
+                if(i == 0 || i % 4 == 0) {
+                    hprintf255(request, "<span style='position:absolute; bottom:-14px; left:50%%; transform:translateX(-50%%); font-size:9px; color:#aaa; font-family:sans-serif;'>%d</span>", net);
+                }
+                poststr(request, "</div>");
+            }
+            
+            poststr(request, "</div>"); // Close interval slice
+        }
+
+        poststr(request, "</div>"); // Close relative data container
+        poststr(request, "</div>"); // Close layout flex column grid wrapper (.graph-col)
       
         // ====================================================================
         // 4. CONTROLS (Right Column)
