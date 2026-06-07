@@ -152,26 +152,33 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     else { mode = "PWR"; }
 
     // ====================================================================
-    // STYLESHEET DEFINITIONS - Combined Continuous Heap Stream
+    // STYLESHEET DEFINITIONS - Adjusted for iOS 9 Safari & Android 4 WebView
     // ====================================================================
     poststr(request, 
         "<style>"
         "body { margin: 0; background-color: #000; }"
         "#my-dash { position: absolute; top: 0; left: 0; width: 100%; min-height: 100vh; background-color: #121212; z-index: 99999; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"
-        ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; gap: 5px; }"
-        ".top-stats div { display: flex; flex-direction: column; justify-content: center; }"
+        
+        /* Flexbox vendor prefixes and margin replacements for GAP */
+        ".top-stats { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between; -webkit-box-align: center; -webkit-align-items: center; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; }"
+        ".top-stats div { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; margin: 0 2px; }"
         ".top-stats label { color: #888; font-size: 25px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }"
         ".top-stats b { font-size: 45px; font-weight: 600; }"
         ".c-exp { color: #4caf50; }"
         ".c-imp { color: #f44336; }"
-        ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 290px; align-items: stretch; }" 
-        ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; }"
+        
+        ".dash-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-flex-direction: row; flex-direction: row; margin-top: 15px; height: 290px; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; }" 
+        ".left-col { -webkit-box-flex: 0; -webkit-flex: 0 0 210px; flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; }"
         ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }"
         ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
-        ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }"
-        ".ctrl-col { flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 10px; box-sizing: border-box; }"
-        ".btn-tgl { width: 100%; border: none; color: white; padding: 8px 0; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; text-align: center; line-height: 1.1; }"
-        ".hist-tbl-wrapper { flex: 1; min-width: 180px; }"
+        
+        ".graph-col { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; background: #222; padding: 10px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; margin-right: 15px; }"
+        
+        ".ctrl-col { -webkit-box-flex: 0; -webkit-flex: 0 0 100px; flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; box-sizing: border-box; }"
+        ".btn-tgl { width: 100%; border: none; color: white; padding: 8px 0; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; text-align: center; line-height: 1.1; margin-bottom: 10px; }"
+        ".btn-tgl:last-child { margin-bottom: 0; }"
+        
+        ".hist-tbl-wrapper { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; min-width: 180px; margin-right: 20px; }"
         ".hist-tbl { width: 100%; text-align: center; font-size: 20px; border-collapse: collapse; }"
         ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 6px; border-bottom: 1px solid #444; }"
         ".hist-tbl td { padding: 10px 2px; border-bottom: 1px solid #333; }"
@@ -185,7 +192,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     );
 
     // ====================================================================
-    // 1. TOP DASHBOARD ROW - Segmented Heap Protections
+    // 1. TOP DASHBOARD ROW
     // ====================================================================
     poststr(request, "<div class='top-stats'>");
     
@@ -249,12 +256,14 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "</tbody></table></div>");
         
         // ====================================================================
-        // 3. GRAPH COLUMN - Reduced to 16 Bars, Doubled Width Setup
+        // 3. GRAPH COLUMN (With Background Icons and Vertical Text)
         // ====================================================================
         poststr(request, 
             "<div class='graph-col' id='d-graph'>"
             "<svg viewBox='0 0 512 260' style='width:100%%; height:100%%; background:transparent;'>"
             "<line x1='0' y1='130' x2='512' y2='130' stroke='#333' stroke-width='1'/>"
+            "<text x='470' y='40' font-size='32' opacity='0.35'>🔌</text>"
+            "<text x='470' y='245' font-size='32' opacity='0.35'>☀️</text>"
         );
         
         for (int i = 15; i >= 0; i--) {
@@ -262,7 +271,6 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             int v = net_matrix[interval_of_day % 32];
             if (i == 0) { v += (int)(real_consumption - real_export); }
             
-            // Step altered to 32px to scale 16 bars across 512px perfectly
             int x = (15 - i) * 32;
             int h = abs(v) / 2;
             if (h > 120) h = 120; 
@@ -270,16 +278,19 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             if (v != 0 || i == 0) {
                 const char* color = (v >= 0) ? "#d32f2f" : "#388e3c";
                 int rect_y = (v >= 0) ? (130 - h) : 130;
-                int text_y = (v >= 0) ? (130 - h - 6) : (130 + h + 14);
+                int text_y = (v >= 0) ? (130 - h - 5) : (130 + h + 5);
+                const char* anchor = (v >= 0) ? "start" : "end";
                 
                 if (h > 0) {
-                    // Width bumped up to 30px
                     hprintf255(request, "<rect x='%d' y='%d' width='32' height='%d' fill='%s' rx='2'/>", x, rect_y, h, color);
                 }
-                // Text anchor adjusted to x + 15 to center directly over the 30px bar width
-                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='16' font-family='sans-serif' text-anchor='middle'>%d</text>", x + 15, text_y, v);
+                
+                // Rotated Vertical text with size 24.
+                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='24' font-family='sans-serif' text-anchor='%s' transform='rotate(-90 %d %d)' dy='8'>%d</text>", 
+                           x + 16, text_y, anchor, x + 16, text_y, v);
             } else {
-                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='16' font-family='sans-serif' text-anchor='middle'>0</text>", x + 15);
+                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='24' font-family='sans-serif' text-anchor='start' transform='rotate(-90 %d 135)' dy='8'>0</text>", 
+                           x + 16, x + 16);
             }
         }
         poststr(request, "</svg></div>");
@@ -297,23 +308,23 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 
         poststr(request, 
             "<div class='ctrl-col'>"
-            "<div style='font-size:10px; color:#888; text-transform:uppercase; text-align:center;'>Controls</div>"
+            "<div style='font-size:10px; color:#888; text-transform:uppercase; text-align:center; margin-bottom:10px;'>Controls</div>"
         );
         
         hprintf255(request, "<button id='m-btn' class='btn-tgl' style='background:%s;' onclick='tm()'>%s</button>", auto_color, auto_text);
         hprintf255(request, "<button id='inv-btn' class='btn-tgl' style='background:%s;' onclick='t_inv()'>INVERTER</button>", inv_color);
         hprintf255(request, "<button id='chg-btn' class='btn-tgl' style='background:%s;' onclick='t_chg()'>CHARGER</button>", chg_color);
         
-        poststr(request, "<div style='display:flex; gap:4px; width:100%%; margin-top:auto;'>");
-        hprintf255(request, "<button id='chg-30-btn' class='btn-tgl' style='background:%s; flex:1; font-size:11px; padding:4px 0;' onclick='upd(30)'>30%%</button>", chg_30_color);
-        hprintf255(request, "<button id='chg-80-btn' class='btn-tgl' style='background:%s; flex:1; font-size:11px; padding:4px 0;' onclick='upd(80)'>80%%</button>", chg_80_color);
+        poststr(request, "<div style='display:-webkit-box; display:-webkit-flex; display:flex; width:100%%; margin-top:auto;'>");
+        hprintf255(request, "<button id='chg-30-btn' class='btn-tgl' style='background:%s; -webkit-box-flex:1; -webkit-flex:1; flex:1; font-size:11px; padding:4px 0; margin-right:4px; margin-bottom:0;' onclick='upd(30)'>30%%</button>", chg_30_color);
+        hprintf255(request, "<button id='chg-80-btn' class='btn-tgl' style='background:%s; -webkit-box-flex:1; -webkit-flex:1; flex:1; font-size:11px; padding:4px 0; margin-bottom:0;' onclick='upd(80)'>80%%</button>", chg_80_color);
         poststr(request, "</div></div></div>"); 
 
         // ====================================================================
         // 5. HOURLY DATA TABLE & LARGE CLOCK SYSTEM
         // ====================================================================
         poststr(request, 
-            "<div style='display:flex; width:100%%; margin-top:20px; gap:20px; align-items:stretch;'>"
+            "<div style='display:-webkit-box; display:-webkit-flex; display:flex; width:100%%; margin-top:20px; -webkit-box-align:stretch; -webkit-align-items:stretch; align-items:stretch;'>"
             "<div class='hist-tbl-wrapper'>"
             "<table class='hist-tbl'><tbody id='d-hist-body'>"
             "<tr><th>Time</th><th>Import / Export</th><th>Net</th></tr>"
@@ -348,7 +359,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 
         poststr(request, 
             "</tbody></table></div>"
-            "<div style='flex:0 0 340px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:10px; overflow:hidden;'>"
+            "<div style='-webkit-box-flex:0; -webkit-flex:0 0 340px; flex:0 0 340px; display:-webkit-box; display:-webkit-flex; display:flex; -webkit-box-pack:center; -webkit-justify-content:center; justify-content:center; -webkit-box-align:center; -webkit-align-items:center; align-items:center; background:#222; border-radius:8px; padding:10px; overflow:hidden;'>"
         );
         
         hprintf255(request, 
@@ -358,7 +369,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         );
 
         // ====================================================================
-        // 6. ASYNCHRONOUS SWAP ENGINE
+        // 6. ASYNCHRONOUS SWAP ENGINE - ES5 Safe Output
         // ====================================================================
         hprintf255(request, "<div id='sys-data' data-dmp='%d' data-auto='%d' style='display:none;'></div>", dump_load_relay[5], charger_c_auto);
         
@@ -366,7 +377,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         hprintf255(request, "var dmp=%d, auto=%d; var lastGoodResponse=Date.now();", dump_load_relay[5], charger_c_auto);
         
         poststr(request, 
-            "function upd(v){if(auto===1)return; dmp=parseInt(v);fetch('/cm?cmnd=SetDumpLoad%20'+dmp);"
+            "function upd(v){if(auto===1)return; dmp=parseInt(v, 10);var xhr=new XMLHttpRequest();"
+            "xhr.open('GET','/cm?cmnd=SetDumpLoad%20'+dmp,true);"
+            "xhr.send();"
             "document.getElementById('inv-btn').style.background=(dmp===5)?'#4caf50':'#555555';"
             "document.getElementById('chg-btn').style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#ffeb3b':'#555555');"
             "document.getElementById('chg-30-btn').style.background=(dmp>=30)?'#4caf50':'#555555';"
@@ -375,23 +388,47 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             "if(tc&&tl){if(dmp===0){tl.innerText='Charger';tc.innerText='Idle';tc.style.color='#888';}"
             "else if(dmp===5){tl.innerText='Charger';tc.innerText='Battery';tc.style.color='#4caf50';}"
             "else{tl.innerText='Charging';tc.innerText=dmp+'%';tc.style.color='#0099FF';}}}"
+            
             "function t_inv(){upd(dmp===5?0:5);}function t_chg(){upd(dmp>=10?0:18);}"
-            "function tm(){auto=(auto===1)?0:1; fetch('/cm?cmnd=ToggleAuto');"
+            "function tm(){auto=(auto===1)?0:1; var xhr=new XMLHttpRequest();"
+            "xhr.open('GET','/cm?cmnd=ToggleAuto',true);"
+            "xhr.send();"
             "var b=document.getElementById('m-btn');if(auto===0){b.innerText='MANUAL';b.style.background='#f44336';}else{b.innerText='AUTO';b.style.background='#0099FF';}}"
-            "function rsh(ids){fetch('/index').then(r=>r.text()).then(html=>{"
+            
+            "function rsh(ids){"
+            "var xhr=new XMLHttpRequest();"
+            "xhr.onreadystatechange=function(){"
+            "if(xhr.readyState!==4)return;"
+            "if(xhr.status===200){"
             "lastGoodResponse=Date.now();"
-            "var doc=new DOMParser().parseFromString(html,'text/html');"
-            "var sys=doc.getElementById('sys-data');if(sys){dmp=parseInt(sys.getAttribute('data-dmp'));auto=parseInt(sys.getAttribute('data-auto'));}"
-            "ids.forEach(id=>{"
-            "var oldEl=document.getElementById(id),newEl=doc.getElementById(id);"
+            "var html=xhr.responseText;"
+            "var doc=document.implementation.createHTMLDocument('new');"
+            "doc.documentElement.innerHTML=html;"
+            "var sys=doc.getElementById('sys-data');"
+            "if(sys){"
+            "dmp=parseInt(sys.getAttribute('data-dmp'), 10);"
+            "auto=parseInt(sys.getAttribute('data-auto'), 10);"
+            "}"
+            "for(var i=0; i<ids.length; i++){"
+            "var id=ids[i];"
+            "var oldEl=document.getElementById(id);"
+            "var newEl=doc.getElementById(id);"
             "if(oldEl&&newEl){"
-            "if(oldEl.innerHTML!==newEl.innerHTML) oldEl.innerHTML=newEl.innerHTML;"
-            "oldEl.className=newEl.className; oldEl.style.color=newEl.style.color; oldEl.style.background=newEl.style.background;"
-            "}});}).catch(e=>console.log(e));}"
+            "if(oldEl.innerHTML!==newEl.innerHTML)oldEl.innerHTML=newEl.innerHTML;"
+            "oldEl.className=newEl.className;"
+            "oldEl.style.color=newEl.style.color;"
+            "oldEl.style.background=newEl.style.background;"
+            "}"
+            "}"
+            "}"
+            "};"
+            "xhr.open('GET','/index',true);"
+            "xhr.send();"
+            "}"
+            
             "setInterval(function(){rsh(['d-va','d-pwr','d-est','d-bal','d-chg-box','d-sens-body','d-clk','inv-btn','chg-btn','chg-30-btn','chg-80-btn','m-btn']);}, 10000);"
             "setInterval(function(){rsh(['d-graph','d-hist-body']);}, 30000);"
             
-            // Watchdog: reload page if no successful refresh for 2 minutes
             "setInterval(function(){"
             "if(Date.now()-lastGoodResponse>120000){"
             "console.log('Watchdog reload');"
@@ -404,6 +441,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     
     poststr(request, "</div>"); 
 }
+
 void BL09XX_SaveEmeteringStatistics()
 {
     ENERGY_METERING_DATA data;
