@@ -255,39 +255,14 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "</table></div>");
         
         // ====================================================================
-        // 3. CANVAS BAR GRAPH (CLIENT-SIDE) - OPTIMIZED FOR MCU WATCHDOG
-        // ====================================================================
-        poststr(request, "<div class='graph-col'>");
-        poststr(request, "<canvas id='chart' width='512' height='260' style='width:100%;'></canvas>");
-        poststr(request, "<script>try{var d=[");
-        
-        // 1. Build the array locally to avoid looping hprintf255 over the network buffer
-        char arr_buf[256];
-        arr_buf[0] = '\0';
-        char temp[16];
-        
-        for (int i = 31; i >= 0; i--) {
-            int interval_of_day = (current_interval_of_day - i + 96) % 96;
-            int c_index = interval_of_day % 32;
-            int net = net_matrix[c_index];
-            if (i == 0) net += (int)(real_consumption - real_export);
-            
-            snprintf(temp, sizeof(temp), "%d%s", net, (i == 0) ? "" : ",");
-            strncat(arr_buf, temp, sizeof(arr_buf) - strlen(arr_buf) - 1);
-        }
-        
-        // 2. Send the entire array in exactly ONE call
-        poststr(request, arr_buf);
-
-        // ====================================================================
         // 3. CANVAS BAR GRAPH - SAFE BUFFER & WATCHDOG OPTIMIZED
         // ====================================================================
         poststr(request, "<div class='graph-col'>");
         poststr(request, "<canvas id='chart' width='512' height='260' style='width:100%;'></canvas>");
         poststr(request, "<script>try{var d=[");
         
-        // 1. Build array locally (Increased to 512 bytes to prevent buffer overflow)
-        char arr_buf[512];
+        // 1. Build array locally (Declared exactly ONCE)
+        char arr_buf[512] = {0}; 
         int pos = 0;
         
         for (int i = 31; i >= 0; i--) {
