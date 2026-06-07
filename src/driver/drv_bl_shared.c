@@ -161,7 +161,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; gap: 5px; }"
         ".top-stats div { display: flex; flex-direction: column; justify-content: center; }"
         ".top-stats label { color: #888; font-size: 25px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }"
-        ".top-stats b { font-size: 35px; font-weight: 600; }"
+        ".top-stats b { font-size: 40px; font-weight: 600; }"
         ".c-exp { color: #4caf50; }"
         ".c-imp { color: #f44336; }"
         ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 290px; align-items: stretch; }" 
@@ -277,9 +277,9 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
                     hprintf255(request, "<rect x='%d' y='%d' width='30' height='%d' fill='%s' rx='2'/>", x, rect_y, h, color);
                 }
                 // Text anchor adjusted to x + 15 to center directly over the 30px bar width
-                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='11' font-family='sans-serif' text-anchor='middle'>%d</text>", x + 15, text_y, v);
+                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='15' font-family='sans-serif' text-anchor='middle'>%d</text>", x + 15, text_y, v);
             } else {
-                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='11' font-family='sans-serif' text-anchor='middle'>0</text>", x + 15);
+                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='15' font-family='sans-serif' text-anchor='middle'>0</text>", x + 15);
             }
         }
         poststr(request, "</svg></div>");
@@ -363,7 +363,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         hprintf255(request, "<div id='sys-data' data-dmp='%d' data-auto='%d' style='display:none;'></div>", dump_load_relay[5], charger_c_auto);
         
         poststr(request, "<script>");
-        hprintf255(request, "var dmp=%d, auto=%d;", dump_load_relay[5], charger_c_auto);
+        hprintf255(request, "var dmp=%d, auto=%d; var lastGoodResponse=Date.now();", dump_load_relay[5], charger_c_auto);
         
         poststr(request, 
             "function upd(v){if(auto===1)return; dmp=parseInt(v);fetch('/cm?cmnd=SetDumpLoad%20'+dmp);"
@@ -379,6 +379,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             "function tm(){auto=(auto===1)?0:1; fetch('/cm?cmnd=ToggleAuto');"
             "var b=document.getElementById('m-btn');if(auto===0){b.innerText='MANUAL';b.style.background='#f44336';}else{b.innerText='AUTO';b.style.background='#0099FF';}}"
             "function rsh(ids){fetch('/index').then(r=>r.text()).then(html=>{"
+            "lastGoodResponse=Date.now();"
             "var doc=new DOMParser().parseFromString(html,'text/html');"
             "var sys=doc.getElementById('sys-data');if(sys){dmp=parseInt(sys.getAttribute('data-dmp'));auto=parseInt(sys.getAttribute('data-auto'));}"
             "ids.forEach(id=>{"
@@ -389,6 +390,14 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             "}});}).catch(e=>console.log(e));}"
             "setInterval(function(){rsh(['d-va','d-pwr','d-est','d-bal','d-chg-box','d-sens-body','d-clk','inv-btn','chg-btn','chg-30-btn','chg-80-btn','m-btn']);}, 10000);"
             "setInterval(function(){rsh(['d-graph','d-hist-body']);}, 30000);"
+            
+            // Watchdog: reload page if no successful refresh for 2 minutes
+            "setInterval(function(){"
+            "if(Date.now()-lastGoodResponse>120000){"
+            "console.log('Watchdog reload');"
+            "location.reload(true);"
+            "}"
+            "},120000);"
             "</script>"
         );
     }
