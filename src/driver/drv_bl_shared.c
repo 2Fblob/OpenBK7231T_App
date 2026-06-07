@@ -161,8 +161,12 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     // Top Stats Bar
     poststr(request, ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; gap: 5px; }");
     poststr(request, ".top-stats div { display: flex; flex-direction: column; justify-content: center; }");
-    poststr(request, ".top-stats span { color: #888; font-size: 25px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }");
-    poststr(request, ".top-stats b { font-size: 29px; font-weight: 600; }");
+    
+    // Titles scaled to 25px
+    poststr(request, ".top-stats label { color: #888; font-size: 25px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }");
+    
+    // Values scaled to 35px
+    poststr(request, ".top-stats b { font-size: 35px; font-weight: 600; }");
     
     poststr(request, ".c-exp { color: #4caf50; }");
     poststr(request, ".c-imp { color: #f44336; }");
@@ -190,47 +194,39 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, "<div id='my-dash'>");
     poststr(request, "<div class='close-btn' onclick='document.getElementById(\"my-dash\").style.display=\"none\"'>✕</div>");
 
-    // ====================================================================
-    // 1. TOP DASHBOARD ROW
-    // ====================================================================
-    poststr(request, "<div class='top-stats'>");
-    
-    // Volts & Amps
-    hprintf255(request, "<div><span>V / A</span><b id='d-va'>%.0f V<br>%.2f A</b></div>", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
-    
-    // Power Matrix Tracker
-    const char* pwr_cls = (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp";
-    hprintf255(request, "<div><span>Power</span><b id='d-pwr' class='%s'>%.0f W</b></div>", pwr_cls, sensors[OBK_POWER].lastReading);
-    
-    // Period Approximations
-    const char* est_cls = (estimated_energy_period < 0) ? "c-exp" : "c-imp";
-    hprintf255(request, "<div><span>15-Min Est.</span><b id='d-est' class='%s'>%i Wh</b></div>", est_cls, estimated_energy_period);
-    
-    // Active Balance
-    const char* bal_cls = (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp";
-    hprintf255(request, "<div><span>Balance</span><b id='d-bal' class='%s'>%.0f Wh</b></div>", bal_cls, sensors[OBK_POWER_REACTIVE].lastReading);
 
-    // Dynamic Charger Display Logic
-    poststr(request, "<div id='d-chg-box'>");
-    if (dump_load_relay[5] == 0) {
-        poststr(request, "<span id='c-lbl'>Charger</span><b id='c-v' style='color:#888;'>Idle</b>");
-    } else if (dump_load_relay[5] == 5) {
-        poststr(request, "<span id='c-lbl'>Charger</span><b id='c-v' style='color:#4caf50;'>Battery</b>");
-    } else {
-        hprintf255(request, "<span id='c-lbl'>Charging</span><b id='c-v' style='color:#0099FF;'>%d%%</b>", dump_load_relay[5]);
-    }
-    poststr(request, "</div>");
-    
-    poststr(request, "</div>");
 
-    if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced())
-    {
-        minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
-        int current_interval_of_day = minutes_since_midnight / net_metering_period;
+        // ====================================================================
+        // 1. TOP DASHBOARD ROW
+        // ====================================================================
+        poststr(request, "<div class='top-stats'>");
         
-        // BEGINNING OF MAIN GRID MATRIX
-        poststr(request, "<div class='dash-row'>");
-
+        // Call 1: Voltage & Current
+        hprintf255(request, "<div><label>Voltage & Current</label><b id='d-va'>%.0fV / %.2fA</b></div>", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
+        
+        // Call 2: Power, Now (Balance), and 15-Min Est
+        const char* pwr_cls = (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp";
+        const char* bal_cls = (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp";
+        const char* est_cls = (estimated_energy_period < 0) ? "c-exp" : "c-imp";
+        
+        hprintf255(request, 
+            "<div><label>Power</label><b id='d-pwr' class='%s'>%.0f W</b></div>"
+            "<div><label>Now / 15min Est.</label><b><span id='d-bal' class='%s'>%.0f Wh</span> / <span id='d-est' class='%s'>%i Wh</span></b></div>", 
+            pwr_cls, sensors[OBK_POWER].lastReading,
+            bal_cls, sensors[OBK_POWER_REACTIVE].lastReading,
+            est_cls, estimated_energy_period);
+    
+        // Dynamic Charger Display Logic
+        if (dump_load_relay[5] == 0) {
+            poststr(request, "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v' style='color:#888;'>Idle</b></div>");
+        } else if (dump_load_relay[5] == 5) {
+            poststr(request, "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v' style='color:#4caf50;'>Battery</b></div>");
+        } else {
+            hprintf255(request, "<div id='d-chg-box'><label id='c-lbl'>Charging</label><b id='c-v' style='color:#0099FF;'>%d%%</b></div>", dump_load_relay[5]);
+        }
+        
+        poststr(request, "</div>");
+  
         // ====================================================================
         // 2. SENSOR COLUMN (Left Alignment Container)
         // ====================================================================
