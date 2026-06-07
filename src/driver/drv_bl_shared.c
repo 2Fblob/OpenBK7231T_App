@@ -184,7 +184,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     
     // Tables & Clock Containers (Fixed to 15px text and tighter paddings)
     poststr(request, ".hist-tbl-wrapper { flex: 1; min-width: 180px; margin-top: 0; }");
-    poststr(request, ".hist-tbl { width: 100%; text-align: center; font-size: 15px; border-collapse: collapse; }");
+    poststr(request, ".hist-tbl { width: 100%; text-align: center; font-size: 20px; border-collapse: collapse; }");
     poststr(request, ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 3px; border-bottom: 1px solid #444; }");
     poststr(request, ".hist-tbl td { padding: 5px 2px; border-bottom: 1px solid #333; }");
     
@@ -342,8 +342,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "</table></div>");
 
         // Clock section frame optimized down to 90px font and 5px layout padding bounds
-        poststr(request, "<div style='flex:0 0 340px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:5px; overflow:hidden;'>");
-        hprintf255(request, "<div style='font-size:90px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
+        poststr(request, "<div style='flex:0 0 340px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:5px; padding:5px; overflow:hidden;'>");
+        hprintf255(request, "<div style='font-size:110px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-5px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
         poststr(request, "</div>");
 
         poststr(request, "</div>"); 
