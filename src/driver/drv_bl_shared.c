@@ -279,9 +279,44 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         // 2. Send the entire array in exactly ONE call
         poststr(request, arr_buf);
 
-        // 3. Send the ENTIRE Javascript logic minified into exactly ONE poststr call
-        poststr(request, "];var c=document.getElementById('chart');if(c){var ctx=c.getContext('2d');var mp=1,mn=1;for(var i=0;i<d.length;i++){if(d[i]>mp)mp=d[i];if(d[i]<0&&-d[i]>mn)mn=-d[i];}var zY=173;ctx.fillStyle='#555';ctx.fillRect(0,zY,512,1);for(var i=0;i<d.length;i++){var v=d[i];var x=i*16;if(v>=0){var h=(v/mp)*155;ctx.fillStyle='#d32f2f';ctx.fillRect(x+1,zY-h,14,h);ctx.fillStyle='#ddd';ctx.font='10px sans-serif';ctx.fillText(v,x+1,zY-h-4);}else{var h=(-v/mn)*75;ctx.fillStyle='#388e3c';ctx.fillRect(x+1,zY,14,h);ctx.fillStyle='#ddd';ctx.font='10px sans-serif';ctx.fillText(-v,x+1,zY+h+10);}}}catch(e){}</script></div>");
-      
+        // ====================================================================
+        // 3. CANVAS BAR GRAPH - SAFE BUFFER & WATCHDOG OPTIMIZED
+        // ====================================================================
+        poststr(request, "<div class='graph-col'>");
+        poststr(request, "<canvas id='chart' width='512' height='260' style='width:100%;'></canvas>");
+        poststr(request, "<script>try{var d=[");
+        
+        // 1. Build array locally (Increased to 512 bytes to prevent buffer overflow)
+        char arr_buf[512];
+        int pos = 0;
+        
+        for (int i = 31; i >= 0; i--) {
+            int interval_of_day = (current_interval_of_day - i + 96) % 96;
+            int c_index = interval_of_day % 32;
+            int net = net_matrix[c_index];
+            if (i == 0) net += (int)(real_consumption - real_export);
+            
+            // Append directly using offset for speed and safety
+            int written = snprintf(arr_buf + pos, sizeof(arr_buf) - pos, "%d%s", net, (i == 0) ? "" : ",");
+            if (written > 0 && written < (sizeof(arr_buf) - pos)) {
+                pos += written;
+            }
+        }
+        
+        // 2. Send the array
+        poststr(request, arr_buf);
+
+        // 3. Send JS in safe chunks (under 120 chars each) to avoid poststr truncation
+        poststr(request, "];var c=document.getElementById('chart');if(c){var ctx=c.getContext('2d');");
+        poststr(request, "var mp=1,mn=1;for(var i=0;i<d.length;i++){if(d[i]>mp)mp=d[i];if(d[i]<0&&-d[i]>mn)mn=-d[i];}");
+        poststr(request, "var zY=173;ctx.fillStyle='#555';ctx.fillRect(0,zY,512,1);");
+        poststr(request, "for(var i=0;i<d.length;i++){var v=d[i];var x=i*16;if(v>=0){");
+        poststr(request, "var h=(v/mp)*155;ctx.fillStyle='#d32f2f';ctx.fillRect(x+1,zY-h,14,h);");
+        poststr(request, "ctx.fillStyle='#ddd';ctx.font='10px sans-serif';ctx.fillText(v,x+1,zY-h-4);}else{");
+        poststr(request, "var h=(-v/mn)*75;ctx.fillStyle='#388e3c';ctx.fillRect(x+1,zY,14,h);");
+        poststr(request, "ctx.fillStyle='#ddd';ctx.font='10px sans-serif';ctx.fillText(-v,x+1,zY+h+10);}}}");
+        poststr(request, "catch(e){console.log('Graph Error');}</script></div>");
+
         // ====================================================================
         // 4. CONTROLS (Right Column)
         // ====================================================================
