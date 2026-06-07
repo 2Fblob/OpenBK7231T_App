@@ -152,34 +152,65 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     else { mode = "PWR"; }
 
     poststr(request, "<style>");
-    poststr(request, "#my-dash { position: absolute; top: 0; left: 0; width: 100%; min-height: 100vh; background-color: #121212; z-index: 99999; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"); 
+    poststr(request, "#my-dash { position: absolute; top: 0; left: 0; width: 100%; ");
+    poststr(request, "min-height: 100vh; background-color: #121212; z-index: 99999; ");
+    poststr(request, "padding: 10px; box-sizing: border-box; ");
+    poststr(request, "font-family: -apple-system, sans-serif; color: #eee; }"); 
     
-    // Top Stats
-    poststr(request, ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; gap: 5px; }");
-    poststr(request, ".top-stats span { color: #888; font-size: 18px; text-transform: uppercase; margin-bottom: 6px; }");
+    poststr(request, ".top-stats { display: flex; justify-content: space-between; ");
+    poststr(request, "align-items: center; background: #222; padding: 18px; ");
+    poststr(request, "border-radius: 8px; text-align: center; gap: 5px; }");
+    
+    poststr(request, ".top-stats div { display: flex; flex-direction: column; ");
+    poststr(request, "align-items: center; flex: 1; }");
+    
+    poststr(request, ".top-stats span { color: #888; font-size: 18px; ");
+    poststr(request, "text-transform: uppercase; margin-bottom: 6px; }");
     poststr(request, ".top-stats b { font-size: 29px; font-weight: 600; }");
     
-    // Controls & Graph Row
-    poststr(request, ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 290px; align-items: stretch; }"); 
-    poststr(request, ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; }");
-    poststr(request, ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; }");
-    poststr(request, ".ctrl-col { flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; gap: 10px; }");
+    poststr(request, ".dash-row { display: flex; flex-direction: row; gap: 15px; ");
+    poststr(request, "margin-top: 15px; height: 290px; align-items: stretch; }"); 
+    
+    poststr(request, ".left-col { flex: 0 0 210px; background: #222; ");
+    poststr(request, "padding: 10px; border-radius: 8px; overflow-y: auto; }");
+    
+    poststr(request, ".graph-col { flex: 1; background: #222; padding: 10px; ");
+    poststr(request, "border-radius: 8px; display: flex; flex-direction: column; ");
+    poststr(request, "align-items: center; }");
+    
+    // Increased to 120px width to prevent buttons from squishing
+    poststr(request, ".ctrl-col { flex: 0 0 120px; background: #222; ");
+    poststr(request, "padding: 10px; border-radius: 8px; display: flex; ");
+    poststr(request, "flex-direction: column; align-items: center; gap: 10px; box-sizing: border-box; }");
 
-    // Tables & Clock (+50% font size from 20px -> 30px)
-    poststr(request, ".hist-tbl { width: 100%; text-align: center; font-size: 30px; border-collapse: collapse; }"); 
-    poststr(request, ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 6px; border-bottom: 1px solid #444; }");
+    // Reinstated missing UI styles
+    poststr(request, ".btn-tgl { width: 100%; border: none; padding: 8px 0; ");
+    poststr(request, "border-radius: 6px; color: #fff; font-weight: bold; cursor: pointer; ");
+    poststr(request, "text-align: center; box-sizing: border-box; }");
+    poststr(request, ".slider { width: 100%; margin: 8px 0; box-sizing: border-box; cursor: pointer; }");
+
+    poststr(request, ".hist-tbl { width: 100%; text-align: center; ");
+    poststr(request, "font-size: 30px; border-collapse: collapse; }"); 
+    poststr(request, ".hist-tbl th { color: #888; font-weight: normal; ");
+    poststr(request, "padding-bottom: 6px; border-bottom: 1px solid #444; }");
     poststr(request, ".hist-tbl td { padding: 10px 2px; border-bottom: 1px solid #333; }");
-    poststr(request, ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; }");
+    
+    poststr(request, ".close-btn { position: absolute; top: 10px; right: 15px; ");
+    poststr(request, "font-size: 16px; color: #666; cursor: pointer; }");
     poststr(request, "</style>");
     
     poststr(request, "<div id='my-dash'>"); 
-    poststr(request, "<div class='close-btn' onclick='document.getElementById(\"my-dash\").style.display=\"none\"'>✕</div>");
+    poststr(request, "<div class='close-btn' ");
+    poststr(request, "onclick='document.getElementById(\"my-dash\").style.display=\"none\"'>✕</div>");
 
     // ====================================================================
     // 1. TOP DASHBOARD
     // ====================================================================
     poststr(request, "<div class='top-stats'>");
-    hprintf255(request, "<div><span>Charger C</span><input type='range' min='10' max='100' value='%d' oninput='document.getElementById(\"c-v\").innerText=this.value+\"%%\"'><b id='c-v' style='color:#0099FF;'>%d%%</b></div>", dump_load_relay[5], dump_load_relay[5]);
+    poststr(request, "<div><span>Charger C</span><input type='range' min='10' max='100' value='");
+    hprintf255(request, "%d", dump_load_relay[5]);
+    poststr(request, "' oninput='document.getElementById(\"c-v\").innerText=this.value+\"%\"'>");
+    hprintf255(request, "<b id='c-v' style='color:#0099FF;'>%d%%</b></div>", dump_load_relay[5]);
     poststr(request, "</div>");
 
     // ====================================================================
@@ -196,11 +227,14 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     }
     poststr(request, "];");
     
-    poststr(request, "const c=document.getElementById('chart').getContext('2d');"
-                     "d.forEach((v,i)=>{ let x=(31-i)*16; let h=Math.abs(v)/2; "
-                     "c.fillStyle=(v>=0)?'#d32f2f':'#388e3c';"
-                     "c.fillRect(x, 130-(v>=0?h:0), 16, h);"
-                     "c.fillStyle='#ddd';c.font='12px sans-serif';c.fillText(v, x, 130+(v>=0?-h-5:h+15)); });</script>");
+    poststr(request, "const c=document.getElementById('chart').getContext('2d');");
+    // Added a baseline so empty graphs don't look broken
+    poststr(request, "c.fillStyle='#444'; c.fillRect(0, 130, 512, 1);"); 
+    poststr(request, "d.forEach((v,i)=>{ let x=(31-i)*16; let h=Math.abs(v)/2; ");
+    poststr(request, "c.fillStyle=(v>=0)?'#d32f2f':'#388e3c';");
+    poststr(request, "c.fillRect(x, 130-(v>=0?h:0), 16, h);");
+    poststr(request, "c.fillStyle='#ddd';c.font='12px sans-serif';");
+    poststr(request, "c.fillText(v, x, 130+(v>=0?-h-5:h+15)); });</script>");
     poststr(request, "</div>");
     
     // ====================================================================
@@ -209,54 +243,58 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, "<div class='ctrl-col'>");
     poststr(request, "<div style='font-size:10px; color:#888; text-transform:uppercase;'>Controls</div>");
     
-    // Auto / Manual Toggle
     const char* auto_bg = charger_c_auto ? "#0099FF" : "#f44336";
     const char* auto_txt = charger_c_auto ? "AUTO" : "MANUAL";
-    hprintf255(request, "<button id='m-btn' class='btn-tgl' style='background:%s;' onclick='tm()'>%s</button>", auto_bg, auto_txt);
+    hprintf255(request, "<button id='m-btn' class='btn-tgl' style='background:%s;' ", auto_bg);
+    hprintf255(request, "onclick='tm()'>%s</button>", auto_txt);
     
-    // Inverter Button
     const char* inv_color = (dump_load_relay[5] == 5) ? "#4caf50" : "#555555";
-    hprintf255(request, "<button class='btn-tgl' style='background:%s;' onclick='fetch(\"/cm?cmnd=DGR_SendDimmer%%20solar_dump%%205\"); fetch(\"/cm?cmnd=SendGet%%20http://192.168.8.21/cm?cmnd=Channel3%%25205\");'>INVERTER</button>", inv_color);
+    hprintf255(request, "<button class='btn-tgl' style='background:%s;' ", inv_color);
+    poststr(request, "onclick='fetch(\"/cm?cmnd=DGR_SendDimmer%20solar_dump%205\"); ");
+    poststr(request, "fetch(\"/cm?cmnd=SendGet%20http://192.168.8.21/cm?cmnd=Channel3%205\");'>INVERTER</button>");
 
-    // Combined Charger C Control Block
-    poststr(request, "<div style='width:100%; background:#1a1a1a; padding:6px; border-radius:6px; box-sizing:border-box; margin-top:auto;'>");
+    poststr(request, "<div style='width:100%; background:#1a1a1a; padding:6px; ");
+    poststr(request, "border-radius:6px; box-sizing:border-box; margin-top:auto;'>");
     
     int d_val = dump_load_relay[5];
     const char* chg_color = "#555555";
     if (d_val >= 10 && d_val <= 18) { chg_color = "#ffeb3b"; }
     else if (d_val > 18) { chg_color = "#4caf50"; }
-    hprintf255(request, "<button class='btn-tgl' style='background:%s; padding:6px 0; margin-bottom:4px; font-size:10px; color:#000;'>CHG C</button>", chg_color);
+    
+    hprintf255(request, "<button class='btn-tgl' style='background:%s; padding:6px 0; ", chg_color);
+    poststr(request, "margin-bottom:4px; font-size:10px; color:#000;'>CHG C</button>");
     
     poststr(request, "<input type='range' id='c-sld' class='slider' min='0' max='100' value='");
     hprintf255(request, "%d", dump_load_relay[5]);
-    poststr(request, "' oninput='let v=parseInt(this.value);let txt=(v<10)?0:v;document.getElementById(\"c-val\").innerText=txt+\"%%\"' ");
+    poststr(request, "' oninput='let v=parseInt(this.value);let txt=(v<10)?0:v;");
+    poststr(request, "document.getElementById(\"c-val\").innerText=txt+\"%\"' ");
     poststr(request, "onchange='let v=parseInt(this.value);let c=(v<10)?0:v;");
     poststr(request, "fetch(\"/cm?cmnd=DGR_SendDimmer%20solar_dump%20\"+c);");
-    hprintf255(request, "fetch(\"/cm?cmnd=SendGet%20http://192.168.8.%d/cm?cmnd=Channel3%%20\"+c);'>", charger_c_ip);
+    hprintf255(request, "fetch(\"/cm?cmnd=SendGet%%20http://192.168.8.%d/cm?cmnd=Channel3%%20\"+c);'>", charger_c_ip);
 
-    hprintf255(request, "<div id='c-val' style='font-size:14px; font-weight:bold; color:#0099FF; margin-top:5px;'>%d%%</div>", dump_load_relay[5]);
+    hprintf255(request, "<div id='c-val' style='font-size:14px; font-weight:bold; color:#0099FF; ");
+    hprintf255(request, "margin-top:5px;'>%d%%</div>", dump_load_relay[5]);
     poststr(request, "</div>");
     
-    // JS handler for Auto toggle via fetch
-    poststr(request, "<script>function tm(){let b=document.getElementById('m-btn');fetch('/cm?cmnd=ToggleAuto');");
+    poststr(request, "<script>function tm(){let b=document.getElementById('m-btn');");
+    poststr(request, "fetch('/cm?cmnd=ToggleAuto');");
     poststr(request, "if(b.innerText==='AUTO'){b.innerText='MANUAL';b.style.background='#f44336';}");
     poststr(request, "else{b.innerText='AUTO';b.style.background='#0099FF';}}</script>");
     
-    poststr(request, "</div>"); // Close ctrl-col
-    poststr(request, "</div>"); // Close dash-row
+    poststr(request, "</div></div>");
 
     // ====================================================================
     // 5. HOURLY DATA TABLE & MCU CLOCK
     // ====================================================================
-    poststr(request, "<div style='display:flex; flex-wrap:wrap; width:100%; margin-top:15px; gap:15px; align-items:stretch;'>");
+    poststr(request, "<div style='display:flex; flex-wrap:wrap; width:100%; ");
+    poststr(request, "margin-top:15px; gap:15px; align-items:stretch;'>");
     
-    // --- Table Section (Reduced Width by 20px: min-width 160px, Increased Vertically 10px via padding) ---
-    poststr(request, "<div class='hist-tbl-wrapper' style='flex:1; min-width:160px; margin-top:0; padding: 5px 0;'>");
+    poststr(request, "<div class='hist-tbl-wrapper' style='flex:1; min-width:160px; ");
+    poststr(request, "margin-top:0; padding: 5px 0;'>");
     poststr(request, "<table class='hist-tbl' style='height:100%;'>");
     poststr(request, "<tr><th>Time</th><th>Import / Export</th><th>Net</th></tr>");
 
     for (int i = 0; i < 4; i++) {
-        // DECLARATION ADDED HERE
         int current_interval_of_day = minutes_since_midnight / net_metering_period;
         int interval_of_day = current_interval_of_day - i;
         if (interval_of_day < 0) { interval_of_day += 96; } 
@@ -267,16 +305,15 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         int net = net_matrix[c_index];
         
         if (i == 0) { 
-            // Active Row (Now)
             cons += (int)real_consumption;
             exp += (int)real_export;
             net += (int)(real_consumption - real_export); 
             
             int mins_left = 15 - (minutes_since_midnight % 15);
-            hprintf255(request, "<tr style='color:#0099FF; font-weight:bold;'><td>Now (-%dmin)</td><td>%dW / %dW</td><td>%dW</td></tr>", 
+            poststr(request, "<tr style='color:#0099FF; font-weight:bold;'>");
+            hprintf255(request, "<td>Now (-%dmin)</td><td>%dW / %dW</td><td>%dW</td></tr>", 
                        mins_left, cons, exp, net);
         } else {
-            // Historical Rows
             int row_mins = interval_of_day * 15;
             int row_h = row_mins / 60;
             int row_m = row_mins % 60;
@@ -287,14 +324,16 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     }
     poststr(request, "</table></div>");
 
-    // --- Big Clock Section (Maximized 132px Font, Expanded Width 360px, Height expanded via 15px padding) ---
-    poststr(request, "<div style='flex:0 0 360px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:15px 10px; overflow:hidden;'>");
-    hprintf255(request, "<div style='font-size:132px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
-    poststr(request, "</div>");
-
-    poststr(request, "</div>"); // Close bottom flex-row
+    poststr(request, "<div style='flex:0 0 360px; display:flex; justify-content:center; ");
+    poststr(request, "align-items:center; background:#222; border-radius:8px; ");
+    poststr(request, "padding:15px 10px; overflow:hidden;'>");
     
-    poststr(request, "</div>"); // Close my-dash
+    poststr(request, "<div style='font-size:132px; font-weight:bold; color:#0099FF; ");
+    poststr(request, "font-family:monospace; line-height:1; letter-spacing:-4px;'>");
+    hprintf255(request, "%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
+    poststr(request, "</div></div></div>");
+    
+    poststr(request, "</div>"); 
 }
 
 void BL09XX_SaveEmeteringStatistics()
