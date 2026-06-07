@@ -152,13 +152,13 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     else { mode = "PWR"; }
 
     // ====================================================================
-    // FULLSCREEN MOBILE CSS DASHBOARD (Matching Reference HTML Specs)
+    // FULLSCREEN MOBILE CSS DASHBOARD
     // ====================================================================
     poststr(request, "<style>");
     poststr(request, "body { margin: 0; background-color: #000; }");
     poststr(request, "#my-dash { position: absolute; top: 0; left: 0; width: 100%; min-height: 100vh; background-color: #121212; z-index: 99999; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"); 
     
-    // Top Statistics Bar (Updated to 18px padding and 5px gap)
+    // Top Statistics Bar
     poststr(request, ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; gap: 5px; }");
     poststr(request, ".top-stats div { display: flex; flex-direction: column; justify-content: center; }");
     poststr(request, ".top-stats span { color: #888; font-size: 18px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }");
@@ -172,17 +172,17 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, ".slider { width: 100%; }");
     poststr(request, ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 290px; align-items: stretch; }");
     
-    // Left Column Fallback (Unified style blending with target layout metrics)
+    // Left Column Fallback
     poststr(request, ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; }");
     poststr(request, ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }");
     poststr(request, ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }");
 
-    // Middle Column & Controls Column (Updated to 10px gap)
+    // Middle Column & Controls Column
     poststr(request, ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; }");
     poststr(request, ".ctrl-col { flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; gap: 10px; }");
     poststr(request, ".btn-tgl { width: 100%; border: none; color: white; padding: 10px 0; border-radius: 4px; font-weight: bold; cursor: pointer; }");
     
-    // Tables & Clock Containers (Fixed to 15px text and tighter paddings)
+    // Tables & Clock Containers
     poststr(request, ".hist-tbl-wrapper { flex: 1; min-width: 180px; margin-top: 0; }");
     poststr(request, ".hist-tbl { width: 100%; text-align: center; font-size: 20px; border-collapse: collapse; }");
     poststr(request, ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 3px; border-bottom: 1px solid #444; }");
@@ -256,7 +256,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "</table></div>");
         
         // ====================================================================
-        // 3. CANVAS BAR GRAPH (Middle Column - Math updated to match baseline 130)
+        // 3. CANVAS BAR GRAPH (Middle Column)
         // ====================================================================
         poststr(request, "<div class='graph-col'>");
         poststr(request, "<canvas id='chart' width='512' height='260' style='width:100%;'></canvas>");
@@ -272,11 +272,13 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         }
         poststr(request, "];");
 
-        // Unified 130-midpoint canvas rendering code loop from target mockup
+        // JS Scaling Fix implemented here to prevent empty chart rendering
         poststr(request, "const c = document.getElementById('chart').getContext('2d');");
+        poststr(request, "let max_v = Math.max(...d.map(Math.abs));");
+        poststr(request, "let scale = max_v > 0 ? 100 / max_v : 1;");
         poststr(request, "d.forEach((v, i) => {");
         poststr(request, "  let x = (31 - i) * 16;");
-        poststr(request, "  let h = Math.abs(v) / 2;");
+        poststr(request, "  let h = Math.abs(v) * scale;");
         poststr(request, "  c.fillStyle = (v >= 0) ? '#d32f2f' : '#388e3c';");
         poststr(request, "  c.fillRect(x, 130 - (v >= 0 ? h : 0), 16, h);");
         poststr(request, "  c.fillStyle = '#ddd';");
@@ -285,27 +287,53 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "});</script></div>");
 
         // ====================================================================
-        // 4. CONTROLS (Right Column - Formatted with inline sub-panel slider block)
+        // 4. CONTROLS (Right Column)
         // ====================================================================
+        int dmp = dump_load_relay[5];
+        const char* inv_color = (dmp == 5) ? "#4caf50" : "#555555";
+        const char* chg_color = (dmp > 18) ? "#4caf50" : ((dmp >= 10) ? "#ffeb3b" : "#555555");
+        const char* auto_color = charger_c_auto ? "#0099FF" : "#f44336";
+        const char* auto_text = charger_c_auto ? "AUTO" : "MANUAL";
+
         poststr(request, "<div class='ctrl-col'>");
         poststr(request, "<div style='font-size:10px; color:#888; text-transform:uppercase;'>Controls</div>");
         
-        poststr(request, "<button id='m-btn' class='btn-tgl' style='background:#0099FF;' onclick='tm()'>AUTO</button>");
-        
-        const char* inv_color = (dump_load_relay[5] == 5) ? "#4caf50" : "#555555";
-        hprintf255(request, "<button class='btn-tgl' style='background:%s;'>INVERTER</button>", inv_color);
+        hprintf255(request, "<button id='m-btn' class='btn-tgl' style='background:%s;' onclick='tm()'>%s</button>", auto_color, auto_text);
+        hprintf255(request, "<button id='inv-btn' class='btn-tgl' style='background:%s;' onclick='t_inv()'>INVERTER</button>", inv_color);
 
-        // Relocated slider housing panel with absolute matching visual padding styles
         poststr(request, "<div style='width:100%; background:#1a1a1a; padding:6px; border-radius:6px; box-sizing:border-box; margin-top:auto;'>");
-        poststr(request, "<button class='btn-tgl' style='background:#444; padding:6px 0; margin-bottom:4px; font-size:10px;'>CHG C</button>");
-        hprintf255(request, "<input type='range' id='c-sld' class='slider' min='10' max='100' value='%d' oninput='document.getElementById(\"c-val\").innerText=this.value+\"%%\"'>", dump_load_relay[5]);
-        hprintf255(request, "<div id='c-val' style='font-size:14px; font-weight:bold; color:#0099FF; margin-top:5px;'>%d%%</div></div>", dump_load_relay[5]);
+        hprintf255(request, "<button id='chg-btn' class='btn-tgl' style='background:%s; padding:6px 0; margin-bottom:4px; font-size:10px;' onclick='t_chg()'>CHG C</button>", chg_color);
+        hprintf255(request, "<input type='range' id='c-sld' class='slider' min='10' max='100' value='%d' onchange='upd(this.value)' oninput='document.getElementById(\"c-val\").innerText=this.value+\"%%\"'>", dmp);
+        hprintf255(request, "<div id='c-val' style='font-size:14px; font-weight:bold; color:#0099FF; margin-top:5px;'>%d%%</div></div>", dmp);
 
-        poststr(request, "<script>function tm(){let b = document.getElementById('m-btn');if(b.innerText === 'AUTO'){b.innerText = 'MANUAL';b.style.background = '#f44336';} else {b.innerText = 'AUTO';b.style.background = '#0099FF';}}</script>");
+        // Synchronize JS clicks with Backend C command SetDumpLoad
+        poststr(request, "<script>");
+        hprintf255(request, "let dmp = %d;", dmp);
+        poststr(request, "function upd(v){");
+        poststr(request, "  dmp = parseInt(v);");
+        poststr(request, "  fetch('/cm?cmnd=SetDumpLoad%20'+dmp);");
+        poststr(request, "  document.getElementById('inv-btn').style.background = (dmp===5)?'#4caf50':'#555555';");
+        poststr(request, "  let cb = document.getElementById('chg-btn');");
+        poststr(request, "  cb.style.background = (dmp>18)?'#4caf50':(dmp>=10?'#ffeb3b':'#555555');");
+        poststr(request, "  document.getElementById('c-sld').value = dmp;");
+        poststr(request, "  document.getElementById('c-val').innerText = dmp + '%';");
+        poststr(request, "}");
+        poststr(request, "function t_inv(){ upd(dmp===5 ? 0 : 5); }");
+        poststr(request, "function t_chg(){ upd(dmp>=10 ? 0 : 18); }");
+        poststr(request, "function tm(){");
+        poststr(request, "  let b = document.getElementById('m-btn');");
+        poststr(request, "  if(b.innerText === 'AUTO'){");
+        poststr(request, "    b.innerText = 'MANUAL'; b.style.background = '#f44336';");
+        poststr(request, "  } else {");
+        poststr(request, "    b.innerText = 'AUTO'; b.style.background = '#0099FF';");
+        poststr(request, "  }");
+        poststr(request, "  fetch('/cm?cmnd=ToggleAuto');");
+        poststr(request, "}");
+        poststr(request, "</script>");
         poststr(request, "</div></div>");
 
         // ====================================================================
-        // 5. HOURLY DATA TABLE & MCU CLOCK (Updated gap and padding footprints)
+        // 5. HOURLY DATA TABLE & MCU CLOCK
         // ====================================================================
         poststr(request, "<div style='display:flex; flex-wrap:wrap; width:100%; margin-top:10px; gap:10px; align-items:stretch;'>");
         
@@ -341,7 +369,6 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         }
         poststr(request, "</table></div>");
 
-        // Clock section frame optimized down to 90px font and 5px layout padding bounds
         poststr(request, "<div style='flex:0 0 340px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:5px; padding:5px; overflow:hidden;'>");
         hprintf255(request, "<div style='font-size:110px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-5px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
         poststr(request, "</div>");
@@ -413,6 +440,24 @@ commandResult_t BL09XX_ResetEnergyCounter(const void *context, const char *cmd, 
     { 
         BL09XX_SaveEmeteringStatistics();
         lastConsumptionSaveStamp = xTaskGetTickCount();
+    }
+    return CMD_RES_OK;
+}
+
+// Custom handler to set Dump Load relay manually via JS
+commandResult_t BL09XX_SetDumpLoad(const void *context, const char *cmd, const char *args, int cmdFlags)
+{
+    if(args && *args) {
+        dump_load_relay[5] = atoi(args);
+        
+        // Push the command instantly when updated in manual mode
+        char dgr_cmd[64];
+        snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
+        CMD_ExecuteCommand(dgr_cmd, 0);
+
+        char fallback_cmd[64];
+        snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
+        CMD_ExecuteCommand(fallback_cmd, 0);
     }
     return CMD_RES_OK;
 }
@@ -592,7 +637,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     float diff;
 
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced())
-    {                                          
+    {                                         
         check_time = NTP_GetMinute();
         check_hour = NTP_GetHour();
 
@@ -642,7 +687,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             old_time = check_time;
             lastsync++;
         }
-                                                 
+                                                         
         net_energy = (real_consumption - real_export);                               
 
         current_minute = check_time;
@@ -667,9 +712,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 net_energy_equivalent = (int)net_energy; 
             }
 
-            // ====================================================================
-            // ** 3. NEW SOLAR STATUS LOGIC **
-            // ====================================================================
+            // 3. NEW SOLAR STATUS LOGIC
             if (net_energy <= -26.0f) {
                 solar_available = 1;
             } else if (net_energy > 14.0f) {
@@ -677,42 +720,37 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             }
 
             // ====================================================================
-            // ** 4. NEW CHARGER C LOGIC (Strict Float Boundaries) **
-            // ====================================================================
-            if (solar_available == 0) {
-                if (net_energy >= 6.0f) {
-                    dump_load_relay[5] = 5;
-                } else if (net_energy <= -6.0f) {
-                    dump_load_relay[5] = 0;
-                }
-                // Between -5.99 and 5.99 Wh, do nothing (keep previous state)
-            } 
-            else {
-                if (net_energy > -10.0f) {
-                    // Timer reset boundary (-9.99 to 14.00 Wh)
-                    if (dump_load_relay[5] > 18) {
-                        dump_load_relay[5] = 18;
-                    }
-                } 
-                else if (net_energy <= -10.0f && net_energy > -20.0f) {
-                    // Exactly -10.0 down to -29.99 Wh
-                    dump_load_relay[5] = 18;
-                } 
-                else if (net_energy <= -20.0f) {
-                    // -30.0 Wh or lower
-                    int calculated_pwr = (abs((int)net_energy) * 60 / check_time_estimate_mins) / 10;
-                    
-                    if (calculated_pwr > 100) calculated_pwr = 100;
-                    if (calculated_pwr < 20) calculated_pwr = 20;
-                    
-                    dump_load_relay[5] = calculated_pwr;
-                }
-            }
-
-            // ====================================================================
-            // ** UNCONDITIONAL SEND: Every minute, ONLY to Charger C **
+            // ISOLATED LOGIC BLOCK (ONLY RUNS IN AUTO MODE)
             // ====================================================================
             if (charger_c_auto == 1) {
+
+                if (solar_available == 0) {
+                    if (net_energy >= 6.0f) {
+                        dump_load_relay[5] = 5;
+                    } else if (net_energy <= -6.0f) {
+                        dump_load_relay[5] = 0;
+                    }
+                } 
+                else {
+                    if (net_energy > -10.0f) {
+                        if (dump_load_relay[5] > 18) {
+                            dump_load_relay[5] = 18;
+                        }
+                    } 
+                    else if (net_energy <= -10.0f && net_energy > -20.0f) {
+                        dump_load_relay[5] = 18;
+                    } 
+                    else if (net_energy <= -20.0f) {
+                        int calculated_pwr = (abs((int)net_energy) * 60 / check_time_estimate_mins) / 10;
+                        
+                        if (calculated_pwr > 100) calculated_pwr = 100;
+                        if (calculated_pwr < 20) calculated_pwr = 20;
+                        
+                        dump_load_relay[5] = calculated_pwr;
+                    }
+                }
+
+                // Unconditional send every minute (Auto Mode Only)
                 char dgr_cmd[64];
                 snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
                 CMD_ExecuteCommand(dgr_cmd, 0);
@@ -1023,6 +1061,9 @@ void BL_Shared_Init(void)
     ConsumptionSaveCounter = data.save_counter;
     lastConsumptionSaveStamp = xTaskGetTickCount();
 
+    // Register our newly created JS backend handler
+    CMD_RegisterCommand("SetDumpLoad", BL09XX_SetDumpLoad, NULL);
+    
     CMD_RegisterCommand("EnergyCntReset", BL09XX_ResetEnergyCounter, NULL);
     CMD_RegisterCommand("ToggleAuto", BL09XX_ToggleAuto, NULL);
     CMD_RegisterCommand("SetupEnergyStats", BL09XX_SetupEnergyStatistic, NULL);
