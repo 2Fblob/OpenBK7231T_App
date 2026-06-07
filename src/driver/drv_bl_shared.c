@@ -152,20 +152,20 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     else { mode = "PWR"; }
 
     // ====================================================================
-    // STYLESHEET DEFINITIONS
+    // STYLESHEET DEFINITIONS (With Final Font Scaling Modifications)
     // ====================================================================
     poststr(request, "<style>");
     poststr(request, "body { margin: 0; background-color: #000; }");
     poststr(request, "#my-dash { position: absolute; top: 0; left: 0; width: 100%; min-height: 100vh; background-color: #121212; z-index: 99999; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"); 
     
-    // Top Stats Bar
+    // Top Stats Bar Grid Setup
     poststr(request, ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; gap: 5px; }");
     poststr(request, ".top-stats div { display: flex; flex-direction: column; justify-content: center; }");
     
-    // Titles scaled to 25px
+    // Section Headings: Upgraded to 25px to match request
     poststr(request, ".top-stats label { color: #888; font-size: 25px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }");
     
-    // Values scaled to 35px
+    // Core Value Readouts: Upgraded to an ultra-readable 35px Bold
     poststr(request, ".top-stats b { font-size: 35px; font-weight: 600; }");
     
     poststr(request, ".c-exp { color: #4caf50; }");
@@ -191,75 +191,84 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; }");
     poststr(request, "</style>");
     
-    poststr(request, "<div id='my-dash'>");
-    poststr(request, "<div class='close-btn' onclick='document.getElementById(\"my-dash\").style.display=\"none\"'>✕</div>");
+    poststr(request, 
+        "<div id='my-dash'>"
+        "<div class='close-btn' onclick='document.getElementById(\"my-dash\").style.display=\"none\"'>✕</div>"
+    );
 
-
-
-        // ====================================================================
-        // 1. TOP DASHBOARD ROW
-        // ====================================================================
-        poststr(request, "<div class='top-stats'>");
-        
-        // Call 1: Voltage & Current
-        hprintf255(request, "<div><label>Voltage & Current</label><b id='d-va'>%.0fV / %.2fA</b></div>", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
-        
-        // Call 2: Power, Now (Balance), and 15-Min Est
-        const char* pwr_cls = (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp";
-        const char* bal_cls = (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp";
-        const char* est_cls = (estimated_energy_period < 0) ? "c-exp" : "c-imp";
-        
-        hprintf255(request, 
-            "<div><label>Power</label><b id='d-pwr' class='%s'>%.0f W</b></div>"
-            "<div><label>Now / 15min Est.</label><b><span id='d-bal' class='%s'>%.0f Wh</span> / <span id='d-est' class='%s'>%i Wh</span></b></div>", 
-            pwr_cls, sensors[OBK_POWER].lastReading,
-            bal_cls, sensors[OBK_POWER_REACTIVE].lastReading,
-            est_cls, estimated_energy_period);
+    // ====================================================================
+    // 1. TOP DASHBOARD ROW (Optimized and Remapped Layout)
+    // ====================================================================
+    poststr(request, "<div class='top-stats'>");
     
-        // Dynamic Charger Display Logic
-        if (dump_load_relay[5] == 0) {
-            poststr(request, "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v' style='color:#888;'>Idle</b></div>");
-        } else if (dump_load_relay[5] == 5) {
-            poststr(request, "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v' style='color:#4caf50;'>Battery</b></div>");
-        } else {
-            hprintf255(request, "<div id='d-chg-box'><label id='c-lbl'>Charging</label><b id='c-v' style='color:#0099FF;'>%d%%</b></div>", dump_load_relay[5]);
-        }
+    // Call 1: Voltage & Current Tracker (~75 bytes format payload - Ultra Safe)
+    hprintf255(request, "<div><label>Voltage & Current</label><b id='d-va'>%.0fV / %.2fA</b></div>", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
+    
+    // Call 2: Combined Power, Balance (Now), and 15-Min Est.
+    // Dynamic Evaluated footprint: ~226 bytes (Maintains a safe, intentional margin under 255 buffer limits)
+    const char* pwr_cls = (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp";
+    const char* bal_cls = (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp";
+    const char* est_cls = (estimated_energy_period < 0) ? "c-exp" : "c-imp";
+    
+    hprintf255(request, 
+        "<div><label>Power</label><b id='d-pwr' class='%s'>%.0f W</b></div>"
+        "<div><label>Now / 15min Est.</label><b><span id='d-bal' class='%s'>%.0f Wh</span> / <span id='d-est' class='%s'>%i Wh</span></b></div>", 
+        pwr_cls, sensors[OBK_POWER].lastReading,
+        bal_cls, sensors[OBK_POWER_REACTIVE].lastReading,
+        est_cls, estimated_energy_period);
+
+    // Dynamic Charger Display Logic (Maintains structural label tags)
+    if (dump_load_relay[5] == 0) {
+        poststr(request, "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v' style='color:#888;'>Idle</b></div>");
+    } else if (dump_load_relay[5] == 5) {
+        poststr(request, "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v' style='color:#4caf50;'>Battery</b></div>");
+    } else {
+        hprintf255(request, "<div id='d-chg-box'><label id='c-lbl'>Charging</label><b id='c-v' style='color:#0099FF;'>%d%%</b></div>", dump_load_relay[5]);
+    }
+    
+    poststr(request, "</div>");
+
+    if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced())
+    {
+        minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
+        int current_interval_of_day = minutes_since_midnight / net_metering_period;
         
-        poststr(request, "</div>");
-  
+        // BEGINNING OF MAIN GRID MATRIX
+        poststr(request, "<div class='dash-row'>");
+
         // ====================================================================
         // 2. SENSOR COLUMN (Left Alignment Container)
         // ====================================================================
-        poststr(request, "<div class='left-col'>"); 
-        poststr(request, "<div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>");
-        poststr(request, "<table class='sens-tbl'><tbody id='d-sens-body'>");
+        poststr(request, 
+            "<div class='left-col'>"
+            "<div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>"
+            "<table class='sens-tbl'><tbody id='d-sens-body'>"
+        );
 
         for (int i = (OBK__FIRST); i <= (OBK_CONSUMPTION__DAILY_LAST); i++) {
             if (i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))){i++;}
             if (i <= OBK__NUM_MEASUREMENTS || NTP_IsTimeSynced()) {
                 if (i == OBK_VOLTAGE || i == OBK_POWER || i == OBK_CURRENT || i == OBK_POWER_APPARENT || i == OBK_POWER_REACTIVE) continue; 
 
-                poststr(request, "<tr><td><b>");
-                poststr(request, sensors[i].names.name_friendly);
-                poststr(request, "</b></td><td style='text-align:right;'>");
-                
                 if ((i == OBK_CONSUMPTION_TOTAL) || (i == OBK_GENERATION_TOTAL)) {
-                    hprintf255(request, "%.*f kWh</td></tr>", sensors[i].rounding_decimals, (0.001*sensors[i].lastReading));
+                    hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f kWh</td></tr>", 
+                               sensors[i].names.name_friendly, sensors[i].rounding_decimals, (0.001*sensors[i].lastReading));
                 } else {
-                    hprintf255(request, "%.*f %s</td></tr>", sensors[i].rounding_decimals, sensors[i].lastReading, sensors[i].names.units);
+                    hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f %s</td></tr>", 
+                               sensors[i].names.name_friendly, sensors[i].rounding_decimals, sensors[i].lastReading, sensors[i].names.units);
                 }
             }
         };
         poststr(request, "</tbody></table></div>");
         
         // ====================================================================
-        // 3. GRAPH COLUMN (Center Vector Block - 100% Pure HTML Server-Rendered)
+        // 3. GRAPH COLUMN (Center Vector Block)
         // ====================================================================
-        poststr(request, "<div class='graph-col' id='d-graph'>");
-        poststr(request, "<svg viewBox='0 0 512 260' style='width:100%%; height:100%%; background:transparent;'>");
-        
-        // Center Baseline Split
-        poststr(request, "<line x1='0' y1='130' x2='512' y2='130' stroke='#333' stroke-width='1'/>");
+        poststr(request, 
+            "<div class='graph-col' id='d-graph'>"
+            "<svg viewBox='0 0 512 260' style='width:100%%; height:100%%; background:transparent;'>"
+            "<line x1='0' y1='130' x2='512' y2='130' stroke='#333' stroke-width='1'/>"
+        );
         
         for (int i = 31; i >= 0; i--) {
             int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
@@ -268,7 +277,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             
             int x = (31 - i) * 16;
             int h = abs(v) / 2;
-            if (h > 120) h = 120; // Structural constraint map boundary
+            if (h > 120) h = 120; 
             
             if (v != 0 || i == 0) {
                 const char* color = (v >= 0) ? "#d32f2f" : "#388e3c";
@@ -280,15 +289,13 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
                 }
                 hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='11' font-family='sans-serif' text-anchor='middle'>%d</text>", x + 7, text_y, v);
             } else {
-                // Ground elements directly along layout spine
                 hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='11' font-family='sans-serif' text-anchor='middle'>0</text>", x + 7);
             }
         }
-        poststr(request, "</svg>");
-        poststr(request, "</div>");
+        poststr(request, "</svg></div>");
 
         // ====================================================================
-        // 4. CONTROL INTERFACE ARRAY (Right Column Column Boundary)
+        // 4. CONTROL INTERFACE ARRAY (Right Column)
         // ====================================================================
         int dmp = dump_load_relay[5];
         const char* inv_color = (dmp == 5) ? "#4caf50" : "#555555";
@@ -298,8 +305,10 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         const char* auto_color = charger_c_auto ? "#0099FF" : "#f44336";
         const char* auto_text = charger_c_auto ? "AUTO" : "MANUAL";
 
-        poststr(request, "<div class='ctrl-col'>");
-        poststr(request, "<div style='font-size:10px; color:#888; text-transform:uppercase; text-align:center;'>Controls</div>");
+        poststr(request, 
+            "<div class='ctrl-col'>"
+            "<div style='font-size:10px; color:#888; text-transform:uppercase; text-align:center;'>Controls</div>"
+        );
         
         hprintf255(request, "<button id='m-btn' class='btn-tgl' style='background:%s;' onclick='tm()'>%s</button>", auto_color, auto_text);
         hprintf255(request, "<button id='inv-btn' class='btn-tgl' style='background:%s;' onclick='t_inv()'>INVERTER</button>", inv_color);
@@ -308,19 +317,17 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "<div style='display:flex; gap:4px; width:100%%; margin-top:auto;'>");
         hprintf255(request, "<button id='chg-30-btn' class='btn-tgl' style='background:%s; flex:1; font-size:11px; padding:4px 0;' onclick='upd(30)'>30%%</button>", chg_30_color);
         hprintf255(request, "<button id='chg-80-btn' class='btn-tgl' style='background:%s; flex:1; font-size:11px; padding:4px 0;' onclick='upd(80)'>80%%</button>", chg_80_color);
-        poststr(request, "</div>");
-
-        poststr(request, "</div>"); // Close ctrl-col
-        poststr(request, "</div>"); // Close dash-row layout boundary
+        poststr(request, "</div></div></div>"); 
 
         // ====================================================================
         // 5. HOURLY DATA TABLE & LARGE CLOCK SYSTEM
         // ====================================================================
-        poststr(request, "<div style='display:flex; width:100%%; margin-top:20px; gap:20px; align-items:stretch;'>");
-        
-        poststr(request, "<div class='hist-tbl-wrapper'>");
-        poststr(request, "<table class='hist-tbl'><tbody id='d-hist-body'>");
-        poststr(request, "<tr><th>Time</th><th>Import / Export</th><th>Net</th></tr>");
+        poststr(request, 
+            "<div style='display:flex; width:100%%; margin-top:20px; gap:20px; align-items:stretch;'>"
+            "<div class='hist-tbl-wrapper'>"
+            "<table class='hist-tbl'><tbody id='d-hist-body'>"
+            "<tr><th>Time</th><th>Import / Export</th><th>Net</th></tr>"
+        );
 
         for (int i = 0; i < 4; i++) {
             int interval_of_day = current_interval_of_day - i;
@@ -348,14 +355,17 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
                            row_h, row_m, cons, exp, net);
             }
         }
-        poststr(request, "</tbody></table></div>");
 
-        // Display module wrapper clock frame
-        poststr(request, "<div style='flex:0 0 340px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:10px; overflow:hidden;'>");
-        hprintf255(request, "<div id='d-clk' style='font-size:110px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
-        poststr(request, "</div>");
+        poststr(request, 
+            "</tbody></table></div>"
+            "<div style='flex:0 0 340px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:10px; overflow:hidden;'>"
+        );
         
-        poststr(request, "</div>"); // Close historical data flex row layout boundary
+        hprintf255(request, 
+            "<div id='d-clk' style='font-size:110px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>%02d:%02d</div>"
+            "</div></div>", 
+            NTP_GetHour(), NTP_GetMinute()
+        );
 
         // ====================================================================
         // 6. ASYNCHRONOUS SWAP ENGINE & STATE SYNC
@@ -365,45 +375,35 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "<script>");
         hprintf255(request, "var dmp=%d, auto=%d;", dump_load_relay[5], charger_c_auto);
         
-        // Command injection channels - Blocked entirely if in Auto mode
-        poststr(request, "function upd(v){if(auto===1)return; dmp=parseInt(v);fetch('/cm?cmnd=SetDumpLoad%20'+dmp);");
-        poststr(request, "document.getElementById('inv-btn').style.background=(dmp===5)?'#4caf50':'#555555';");
-        poststr(request, "document.getElementById('chg-btn').style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#ffeb3b':'#555555');");
-        poststr(request, "document.getElementById('chg-30-btn').style.background=(dmp>=30)?'#4caf50':'#555555';");
-        poststr(request, "document.getElementById('chg-80-btn').style.background=(dmp>=80)?'#4caf50':'#555555';");
-        
-        poststr(request, "var tc=document.getElementById('c-v'),tl=document.getElementById('c-lbl');");
-        poststr(request, "if(tc&&tl){if(dmp===0){tl.innerText='Charger';tc.innerText='Idle';tc.style.color='#888';}");
-        poststr(request, "else if(dmp===5){tl.innerText='Charger';tc.innerText='Battery';tc.style.color='#4caf50';}");
-        poststr(request, "else{tl.innerText='Charging';tc.innerText=dmp+'%';tc.style.color='#0099FF';}}}");
-        
-        poststr(request, "function t_inv(){upd(dmp===5?0:5);}function t_chg(){upd(dmp>=10?0:18);}");
-        
-        poststr(request, "function tm(){auto=(auto===1)?0:1; fetch('/cm?cmnd=ToggleAuto');");
-        poststr(request, "var b=document.getElementById('m-btn');if(auto===0){b.innerText='MANUAL';b.style.background='#f44336';}else{b.innerText='AUTO';b.style.background='#0099FF';}}");
-        
-        // Target list DOM parser loop - Force matches style.background even if inner text is static
-        poststr(request, "function rsh(ids){fetch('/index').then(r=>r.text()).then(html=>{");
-        poststr(request, "var doc=new DOMParser().parseFromString(html,'text/html');");
-        poststr(request, "var sys=doc.getElementById('sys-data');if(sys){dmp=parseInt(sys.getAttribute('data-dmp'));auto=parseInt(sys.getAttribute('data-auto'));}");
-        
-        poststr(request, "ids.forEach(id=>{");
-        poststr(request, "var oldEl=document.getElementById(id),newEl=doc.getElementById(id);");
-        poststr(request, "if(oldEl&&newEl){");
-        poststr(request, "if(oldEl.innerHTML!==newEl.innerHTML) oldEl.innerHTML=newEl.innerHTML;");
-        poststr(request, "oldEl.className=newEl.className; oldEl.style.color=newEl.style.color; oldEl.style.background=newEl.style.background;");
-        poststr(request, "}});}).catch(e=>console.log(e));}");
-        
-        // 10-Second Refresh Cycle
-        poststr(request, "setInterval(function(){rsh(['d-va','d-pwr','d-est','d-bal','d-chg-box','d-sens-body','d-clk','inv-btn','chg-btn','chg-30-btn','chg-80-btn','m-btn']);}, 10000);");
-        
-        // 30-Second Refresh Cycle
-        poststr(request, "setInterval(function(){rsh(['d-graph','d-hist-body']);}, 30000);");
-        
-        poststr(request, "</script>");
+        poststr(request, 
+            "function upd(v){if(auto===1)return; dmp=parseInt(v);fetch('/cm?cmnd=SetDumpLoad%20'+dmp);"
+            "document.getElementById('inv-btn').style.background=(dmp===5)?'#4caf50':'#555555';"
+            "document.getElementById('chg-btn').style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#ffeb3b':'#555555');"
+            "document.getElementById('chg-30-btn').style.background=(dmp>=30)?'#4caf50':'#555555';"
+            "document.getElementById('chg-80-btn').style.background=(dmp>=80)?'#4caf50':'#555555';"
+            "var tc=document.getElementById('c-v'),tl=document.getElementById('c-lbl');"
+            "if(tc&&tl){if(dmp===0){tl.innerText='Charger';tc.innerText='Idle';tc.style.color='#888';}"
+            "else if(dmp===5){tl.innerText='Charger';tc.innerText='Battery';tc.style.color='#4caf50';}"
+            "else{tl.innerText='Charging';tc.innerText=dmp+'%';tc.style.color='#0099FF';}}}"
+            "function t_inv(){upd(dmp===5?0:5);}function t_chg(){upd(dmp>=10?0:18);}"
+            "function tm(){auto=(auto===1)?0:1; fetch('/cm?cmnd=ToggleAuto');"
+            "var b=document.getElementById('m-btn');if(auto===0){b.innerText='MANUAL';b.style.background='#f44336';}else{b.innerText='AUTO';b.style.background='#0099FF';}}"
+            "function rsh(ids){fetch('/index').then(r=>r.text()).then(html=>{"
+            "var doc=new DOMParser().parseFromString(html,'text/html');"
+            "var sys=doc.getElementById('sys-data');if(sys){dmp=parseInt(sys.getAttribute('data-dmp'));auto=parseInt(sys.getAttribute('data-auto'));}"
+            "ids.forEach(id=>{"
+            "var oldEl=document.getElementById(id),newEl=doc.getElementById(id);"
+            "if(oldEl&&newEl){"
+            "if(oldEl.innerHTML!==newEl.innerHTML) oldEl.innerHTML=newEl.innerHTML;"
+            "oldEl.className=newEl.className; oldEl.style.color=newEl.style.color; oldEl.style.background=newEl.style.background;"
+            "}});}).catch(e=>console.log(e));}"
+            "setInterval(function(){rsh(['d-va','d-pwr','d-est','d-bal','d-chg-box','d-sens-body','d-clk','inv-btn','chg-btn','chg-30-btn','chg-80-btn','m-btn']);}, 10000);"
+            "setInterval(function(){rsh(['d-graph','d-hist-body']);}, 30000);"
+            "</script>"
+        );
     }
     
-    poststr(request, "</div>"); // Close main interface container block (#my-dash)
+    poststr(request, "</div>"); 
 }
 
 void BL09XX_SaveEmeteringStatistics()
