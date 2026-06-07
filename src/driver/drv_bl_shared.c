@@ -152,44 +152,32 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     else { mode = "PWR"; }
 
     // ====================================================================
-    // STYLESHEET DEFINITIONS (With Final Font Scaling Modifications)
+    // STYLESHEET DEFINITIONS - Combined Continuous Heap Stream
     // ====================================================================
-    poststr(request, "<style>");
-    poststr(request, "body { margin: 0; background-color: #000; }");
-    poststr(request, "#my-dash { position: absolute; top: 0; left: 0; width: 100%; min-height: 100vh; background-color: #121212; z-index: 99999; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"); 
-    
-    // Top Stats Bar Grid Setup
-    poststr(request, ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; gap: 5px; }");
-    poststr(request, ".top-stats div { display: flex; flex-direction: column; justify-content: center; }");
-    
-    // Section Headings: Upgraded to 25px to match request
-    poststr(request, ".top-stats label { color: #888; font-size: 25px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }");
-    
-    // Core Value Readouts: Upgraded to an ultra-readable 35px Bold
-    poststr(request, ".top-stats b { font-size: 35px; font-weight: 600; }");
-    
-    poststr(request, ".c-exp { color: #4caf50; }");
-    poststr(request, ".c-imp { color: #f44336; }");
-
-    // Main Row Containers
-    poststr(request, ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 290px; align-items: stretch; }"); 
-    poststr(request, ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; }");
-    poststr(request, ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }");
-    poststr(request, ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }");
-
-    // Graph Area & Control Column Designations
-    poststr(request, ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }");
-    poststr(request, ".ctrl-col { flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 10px; box-sizing: border-box; }");
-    poststr(request, ".btn-tgl { width: 100%; border: none; color: white; padding: 8px 0; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; text-align: center; line-height: 1.1; }");
-    
-    // Bottom Section Layout Rules
-    poststr(request, ".hist-tbl-wrapper { flex: 1; min-width: 180px; }");
-    poststr(request, ".hist-tbl { width: 100%; text-align: center; font-size: 20px; border-collapse: collapse; }");
-    poststr(request, ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 6px; border-bottom: 1px solid #444; }");
-    poststr(request, ".hist-tbl td { padding: 10px 2px; border-bottom: 1px solid #333; }");
-    
-    poststr(request, ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; }");
-    poststr(request, "</style>");
+    poststr(request, 
+        "<style>"
+        "body { margin: 0; background-color: #000; }"
+        "#my-dash { position: absolute; top: 0; left: 0; width: 100%; min-height: 100vh; background-color: #121212; z-index: 99999; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"
+        ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; gap: 5px; }"
+        ".top-stats div { display: flex; flex-direction: column; justify-content: center; }"
+        ".top-stats label { color: #888; font-size: 25px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }"
+        ".top-stats b { font-size: 35px; font-weight: 600; }"
+        ".c-exp { color: #4caf50; }"
+        ".c-imp { color: #f44336; }"
+        ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 290px; align-items: stretch; }" 
+        ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; }"
+        ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }"
+        ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
+        ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }"
+        ".ctrl-col { flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 10px; box-sizing: border-box; }"
+        ".btn-tgl { width: 100%; border: none; color: white; padding: 8px 0; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; text-align: center; line-height: 1.1; }"
+        ".hist-tbl-wrapper { flex: 1; min-width: 180px; }"
+        ".hist-tbl { width: 100%; text-align: center; font-size: 20px; border-collapse: collapse; }"
+        ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 6px; border-bottom: 1px solid #444; }"
+        ".hist-tbl td { padding: 10px 2px; border-bottom: 1px solid #333; }"
+        ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; }"
+        "</style>"
+    );
     
     poststr(request, 
         "<div id='my-dash'>"
@@ -197,27 +185,26 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     );
 
     // ====================================================================
-    // 1. TOP DASHBOARD ROW (Optimized and Remapped Layout)
+    // 1. TOP DASHBOARD ROW - Segmented Heap Protections
     // ====================================================================
     poststr(request, "<div class='top-stats'>");
     
-    // Call 1: Voltage & Current Tracker (~75 bytes format payload - Ultra Safe)
+    // Call 1: Voltage & Current Title & Values
     hprintf255(request, "<div><label>Voltage & Current</label><b id='d-va'>%.0fV / %.2fA</b></div>", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
     
-    // Call 2: Combined Power, Balance (Now), and 15-Min Est.
-    // Dynamic Evaluated footprint: ~226 bytes (Maintains a safe, intentional margin under 255 buffer limits)
+    // Call 2: Power 
     const char* pwr_cls = (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp";
+    hprintf255(request, "<div><label>Power</label><b id='d-pwr' class='%s'>%.0f W</b></div>", pwr_cls, sensors[OBK_POWER].lastReading);
+    
+    // Call 3: Now / 15min Est. Alignment Setup
     const char* bal_cls = (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp";
     const char* est_cls = (estimated_energy_period < 0) ? "c-exp" : "c-imp";
-    
     hprintf255(request, 
-        "<div><label>Power</label><b id='d-pwr' class='%s'>%.0f W</b></div>"
         "<div><label>Now / 15min Est.</label><b><span id='d-bal' class='%s'>%.0f Wh</span> / <span id='d-est' class='%s'>%i Wh</span></b></div>", 
-        pwr_cls, sensors[OBK_POWER].lastReading,
         bal_cls, sensors[OBK_POWER_REACTIVE].lastReading,
         est_cls, estimated_energy_period);
 
-    // Dynamic Charger Display Logic (Maintains structural label tags)
+    // Charger Logic
     if (dump_load_relay[5] == 0) {
         poststr(request, "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v' style='color:#888;'>Idle</b></div>");
     } else if (dump_load_relay[5] == 5) {
@@ -237,7 +224,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "<div class='dash-row'>");
 
         // ====================================================================
-        // 2. SENSOR COLUMN (Left Alignment Container)
+        // 2. SENSOR COLUMN
         // ====================================================================
         poststr(request, 
             "<div class='left-col'>"
@@ -262,7 +249,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "</tbody></table></div>");
         
         // ====================================================================
-        // 3. GRAPH COLUMN (Center Vector Block)
+        // 3. GRAPH COLUMN - Reduced to 16 Bars, Doubled Width Setup
         // ====================================================================
         poststr(request, 
             "<div class='graph-col' id='d-graph'>"
@@ -270,12 +257,13 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             "<line x1='0' y1='130' x2='512' y2='130' stroke='#333' stroke-width='1'/>"
         );
         
-        for (int i = 31; i >= 0; i--) {
+        for (int i = 15; i >= 0; i--) {
             int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
             int v = net_matrix[interval_of_day % 32];
             if (i == 0) { v += (int)(real_consumption - real_export); }
             
-            int x = (31 - i) * 16;
+            // Step altered to 32px to scale 16 bars across 512px perfectly
+            int x = (15 - i) * 32;
             int h = abs(v) / 2;
             if (h > 120) h = 120; 
             
@@ -285,17 +273,19 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
                 int text_y = (v >= 0) ? (130 - h - 6) : (130 + h + 14);
                 
                 if (h > 0) {
-                    hprintf255(request, "<rect x='%d' y='%d' width='15' height='%d' fill='%s' rx='1'/>", x, rect_y, h, color);
+                    // Width bumped up to 30px
+                    hprintf255(request, "<rect x='%d' y='%d' width='30' height='%d' fill='%s' rx='2'/>", x, rect_y, h, color);
                 }
-                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='11' font-family='sans-serif' text-anchor='middle'>%d</text>", x + 7, text_y, v);
+                // Text anchor adjusted to x + 15 to center directly over the 30px bar width
+                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='11' font-family='sans-serif' text-anchor='middle'>%d</text>", x + 15, text_y, v);
             } else {
-                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='11' font-family='sans-serif' text-anchor='middle'>0</text>", x + 7);
+                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='11' font-family='sans-serif' text-anchor='middle'>0</text>", x + 15);
             }
         }
         poststr(request, "</svg></div>");
 
         // ====================================================================
-        // 4. CONTROL INTERFACE ARRAY (Right Column)
+        // 4. CONTROL INTERFACE ARRAY
         // ====================================================================
         int dmp = dump_load_relay[5];
         const char* inv_color = (dmp == 5) ? "#4caf50" : "#555555";
@@ -368,7 +358,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         );
 
         // ====================================================================
-        // 6. ASYNCHRONOUS SWAP ENGINE & STATE SYNC
+        // 6. ASYNCHRONOUS SWAP ENGINE
         // ====================================================================
         hprintf255(request, "<div id='sys-data' data-dmp='%d' data-auto='%d' style='display:none;'></div>", dump_load_relay[5], charger_c_auto);
         
@@ -405,7 +395,6 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     
     poststr(request, "</div>"); 
 }
-
 void BL09XX_SaveEmeteringStatistics()
 {
     ENERGY_METERING_DATA data;
