@@ -271,25 +271,47 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         }
         poststr(request, "];");
 
-        // JS Scaling Fix (Rewritten to pure ES5 to prevent WebView crashes)
+        // JS Scaling Fix (Rewritten to pure ES5)
         poststr(request, "var c_el = document.getElementById('chart');");
         poststr(request, "if(c_el) {");
         poststr(request, "  var ctx = c_el.getContext('2d');");
-        poststr(request, "  var max_v = 0;");
-        poststr(request, "  for(var i=0; i<d.length; i++) { var ab = Math.abs(d[i]); if(ab > max_v) max_v = ab; }");
-        poststr(request, "  var sc = max_v > 0 ? 100 / max_v : 1;");
+        
+        // Shift Zero Line to 2/3 of 260px height (~173px)
+        poststr(request, "  var zy = 173;"); 
+        
+        // Find maximums to dynamically scale and fill the container
+        poststr(request, "  var max_p = 1, max_n = 1;"); 
+        poststr(request, "  for(var i=0; i<d.length; i++) {");
+        poststr(request, "    if(d[i] > max_p) max_p = d[i];");
+        poststr(request, "    if(d[i] < 0 && Math.abs(d[i]) > max_n) max_n = Math.abs(d[i]);");
+        poststr(request, "  }");
+        
+        // Calculate dynamic scale. Max positive space is ~150px, max negative is ~65px.
+        // We use Math.min to ensure a uniform scale that won't clip text on either side.
+        poststr(request, "  var sc_p = 150 / max_p;");
+        poststr(request, "  var sc_n = 65 / max_n;");
+        poststr(request, "  var sc = Math.min(sc_p, sc_n);"); 
+        
+        // Draw a faint zero-line reference
+        poststr(request, "  ctx.fillStyle = '#444';");
+        poststr(request, "  ctx.fillRect(0, zy, 512, 1);");
+
         poststr(request, "  for(var i=0; i<d.length; i++) {");
         poststr(request, "    var v = d[i];");
         poststr(request, "    var x = (31 - i) * 16;");
         poststr(request, "    var h = Math.abs(v) * sc;");
         poststr(request, "    ctx.fillStyle = (v >= 0) ? '#d32f2f' : '#388e3c';");
-        poststr(request, "    ctx.fillRect(x, 130 - (v >= 0 ? h : 0), 16, h);");
+        // Use 15px width instead of 16px to create a clean 1px gap between bars
+        poststr(request, "    ctx.fillRect(x, zy - (v >= 0 ? h : 0), 15, h);"); 
+        
         poststr(request, "    ctx.fillStyle = '#ddd';");
-        poststr(request, "    ctx.font = '12px sans-serif';");
-        poststr(request, "    ctx.fillText(v, x, 130 + (v >= 0 ? -h - 5 : h + 15));");
+        poststr(request, "    ctx.font = '10px sans-serif';");
+        poststr(request, "    ctx.textAlign = 'center';");
+        // Center text cleanly above/below the respective bars
+        poststr(request, "    ctx.fillText(v, x + 7.5, zy + (v >= 0 ? -h - 4 : h + 12));");
         poststr(request, "  }");
         poststr(request, "}</script></div>");
-
+      
         // ====================================================================
         // 4. CONTROLS (Right Column)
         // ====================================================================
