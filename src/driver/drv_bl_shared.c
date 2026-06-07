@@ -176,10 +176,10 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }");
     poststr(request, ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }");
 
-    // Middle Column & Controls Column
+    // Middle Column & Controls Column (Updated per your specs)
     poststr(request, ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; }");
-    poststr(request, ".ctrl-col { flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; gap: 10px; }");
-    poststr(request, ".btn-tgl { width: 100%; border: none; color: white; padding: 10px 0; border-radius: 4px; font-weight: bold; cursor: pointer; }");
+    poststr(request, ".ctrl-col { flex: 0 0 140px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 10px; box-sizing: border-box; }");
+    poststr(request, ".btn-tgl { width: 100%; border: none; color: white; padding: 6px 0; border-radius: 4px; font-weight: bold; cursor: pointer; line-height: 1.4rem; font-size: 1rem; box-sizing: border-box; }");
     
     // Tables & Clock Containers
     poststr(request, ".hist-tbl-wrapper { flex: 1; min-width: 180px; margin-top: 0; }");
@@ -260,7 +260,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "<div class='graph-col'>");
         poststr(request, "<canvas id='chart' width='512' height='260' style='width:100%;'></canvas>");
         
-        poststr(request, "<script>const d = [");
+        poststr(request, "<script>var d = [");
         for (int i = 31; i >= 0; i--) {
             int interval_of_day = (current_interval_of_day - i + 96) % 96;
             int c_index = interval_of_day % 32;
@@ -271,19 +271,24 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         }
         poststr(request, "];");
 
-        // JS Scaling Fix implemented here to prevent empty chart rendering
-        poststr(request, "const c = document.getElementById('chart').getContext('2d');");
-        poststr(request, "let max_v = Math.max(...d.map(Math.abs));");
-        poststr(request, "let scale = max_v > 0 ? 100 / max_v : 1;");
-        poststr(request, "d.forEach((v, i) => {");
-        poststr(request, "  let x = (31 - i) * 16;");
-        poststr(request, "  let h = Math.abs(v) * scale;");
-        poststr(request, "  c.fillStyle = (v >= 0) ? '#d32f2f' : '#388e3c';");
-        poststr(request, "  c.fillRect(x, 130 - (v >= 0 ? h : 0), 16, h);");
-        poststr(request, "  c.fillStyle = '#ddd';");
-        poststr(request, "  c.font = '12px sans-serif';");
-        poststr(request, "  c.fillText(v, x, 130 + (v >= 0 ? -h - 5 : h + 15));");
-        poststr(request, "});</script></div>");
+        // JS Scaling Fix (Rewritten to pure ES5 to prevent WebView crashes)
+        poststr(request, "var c_el = document.getElementById('chart');");
+        poststr(request, "if(c_el) {");
+        poststr(request, "  var ctx = c_el.getContext('2d');");
+        poststr(request, "  var max_v = 0;");
+        poststr(request, "  for(var i=0; i<d.length; i++) { var ab = Math.abs(d[i]); if(ab > max_v) max_v = ab; }");
+        poststr(request, "  var sc = max_v > 0 ? 100 / max_v : 1;");
+        poststr(request, "  for(var i=0; i<d.length; i++) {");
+        poststr(request, "    var v = d[i];");
+        poststr(request, "    var x = (31 - i) * 16;");
+        poststr(request, "    var h = Math.abs(v) * sc;");
+        poststr(request, "    ctx.fillStyle = (v >= 0) ? '#d32f2f' : '#388e3c';");
+        poststr(request, "    ctx.fillRect(x, 130 - (v >= 0 ? h : 0), 16, h);");
+        poststr(request, "    ctx.fillStyle = '#ddd';");
+        poststr(request, "    ctx.font = '12px sans-serif';");
+        poststr(request, "    ctx.fillText(v, x, 130 + (v >= 0 ? -h - 5 : h + 15));");
+        poststr(request, "  }");
+        poststr(request, "}</script></div>");
 
         // ====================================================================
         // 4. CONTROLS (Right Column)
@@ -297,24 +302,28 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         const char* auto_text = charger_c_auto ? "AUTO" : "MANUAL";
 
         poststr(request, "<div class='ctrl-col'>");
-        poststr(request, "<div style='font-size:10px; color:#888; text-transform:uppercase;'>Controls</div>");
+        poststr(request, "<div style='font-size:10px; color:#888; text-transform:uppercase; text-align:center; padding:0; margin:0 0 4px 0;'>Controls</div>");
         
-        hprintf255(request, "<button id='m-btn' class='btn-tgl' style='background:%s;' onclick='tm()'>%s</button>", auto_color, auto_text);
-        hprintf255(request, "<button id='inv-btn' class='btn-tgl' style='background:%s;' onclick='t_inv()'>INVERTER</button>", inv_color);
+        hprintf255(request, "<button id='m-btn' class='btn-tgl' style='background:%s; margin-bottom:12px; width:100%%;' onclick='tm()'>%s</button>", auto_color, auto_text);
 
-        poststr(request, "<div style='width:100%; background:#1a1a1a; padding:6px; border-radius:6px; box-sizing:border-box; margin-top:auto;'>");
-        hprintf255(request, "<button id='chg-btn' class='btn-tgl' style='background:%s; padding:6px 0; margin-bottom:4px; font-size:10px;' onclick='t_chg()'>CHG C</button>", chg_color);
+        poststr(request, "<div style='width:100%; background:#1a1a1a; padding:6px; border-radius:6px; box-sizing:border-box; display:flex; flex-direction:column; gap:6px; align-items:stretch;'>");
         
-        poststr(request, "<div style='display:flex; gap:4px; margin-bottom:2px;'>");
-        hprintf255(request, "<button id='chg-30-btn' class='btn-tgl' style='background:%s; padding:6px 0; font-size:10px; flex:1;' onclick='upd(30)'>30%%</button>", chg_30_color);
-        hprintf255(request, "<button id='chg-80-btn' class='btn-tgl' style='background:%s; padding:6px 0; font-size:10px; flex:1;' onclick='upd(80)'>80%%</button>", chg_80_color);
+        hprintf255(request, "<button id='inv-btn' class='btn-tgl' style='background:%s;' onclick='t_inv()'>INVERTER</button>", inv_color);
+        
+        poststr(request, "<div style='height:4px; padding:0; margin:0;'></div>");
+        
+        hprintf255(request, "<button id='chg-btn' class='btn-tgl' style='background:%s;' onclick='t_chg()'>CHARGER</button>", chg_color);
+        
+        poststr(request, "<div style='display:flex; gap:6px;'>");
+        hprintf255(request, "<button id='chg-30-btn' class='btn-tgl' style='background:%s; flex:1;' onclick='upd(30)'>30%%</button>", chg_30_color);
+        hprintf255(request, "<button id='chg-80-btn' class='btn-tgl' style='background:%s; flex:1;' onclick='upd(80)'>80%%</button>", chg_80_color);
         poststr(request, "</div>");
 
-        hprintf255(request, "<div id='c-val' style='font-size:14px; font-weight:bold; color:#0099FF; margin-top:2px;'>%d%%</div></div>", dmp);
+        hprintf255(request, "<div id='c-val' style='font-size:14px; font-weight:bold; color:#0099FF; text-align:center;'>%d%%</div></div>", dmp);
 
-        // Synchronize JS clicks with Backend C command SetDumpLoad
+        // Synchronize JS clicks with Backend C command SetDumpLoad (ES5 syntax)
         poststr(request, "<script>");
-        hprintf255(request, "let dmp = %d;", dmp);
+        hprintf255(request, "var dmp = %d;", dmp);
         poststr(request, "function upd(v){");
         poststr(request, "  dmp = parseInt(v);");
         poststr(request, "  fetch('/cm?cmnd=SetDumpLoad%20'+dmp);");
@@ -323,12 +332,13 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "  document.getElementById('chg-30-btn').style.background = (dmp===30)?'#4caf50':'#555555';");
         poststr(request, "  document.getElementById('chg-80-btn').style.background = (dmp===80)?'#4caf50':'#555555';");
         poststr(request, "  document.getElementById('c-val').innerText = dmp + '%';");
-        poststr(request, "  document.getElementById('c-v').innerText = dmp + '%';");
+        poststr(request, "  var top_cv = document.getElementById('c-v');");
+        poststr(request, "  if(top_cv) top_cv.innerText = dmp + '%';");
         poststr(request, "}");
         poststr(request, "function t_inv(){ upd(dmp===5 ? 0 : 5); }");
         poststr(request, "function t_chg(){ upd(dmp>=10 ? 0 : 18); }");
         poststr(request, "function tm(){");
-        poststr(request, "  let b = document.getElementById('m-btn');");
+        poststr(request, "  var b = document.getElementById('m-btn');");
         poststr(request, "  if(b.innerText === 'AUTO'){");
         poststr(request, "    b.innerText = 'MANUAL'; b.style.background = '#f44336';");
         poststr(request, "  } else {");
