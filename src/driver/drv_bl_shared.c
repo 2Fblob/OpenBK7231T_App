@@ -255,12 +255,18 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "</table></div>");
         
         // ====================================================================
-        // 3. CANVAS BAR GRAPH (Middle Column)
+        // 3. CANVAS BAR GRAPH (Middle Column) - CLIENT-SIDE RENDERING
         // ====================================================================
         poststr(request, "<div class='graph-col'>");
         poststr(request, "<canvas id='chart' width='512' height='260' style='width:100%;'></canvas>");
         
-        poststr(request, "<script>var d = [");
+        poststr(request, "<script>");
+        // The try-catch ensures that if the MCU drops a packet and mangles the array, 
+        // the rest of the page (buttons/toggles) still functions.
+        poststr(request, "try {");
+        poststr(request, "var d = [");
+        
+        // Server does minimum work: just prints the array numbers
         for (int i = 31; i >= 0; i--) {
             int interval_of_day = (current_interval_of_day - i + 96) % 96;
             int c_index = interval_of_day % 32;
@@ -271,46 +277,42 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         }
         poststr(request, "];");
 
-        // JS Scaling Fix (Rewritten to pure ES5)
-        poststr(request, "var c_el = document.getElementById('chart');");
-        poststr(request, "if(c_el) {");
-        poststr(request, "  var ctx = c_el.getContext('2d');");
-        
-        // Shift Zero Line to 2/3 of 260px height (~173px)
-        poststr(request, "  var zy = 173;"); 
-        
-        // Find maximums to dynamically scale and fill the container
-        poststr(request, "  var max_p = 1, max_n = 1;"); 
+        // Client browser does the math and scaling
+        poststr(request, "var c = document.getElementById('chart');");
+        poststr(request, "if(c) {");
+        poststr(request, "  var ctx = c.getContext('2d');");
+        poststr(request, "  var mp = 1, mn = 1;"); 
         poststr(request, "  for(var i=0; i<d.length; i++) {");
-        poststr(request, "    if(d[i] > max_p) max_p = d[i];");
-        poststr(request, "    if(d[i] < 0 && Math.abs(d[i]) > max_n) max_n = Math.abs(d[i]);");
+        poststr(request, "    if(d[i] > mp) mp = d[i];");
+        poststr(request, "    if(d[i] < 0 && -d[i] > mn) mn = -d[i];");
         poststr(request, "  }");
         
-        // Calculate dynamic scale. Max positive space is ~150px, max negative is ~65px.
-        // We use Math.min to ensure a uniform scale that won't clip text on either side.
-        poststr(request, "  var sc_p = 150 / max_p;");
-        poststr(request, "  var sc_n = 65 / max_n;");
-        poststr(request, "  var sc = Math.min(sc_p, sc_n);"); 
+        // Total height 260px. Zero line roughly 2/3 down (173px)
+        poststr(request, "  var zY = 173;"); 
         
-        // Draw a faint zero-line reference
-        poststr(request, "  ctx.fillStyle = '#444';");
-        poststr(request, "  ctx.fillRect(0, zy, 512, 1);");
-
+        // Draw the zero line
+        poststr(request, "  ctx.fillStyle = '#555'; ctx.fillRect(0, zY, 512, 1);"); 
+        
+        // Draw the bars
         poststr(request, "  for(var i=0; i<d.length; i++) {");
         poststr(request, "    var v = d[i];");
-        poststr(request, "    var x = (31 - i) * 16;");
-        poststr(request, "    var h = Math.abs(v) * sc;");
-        poststr(request, "    ctx.fillStyle = (v >= 0) ? '#d32f2f' : '#388e3c';");
-        // Use 15px width instead of 16px to create a clean 1px gap between bars
-        poststr(request, "    ctx.fillRect(x, zy - (v >= 0 ? h : 0), 15, h);"); 
+        poststr(request, "    var x = i * 16;"); // 512px / 32 = 16px wide columns
         
-        poststr(request, "    ctx.fillStyle = '#ddd';");
-        poststr(request, "    ctx.font = '10px sans-serif';");
-        poststr(request, "    ctx.textAlign = 'center';");
-        // Center text cleanly above/below the respective bars
-        poststr(request, "    ctx.fillText(v, x + 7.5, zy + (v >= 0 ? -h - 4 : h + 12));");
+        poststr(request, "    if(v >= 0) {");
+        poststr(request, "      var h = (v / mp) * 155;"); // Scale positive into the top 173px
+        poststr(request, "      ctx.fillStyle = '#d32f2f'; ctx.fillRect(x+1, zY - h, 14, h);");
+        poststr(request, "      ctx.fillStyle = '#ddd'; ctx.font = '10px sans-serif';");
+        poststr(request, "      ctx.fillText(v, x+1, zY - h - 4);");
+        poststr(request, "    } else {");
+        poststr(request, "      var h = (-v / mn) * 75;"); // Scale negative into the bottom 87px
+        poststr(request, "      ctx.fillStyle = '#388e3c'; ctx.fillRect(x+1, zY, 14, h);");
+        poststr(request, "      ctx.fillStyle = '#ddd'; ctx.font = '10px sans-serif';");
+        poststr(request, "      ctx.fillText(-v, x+1, zY + h + 10);");
+        poststr(request, "    }");
         poststr(request, "  }");
-        poststr(request, "}</script></div>");
+        poststr(request, "}");
+        poststr(request, "} catch(e) { console.error('Chart init failed'); }");
+        poststr(request, "</script></div>");
       
         // ====================================================================
         // 4. CONTROLS (Right Column)
