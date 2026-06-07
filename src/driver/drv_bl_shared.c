@@ -161,7 +161,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; gap: 5px; }"
         ".top-stats div { display: flex; flex-direction: column; justify-content: center; }"
         ".top-stats label { color: #888; font-size: 25px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }"
-        ".top-stats b { font-size: 40px; font-weight: 600; }"
+        ".top-stats b { font-size: 45px; font-weight: 600; }"
         ".c-exp { color: #4caf50; }"
         ".c-imp { color: #f44336; }"
         ".dash-row { display: flex; flex-direction: row; gap: 15px; margin-top: 15px; height: 290px; align-items: stretch; }" 
@@ -274,12 +274,12 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
                 
                 if (h > 0) {
                     // Width bumped up to 30px
-                    hprintf255(request, "<rect x='%d' y='%d' width='30' height='%d' fill='%s' rx='2'/>", x, rect_y, h, color);
+                    hprintf255(request, "<rect x='%d' y='%d' width='32' height='%d' fill='%s' rx='2'/>", x, rect_y, h, color);
                 }
                 // Text anchor adjusted to x + 15 to center directly over the 30px bar width
-                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='15' font-family='sans-serif' text-anchor='middle'>%d</text>", x + 15, text_y, v);
+                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='16' font-family='sans-serif' text-anchor='middle'>%d</text>", x + 15, text_y, v);
             } else {
-                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='15' font-family='sans-serif' text-anchor='middle'>0</text>", x + 15);
+                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='16' font-family='sans-serif' text-anchor='middle'>0</text>", x + 15);
             }
         }
         poststr(request, "</svg></div>");
