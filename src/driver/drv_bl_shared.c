@@ -256,6 +256,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, "<tr><th>Time</th><th>Import / Export</th><th>Net</th></tr>");
 
     for (int i = 0; i < 4; i++) {
+        // DECLARATION ADDED HERE
+        int current_interval_of_day = minutes_since_midnight / net_metering_period;
         int interval_of_day = current_interval_of_day - i;
         if (interval_of_day < 0) { interval_of_day += 96; } 
         int c_index = interval_of_day % 32;
