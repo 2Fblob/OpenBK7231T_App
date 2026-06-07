@@ -176,7 +176,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }");
     poststr(request, ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }");
 
-    // Middle Column & Controls Column (Updated per your specs)
+    // Middle Column & Controls Column
     poststr(request, ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; }");
     poststr(request, ".ctrl-col { flex: 0 0 140px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; gap: 10px; box-sizing: border-box; }");
     poststr(request, ".btn-tgl { width: 100%; border: none; color: white; padding: 6px 0; border-radius: 4px; font-weight: bold; cursor: pointer; line-height: 1.4rem; font-size: 1rem; box-sizing: border-box; }");
@@ -199,25 +199,25 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     poststr(request, "<div class='top-stats'>");
     
     // Volts / Amps
-    hprintf255(request, "<div><span>V / A</span><b>%.0f V<br>%.2f A</b></div>", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
+    hprintf255(request, "<div><span>V / A</span><b id='d-va'>%.0f V<br>%.2f A</b></div>", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
     
     // Power (Dynamic Colors)
     const char* pwr_cls = (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp";
-    hprintf255(request, "<div><span>Power</span><b class='%s'>%.0f W</b></div>", pwr_cls, sensors[OBK_POWER].lastReading);
+    hprintf255(request, "<div><span>Power</span><b id='d-pwr' class='%s'>%.0f W</b></div>", pwr_cls, sensors[OBK_POWER].lastReading);
     
     // 15-Min Est (Dynamic Colors)
     const char* est_cls = (estimated_energy_period < 0) ? "c-exp" : "c-imp";
-    hprintf255(request, "<div><span>15-Min Est.</span><b class='%s'>%i Wh</b></div>", est_cls, estimated_energy_period);
+    hprintf255(request, "<div><span>15-Min Est.</span><b id='d-est' class='%s'>%i Wh</b></div>", est_cls, estimated_energy_period);
     
     // Energy Balance (Dynamic Colors)
     const char* bal_cls = (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp";
-    hprintf255(request, "<div><span>Balance</span><b class='%s'>%.0f Wh</b></div>", bal_cls, sensors[OBK_POWER_REACTIVE].lastReading);
+    hprintf255(request, "<div><span>Balance</span><b id='d-bal' class='%s'>%.0f Wh</b></div>", bal_cls, sensors[OBK_POWER_REACTIVE].lastReading);
 
-    // Charger C Container (Slider Removed)
+    // Charger C Container
     hprintf255(request, "<div><span>Charger C</span><b id='c-v' style='color:#0099FF; font-size:24px; margin-top:4px;'>%d%%</b></div>", dump_load_relay[5]);
 
     // Status Field
-    hprintf255(request, "<div><span>Status</span><b style='color:%s;'>%s</b></div>", solar_available ? "#4caf50" : "#f44336", solar_available ? "Exporting" : "Importing");
+    hprintf255(request, "<div><span>Status</span><b id='d-stat' style='color:%s;'>%s</b></div>", solar_available ? "#4caf50" : "#f44336", solar_available ? "Exporting" : "Importing");
     
     poststr(request, "</div>");
 
@@ -233,7 +233,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         // ====================================================================
         poststr(request, "<div class='left-col'>"); 
         poststr(request, "<div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>");
-        poststr(request, "<table class='sens-tbl'>");
+        poststr(request, "<table class='sens-tbl'><tbody id='d-sens-body'>");
 
         for (int i = (OBK__FIRST); i <= (OBK_CONSUMPTION__DAILY_LAST); i++) {
             if (i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))){i++;}
@@ -252,45 +252,14 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
                 }
             }
         };
-        poststr(request, "</table></div>");
+        poststr(request, "</tbody></table></div>");
         
         // ====================================================================
-        // 3. CANVAS BAR GRAPH - SAFE BUFFER & WATCHDOG OPTIMIZED
+        // 3. CANVAS BAR GRAPH SKELETON
         // ====================================================================
         poststr(request, "<div class='graph-col'>");
         poststr(request, "<canvas id='chart' width='512' height='260' style='width:100%;'></canvas>");
-        poststr(request, "<script>try{var d=[");
-        
-        // 1. Build array locally (Declared exactly ONCE)
-        char arr_buf[512] = {0}; 
-        int pos = 0;
-        
-        for (int i = 31; i >= 0; i--) {
-            int interval_of_day = (current_interval_of_day - i + 96) % 96;
-            int c_index = interval_of_day % 32;
-            int net = net_matrix[c_index];
-            if (i == 0) net += (int)(real_consumption - real_export);
-            
-            // Append directly using offset for speed and safety
-            int written = snprintf(arr_buf + pos, sizeof(arr_buf) - pos, "%d%s", net, (i == 0) ? "" : ",");
-            if (written > 0 && written < (sizeof(arr_buf) - pos)) {
-                pos += written;
-            }
-        }
-        
-        // 2. Send the array
-        poststr(request, arr_buf);
-
-        // 3. Send JS in safe chunks (under 120 chars each) to avoid poststr truncation
-        poststr(request, "];var c=document.getElementById('chart');if(c){var ctx=c.getContext('2d');");
-        poststr(request, "var mp=1,mn=1;for(var i=0;i<d.length;i++){if(d[i]>mp)mp=d[i];if(d[i]<0&&-d[i]>mn)mn=-d[i];}");
-        poststr(request, "var zY=173;ctx.fillStyle='#555';ctx.fillRect(0,zY,512,1);");
-        poststr(request, "for(var i=0;i<d.length;i++){var v=d[i];var x=i*16;if(v>=0){");
-        poststr(request, "var h=(v/mp)*155;ctx.fillStyle='#d32f2f';ctx.fillRect(x+1,zY-h,14,h);");
-        poststr(request, "ctx.fillStyle='#ddd';ctx.font='10px sans-serif';ctx.fillText(v,x+1,zY-h-4);}else{");
-        poststr(request, "var h=(-v/mn)*75;ctx.fillStyle='#388e3c';ctx.fillRect(x+1,zY,14,h);");
-        poststr(request, "ctx.fillStyle='#ddd';ctx.font='10px sans-serif';ctx.fillText(-v,x+1,zY+h+10);}}}");
-        poststr(request, "catch(e){console.log('Graph Error');}</script></div>");
+        poststr(request, "</div>");
 
         // ====================================================================
         // 4. CONTROLS (Right Column)
@@ -307,57 +276,25 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         poststr(request, "<div style='font-size:10px; color:#888; text-transform:uppercase; text-align:center; padding:0; margin:0 0 4px 0;'>Controls</div>");
         
         hprintf255(request, "<button id='m-btn' class='btn-tgl' style='background:%s; margin-bottom:12px; width:100%%;' onclick='tm()'>%s</button>", auto_color, auto_text);
-
         poststr(request, "<div style='width:100%; background:#1a1a1a; padding:6px; border-radius:6px; box-sizing:border-box; display:flex; flex-direction:column; gap:6px; align-items:stretch;'>");
         
         hprintf255(request, "<button id='inv-btn' class='btn-tgl' style='background:%s;' onclick='t_inv()'>INVERTER</button>", inv_color);
-        
         poststr(request, "<div style='height:4px; padding:0; margin:0;'></div>");
-        
         hprintf255(request, "<button id='chg-btn' class='btn-tgl' style='background:%s;' onclick='t_chg()'>CHARGER</button>", chg_color);
-        
         poststr(request, "<div style='display:flex; gap:6px;'>");
         hprintf255(request, "<button id='chg-30-btn' class='btn-tgl' style='background:%s; flex:1;' onclick='upd(30)'>30%%</button>", chg_30_color);
         hprintf255(request, "<button id='chg-80-btn' class='btn-tgl' style='background:%s; flex:1;' onclick='upd(80)'>80%%</button>", chg_80_color);
         poststr(request, "</div>");
 
         hprintf255(request, "<div id='c-val' style='font-size:14px; font-weight:bold; color:#0099FF; text-align:center;'>%d%%</div></div>", dmp);
-
-        // Synchronize JS clicks with Backend C command SetDumpLoad (ES5 syntax)
-        poststr(request, "<script>");
-        hprintf255(request, "var dmp = %d;", dmp);
-        poststr(request, "function upd(v){");
-        poststr(request, "  dmp = parseInt(v);");
-        poststr(request, "  fetch('/cm?cmnd=SetDumpLoad%20'+dmp);");
-        poststr(request, "  document.getElementById('inv-btn').style.background = (dmp===5)?'#4caf50':'#555555';");
-        poststr(request, "  document.getElementById('chg-btn').style.background = (dmp>18)?'#4caf50':(dmp>=10?'#ffeb3b':'#555555');");
-        poststr(request, "  document.getElementById('chg-30-btn').style.background = (dmp===30)?'#4caf50':'#555555';");
-        poststr(request, "  document.getElementById('chg-80-btn').style.background = (dmp===80)?'#4caf50':'#555555';");
-        poststr(request, "  document.getElementById('c-val').innerText = dmp + '%';");
-        poststr(request, "  var top_cv = document.getElementById('c-v');");
-        poststr(request, "  if(top_cv) top_cv.innerText = dmp + '%';");
-        poststr(request, "}");
-        poststr(request, "function t_inv(){ upd(dmp===5 ? 0 : 5); }");
-        poststr(request, "function t_chg(){ upd(dmp>=10 ? 0 : 18); }");
-        poststr(request, "function tm(){");
-        poststr(request, "  var b = document.getElementById('m-btn');");
-        poststr(request, "  if(b.innerText === 'AUTO'){");
-        poststr(request, "    b.innerText = 'MANUAL'; b.style.background = '#f44336';");
-        poststr(request, "  } else {");
-        poststr(request, "    b.innerText = 'AUTO'; b.style.background = '#0099FF';");
-        poststr(request, "  }");
-        poststr(request, "  fetch('/cm?cmnd=ToggleAuto');");
-        poststr(request, "}");
-        poststr(request, "</script>");
         poststr(request, "</div></div>");
 
         // ====================================================================
         // 5. HOURLY DATA TABLE & MCU CLOCK
         // ====================================================================
         poststr(request, "<div style='display:flex; flex-wrap:wrap; width:100%; margin-top:10px; gap:10px; align-items:stretch;'>");
-        
         poststr(request, "<div class='hist-tbl-wrapper'>");
-        poststr(request, "<table class='hist-tbl' style='height:100%;'>");
+        poststr(request, "<table class='hist-tbl' style='height:100%;'><tbody id='d-hist-body'>");
         poststr(request, "<tr><th>Time</th><th>Import / Export</th><th>Net</th></tr>");
 
         for (int i = 0; i < 4; i++) {
@@ -386,13 +323,67 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
                            row_h, row_m, cons, exp, net);
             }
         }
-        poststr(request, "</table></div>");
+        poststr(request, "</tbody></table></div>");
 
         poststr(request, "<div style='flex:0 0 340px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:5px; padding:5px; overflow:hidden;'>");
-        hprintf255(request, "<div style='font-size:110px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-5px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
+        hprintf255(request, "<div id='d-clk' style='font-size:110px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-5px;'>%02d:%02d</div>", NTP_GetHour(), NTP_GetMinute());
+        poststr(request, "</div>");
+        poststr(request, "</div>"); 
+
+        // ====================================================================
+        // 6. HIDDEN DATA STREAM CARRIER (Asynchronous Parsing Output)
+        // ====================================================================
+        poststr(request, "<div id='d-raw' style='display:none;'>");
+        char arr_buf[256] = {0}; 
+        int pos = 0;
+        for (int i = 31; i >= 0; i--) {
+            int interval_of_day = (current_interval_of_day - i + 96) % 96;
+            int c_index = interval_of_day % 32;
+            int net = net_matrix[c_index];
+            if (i == 0) net += (int)(real_consumption - real_export);
+            
+            int written = snprintf(arr_buf + pos, sizeof(arr_buf) - pos, "%d%s", net, (i == 0) ? "" : ",");
+            if (written > 0 && written < (sizeof(arr_buf) - pos)) { pos += written; }
+        }
+        poststr(request, arr_buf);
         poststr(request, "</div>");
 
-        poststr(request, "</div>"); 
+        // ====================================================================
+        // 7. CLIENT SIDE DYNAMIC ENGINE (ES5 Compiles - Zero MCU Truncation)
+        // ====================================================================
+        poststr(request, "<script>");
+        hprintf255(request, "var dmp=%d;", dmp);
+        
+        // Control Interactivity Triggers
+        poststr(request, "function upd(v){dmp=parseInt(v);fetch('/cm?cmnd=SetDumpLoad%20'+dmp);");
+        poststr(request, "document.getElementById('inv-btn').style.background=(dmp===5)?'#4caf50':'#555555';");
+        poststr(request, "document.getElementById('chg-btn').style.background=(dmp>18)?'#4caf50':(dmp>=10?'#ffeb3b':'#555555');");
+        poststr(request, "document.getElementById('chg-30-btn').style.background=(dmp===30)?'#4caf50':'#555555';");
+        poststr(request, "document.getElementById('chg-80-btn').style.background=(dmp===80)?'#4caf50':'#555555';");
+        poststr(request, "document.getElementById('c-val').innerText=dmp+'%';var tc=document.getElementById('c-v');if(tc)tc.innerText=dmp+'%';}");
+        poststr(request, "function t_inv(){upd(dmp===5?0:5);}function t_chg(){upd(dmp>=10?0:18);}");
+        poststr(request, "function tm(){var b=document.getElementById('m-btn');if(b.innerText==='AUTO'){b.innerText='MANUAL';b.style.background='#f44336';}else{b.innerText='AUTO';b.style.background='#0099FF';}fetch('/cm?cmnd=ToggleAuto');}");
+        
+        // Canvas Rendering Subroutine
+        poststr(request, "function drw(d){var c=document.getElementById('chart');if(!c)return;var ctx=c.getContext('2d');ctx.clearRect(0,0,512,260);");
+        poststr(request, "var mp=1,mn=1;for(var i=0;i<d.length;i++){if(d[i]>mp)mp=d[i];if(d[i]<0&&-d[i]>mn)mn=-d[i];}var zY=173;");
+        poststr(request, "ctx.fillStyle='#555';ctx.fillRect(0,zY,512,1);for(var i=0;i<d.length;i++){var v=d[i],x=i*16;if(v>=0){");
+        poststr(request, "var h=(v/mp)*155;ctx.fillStyle='#d32f2f';ctx.fillRect(x+1,zY-h,14,h);ctx.fillStyle='#ddd';ctx.font='10px sans-serif';ctx.fillText(v,x+1,zY-h-4);}");
+        poststr(request, "else{var h=(-v/mn)*75;ctx.fillStyle='#388e3c';ctx.fillRect(x+1,zY,14,h);ctx.fillStyle='#ddd';ctx.font='10px sans-serif';ctx.fillText(-v,x+1,zY+h+10);}}}");
+        
+        // Dynamic Fragment Background Swapper
+        poststr(request, "function rsh(){fetch('/index').then(function(r){return r.text();}).then(function(html){");
+        poststr(request, "var parser=new DOMParser();var doc=parser.parseFromString(html,'text/html');");
+        poststr(request, "['d-va','d-pwr','d-est','d-bal','c-v','d-stat','c-val'].forEach(function(id){");
+        poststr(request, "var o=document.getElementById(id),n=doc.getElementById(id);if(o&&n){if(o.innerHTML!==n.innerHTML){o.innerHTML=n.innerHTML;o.className=n.className;o.style.color=n.style.color;}}});");
+        poststr(request, "['d-sens-body','d-hist-body','d-clk'].forEach(function(id){");
+        poststr(request, "var o=document.getElementById(id),n=doc.getElementById(id);if(o&&n){if(o.innerHTML!==n.innerHTML)o.innerHTML=n.innerHTML;}});");
+        poststr(request, "var raw=doc.getElementById('d-raw');if(raw){var arr=raw.innerText.split(',').map(Number);drw(arr);}");
+        poststr(request, "}).catch(function(e){console.log(e);});}");
+        
+        // Engine Lifecycle Init (Executes instantly on window generation, updates every 4 seconds)
+        poststr(request, "setTimeout(rsh,100);setInterval(rsh,4000);");
+        poststr(request, "</script>");
     }
     
     poststr(request, "</div>"); 
