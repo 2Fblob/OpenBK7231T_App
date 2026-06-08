@@ -1,5 +1,3 @@
-
-
 #include "../new_common.h"
 #include "../logging/logging.h"
 #include "ctype.h"
@@ -743,6 +741,11 @@ int HTTP_ProcessPacket(http_request_t* request) {
 
 	if (http_checkUrlBase(urlStr, "testmsg")) return http_fn_testmsg(request);
 	if (http_checkUrlBase(urlStr, "index")) return http_fn_index(request);
+
+	// ---> NEW DASHBOARD ROUTES <---
+	if (http_checkUrlBase(urlStr, "dash")) return http_fn_custom_dash(request);
+	if (http_checkUrlBase(urlStr, "api/dash")) return http_fn_api_dash(request);
+	// --------------------------------------
 
 	if (http_checkUrlBase(urlStr, "about")) return http_fn_about(request);
 
