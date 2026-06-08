@@ -172,7 +172,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }"
         ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
         
-        ".graph-col { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; background: #222; padding: 10px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; margin-right: 15px; }"
+        /* MODIFIED: Changed overflow: hidden to overflow-x: auto; overflow-y: hidden; */
+        ".graph-col { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; background: #222; padding: 10px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; overflow-x: auto; overflow-y: hidden; margin-right: 15px; }"
         
         ".ctrl-col { -webkit-box-flex: 0; -webkit-flex: 0 0 100px; flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; box-sizing: border-box; }"
         ".btn-tgl { width: 100%; border: none; color: white; padding: 8px 0; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; text-align: center; line-height: 1.1; margin-bottom: 10px; }"
@@ -258,9 +259,11 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         // ====================================================================
         // 3. GRAPH COLUMN (With Background Icons and Vertical Text)
         // ====================================================================
+        
+        // MODIFIED: Changed width and height from 100% to fixed 512px and 260px
         poststr(request, 
             "<div class='graph-col' id='d-graph'>"
-            "<svg viewBox='0 0 512 260' style='width:100%%; height:100%%; background:transparent;'>"
+            "<svg viewBox='0 0 512 260' style='width:512px; height:260px; background:transparent;'>"
             "<line x1='0' y1='130' x2='512' y2='130' stroke='#333' stroke-width='1'/>"
             "<text x='470' y='40' font-size='32' opacity='0.35'>🔌</text>"
             "<text x='470' y='245' font-size='32' opacity='0.35'>☀️</text>"
@@ -420,6 +423,7 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
             "oldEl.style.background=newEl.style.background;"
             "}"
             "}"
+            "doc=null;" // MODIFIED: Added this to force garbage collection
             "}"
             "};"
             "xhr.open('GET','/index',true);"
@@ -441,7 +445,6 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
     
     poststr(request, "</div>"); 
 }
-
 void BL09XX_SaveEmeteringStatistics()
 {
     ENERGY_METERING_DATA data;
