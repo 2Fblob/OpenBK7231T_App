@@ -141,311 +141,10 @@ int changeDoNotSendMinFrames = 5;
 
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 {
-    const char *mode;
-    unsigned int minutes_since_midnight;
-
-    if(DRV_IsRunning("BL0937")) { mode = "BL0937"; } 
-    else if(DRV_IsRunning("BL0942")) { mode = "BL0942"; } 
-    else if (DRV_IsRunning("BL0942SPI")) { mode = "BL0942SPI"; } 
-    else if(DRV_IsRunning("CSE7766")) { mode = "CSE7766"; } 
-    else if(DRV_IsRunning("RN8209")) { mode = "RN8209"; } 
-    else { mode = "PWR"; }
-
-    // ====================================================================
-    // STYLESHEET DEFINITIONS - Adjusted for iOS 9 Safari & Android 4 WebView
-    // ====================================================================
-    poststr(request, 
-        "<style>"
-        "body { margin: 0; background-color: #000; }"
-        "#my-dash { position: absolute; top: 0; left: 0; width: 100%; min-height: 100vh; background-color: #121212; z-index: 99999; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"
-        
-        /* Flexbox vendor prefixes and margin replacements for GAP */
-        ".top-stats { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between; -webkit-box-align: center; -webkit-align-items: center; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; }"
-        ".top-stats div { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; margin: 0 2px; }"
-        ".top-stats label { color: #888; font-size: 25px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }"
-        ".top-stats b { font-size: 45px; font-weight: 600; }"
-        ".c-exp { color: #4caf50; }"
-        ".c-imp { color: #f44336; }"
-        
-        ".dash-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-flex-direction: row; flex-direction: row; margin-top: 15px; height: 290px; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; }" 
-        ".left-col { -webkit-box-flex: 0; -webkit-flex: 0 0 210px; flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; }"
-        ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }"
-        ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
-        
-        /* MODIFIED: Changed overflow: hidden to overflow-x: auto; overflow-y: hidden; */
-        ".graph-col { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; background: #222; padding: 10px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; overflow-x: auto; overflow-y: hidden; margin-right: 15px; }"
-        
-        ".ctrl-col { -webkit-box-flex: 0; -webkit-flex: 0 0 100px; flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; box-sizing: border-box; }"
-        ".btn-tgl { width: 100%; border: none; color: white; padding: 8px 0; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; text-align: center; line-height: 1.1; margin-bottom: 10px; }"
-        ".btn-tgl:last-child { margin-bottom: 0; }"
-        
-        ".hist-tbl-wrapper { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; min-width: 180px; margin-right: 20px; }"
-        ".hist-tbl { width: 100%; text-align: center; font-size: 20px; border-collapse: collapse; }"
-        ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 6px; border-bottom: 1px solid #444; }"
-        ".hist-tbl td { padding: 10px 2px; border-bottom: 1px solid #333; }"
-        ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; }"
-        "</style>"
-    );
-    
-    poststr(request, 
-        "<div id='my-dash'>"
-        "<div class='close-btn' onclick='document.getElementById(\"my-dash\").style.display=\"none\"'>✕</div>"
-    );
-
-    // ====================================================================
-    // 1. TOP DASHBOARD ROW
-    // ====================================================================
-    poststr(request, "<div class='top-stats'>");
-    
-    // Call 1: Voltage & Current Title & Values
-    hprintf255(request, "<div><label>Voltage & Current</label><b id='d-va'>%.0fV / %.2fA</b></div>", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
-    
-    // Call 2: Power 
-    const char* pwr_cls = (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp";
-    hprintf255(request, "<div><label>Power</label><b id='d-pwr' class='%s'>%.0f W</b></div>", pwr_cls, sensors[OBK_POWER].lastReading);
-    
-    // Call 3: Now / 15min Est. Alignment Setup
-    const char* bal_cls = (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp";
-    const char* est_cls = (estimated_energy_period < 0) ? "c-exp" : "c-imp";
-    hprintf255(request, 
-        "<div><label>Now / 15min Est.</label><b><span id='d-bal' class='%s'>%.0f Wh</span> / <span id='d-est' class='%s'>%i Wh</span></b></div>", 
-        bal_cls, sensors[OBK_POWER_REACTIVE].lastReading,
-        est_cls, estimated_energy_period);
-
-    // Charger Logic
-    if (dump_load_relay[5] == 0) {
-        poststr(request, "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v' style='color:#888;'>Idle</b></div>");
-    } else if (dump_load_relay[5] == 5) {
-        poststr(request, "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v' style='color:#4caf50;'>Battery</b></div>");
-    } else {
-        hprintf255(request, "<div id='d-chg-box'><label id='c-lbl'>Charging</label><b id='c-v' style='color:#0099FF;'>%d%%</b></div>", dump_load_relay[5]);
-    }
-    
-    poststr(request, "</div>");
-
-    if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced())
-    {
-        minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
-        int current_interval_of_day = minutes_since_midnight / net_metering_period;
-        
-        // BEGINNING OF MAIN GRID MATRIX
-        poststr(request, "<div class='dash-row'>");
-
-        // ====================================================================
-        // 2. SENSOR COLUMN
-        // ====================================================================
-        poststr(request, 
-            "<div class='left-col'>"
-            "<div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>"
-            "<table class='sens-tbl'><tbody id='d-sens-body'>"
-        );
-
-        for (int i = (OBK__FIRST); i <= (OBK_CONSUMPTION__DAILY_LAST); i++) {
-            if (i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))){i++;}
-            if (i <= OBK__NUM_MEASUREMENTS || NTP_IsTimeSynced()) {
-                if (i == OBK_VOLTAGE || i == OBK_POWER || i == OBK_CURRENT || i == OBK_POWER_APPARENT || i == OBK_POWER_REACTIVE) continue; 
-
-                if ((i == OBK_CONSUMPTION_TOTAL) || (i == OBK_GENERATION_TOTAL)) {
-                    hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f kWh</td></tr>", 
-                               sensors[i].names.name_friendly, sensors[i].rounding_decimals, (0.001*sensors[i].lastReading));
-                } else {
-                    hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f %s</td></tr>", 
-                               sensors[i].names.name_friendly, sensors[i].rounding_decimals, sensors[i].lastReading, sensors[i].names.units);
-                }
-            }
-        };
-        poststr(request, "</tbody></table></div>");
-        
-        // ====================================================================
-        // 3. GRAPH COLUMN (With Background Icons and Vertical Text)
-        // ====================================================================
-        
-        // MODIFIED: Changed width and height from 100% to fixed 512px and 260px
-        poststr(request, 
-            "<div class='graph-col' id='d-graph'>"
-            // CHANGED: Removed the double %%. Changed height to auto.
-            "<svg viewBox='0 0 512 260' style='width:100%; height:auto; background:transparent;'>"
-            "<line x1='0' y1='130' x2='512' y2='130' stroke='#333' stroke-width='1'/>"
-            "<text x='470' y='40' font-size='32' opacity='0.35'>🔌</text>"
-            "<text x='470' y='245' font-size='32' opacity='0.35'>☀️</text>"
-        );
-        
-        for (int i = 15; i >= 0; i--) {
-            int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-            int v = net_matrix[interval_of_day % 32];
-            if (i == 0) { v += (int)(real_consumption - real_export); }
-            
-            int x = (15 - i) * 32;
-            int h = abs(v) / 2;
-            if (h > 120) h = 120; 
-            
-            if (v != 0 || i == 0) {
-                const char* color = (v >= 0) ? "#d32f2f" : "#388e3c";
-                int rect_y = (v >= 0) ? (130 - h) : 130;
-                int text_y = (v >= 0) ? (130 - h - 5) : (130 + h + 5);
-                const char* anchor = (v >= 0) ? "start" : "end";
-                
-                if (h > 0) {
-                    hprintf255(request, "<rect x='%d' y='%d' width='32' height='%d' fill='%s' rx='2'/>", x, rect_y, h, color);
-                }
-                
-                // Rotated Vertical text with size 24.
-                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='24' font-family='sans-serif' text-anchor='%s' transform='rotate(-90 %d %d)' dy='8'>%d</text>", 
-                           x + 16, text_y, anchor, x + 16, text_y, v);
-            } else {
-                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='24' font-family='sans-serif' text-anchor='start' transform='rotate(-90 %d 135)' dy='8'>0</text>", 
-                           x + 16, x + 16);
-            }
-        }
-        poststr(request, "</svg></div>");
-
-        // ====================================================================
-        // 4. CONTROL INTERFACE ARRAY
-        // ====================================================================
-        int dmp = dump_load_relay[5];
-        const char* inv_color = (dmp == 5) ? "#4caf50" : "#555555";
-        const char* chg_color = (dmp > 18) ? "#4caf50" : ((dmp >= 10 && dmp <= 18) ? "#ffeb3b" : "#555555");
-        const char* chg_30_color = (dmp >= 30) ? "#4caf50" : "#555555";
-        const char* chg_80_color = (dmp >= 80) ? "#4caf50" : "#555555";
-        const char* auto_color = charger_c_auto ? "#0099FF" : "#f44336";
-        const char* auto_text = charger_c_auto ? "AUTO" : "MANUAL";
-
-        poststr(request, 
-            "<div class='ctrl-col'>"
-            "<div style='font-size:10px; color:#888; text-transform:uppercase; text-align:center; margin-bottom:10px;'>Controls</div>"
-        );
-        
-        hprintf255(request, "<button id='m-btn' class='btn-tgl' style='background:%s;' onclick='tm()'>%s</button>", auto_color, auto_text);
-        hprintf255(request, "<button id='inv-btn' class='btn-tgl' style='background:%s;' onclick='t_inv()'>INVERTER</button>", inv_color);
-        hprintf255(request, "<button id='chg-btn' class='btn-tgl' style='background:%s;' onclick='t_chg()'>CHARGER</button>", chg_color);
-        
-        poststr(request, "<div style='display:-webkit-box; display:-webkit-flex; display:flex; width:100%%; margin-top:auto;'>");
-        hprintf255(request, "<button id='chg-30-btn' class='btn-tgl' style='background:%s; -webkit-box-flex:1; -webkit-flex:1; flex:1; font-size:11px; padding:4px 0; margin-right:4px; margin-bottom:0;' onclick='upd(30)'>30%%</button>", chg_30_color);
-        hprintf255(request, "<button id='chg-80-btn' class='btn-tgl' style='background:%s; -webkit-box-flex:1; -webkit-flex:1; flex:1; font-size:11px; padding:4px 0; margin-bottom:0;' onclick='upd(80)'>80%%</button>", chg_80_color);
-        poststr(request, "</div></div></div>"); 
-
-        // ====================================================================
-        // 5. HOURLY DATA TABLE & LARGE CLOCK SYSTEM
-        // ====================================================================
-        poststr(request, 
-            "<div style='display:-webkit-box; display:-webkit-flex; display:flex; width:100%%; margin-top:20px; -webkit-box-align:stretch; -webkit-align-items:stretch; align-items:stretch;'>"
-            "<div class='hist-tbl-wrapper'>"
-            "<table class='hist-tbl'><tbody id='d-hist-body'>"
-            "<tr><th>Time</th><th>Import / Export</th><th>Net</th></tr>"
-        );
-
-        for (int i = 0; i < 4; i++) {
-            int interval_of_day = current_interval_of_day - i;
-            if (interval_of_day < 0) { interval_of_day += 96; } 
-            int c_index = interval_of_day % 32;
-            
-            int cons = consumption_matrix[c_index];
-            int exp = export_matrix[c_index];
-            int net = net_matrix[c_index];
-            
-            if (i == 0) { 
-                cons += (int)real_consumption;
-                exp += (int)real_export;
-                net += (int)(real_consumption - real_export); 
-                
-                int mins_left = 15 - (minutes_since_midnight % 15);
-                hprintf255(request, "<tr style='color:#0099FF; font-weight:bold;'><td>Now (-%dmin)</td><td>%dW / %dW</td><td>%dW</td></tr>", 
-                           mins_left, cons, exp, net);
-            } else {
-                int row_mins = interval_of_day * 15;
-                int row_h = row_mins / 60;
-                int row_m = row_mins % 60;
-                
-                hprintf255(request, "<tr><td>%02dh%02d</td><td>%dW / %dW</td><td>%dW</td></tr>", 
-                           row_h, row_m, cons, exp, net);
-            }
-        }
-
-        poststr(request, 
-            "</tbody></table></div>"
-            "<div style='-webkit-box-flex:0; -webkit-flex:0 0 340px; flex:0 0 340px; display:-webkit-box; display:-webkit-flex; display:flex; -webkit-box-pack:center; -webkit-justify-content:center; justify-content:center; -webkit-box-align:center; -webkit-align-items:center; align-items:center; background:#222; border-radius:8px; padding:10px; overflow:hidden;'>"
-        );
-        
-        hprintf255(request, 
-            "<div id='d-clk' style='font-size:110px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>%02d:%02d</div>"
-            "</div></div>", 
-            NTP_GetHour(), NTP_GetMinute()
-        );
-
-        // ====================================================================
-        // 6. ASYNCHRONOUS SWAP ENGINE - ES5 Safe Output
-        // ====================================================================
-        hprintf255(request, "<div id='sys-data' data-dmp='%d' data-auto='%d' style='display:none;'></div>", dump_load_relay[5], charger_c_auto);
-        
-        poststr(request, "<script>");
-        hprintf255(request, "var dmp=%d, auto=%d; var lastGoodResponse=Date.now();", dump_load_relay[5], charger_c_auto);
-        
-        poststr(request, 
-            "function upd(v){if(auto===1)return; dmp=parseInt(v, 10);var xhr=new XMLHttpRequest();"
-            "xhr.open('GET','/cm?cmnd=SetDumpLoad%20'+dmp,true);"
-            "xhr.send();"
-            "document.getElementById('inv-btn').style.background=(dmp===5)?'#4caf50':'#555555';"
-            "document.getElementById('chg-btn').style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#ffeb3b':'#555555');"
-            "document.getElementById('chg-30-btn').style.background=(dmp>=30)?'#4caf50':'#555555';"
-            "document.getElementById('chg-80-btn').style.background=(dmp>=80)?'#4caf50':'#555555';"
-            "var tc=document.getElementById('c-v'),tl=document.getElementById('c-lbl');"
-            "if(tc&&tl){if(dmp===0){tl.innerText='Charger';tc.innerText='Idle';tc.style.color='#888';}"
-            "else if(dmp===5){tl.innerText='Charger';tc.innerText='Battery';tc.style.color='#4caf50';}"
-            "else{tl.innerText='Charging';tc.innerText=dmp+'%';tc.style.color='#0099FF';}}}"
-            
-            "function t_inv(){upd(dmp===5?0:5);}function t_chg(){upd(dmp>=10?0:18);}"
-            "function tm(){auto=(auto===1)?0:1; var xhr=new XMLHttpRequest();"
-            "xhr.open('GET','/cm?cmnd=ToggleAuto',true);"
-            "xhr.send();"
-            "var b=document.getElementById('m-btn');if(auto===0){b.innerText='MANUAL';b.style.background='#f44336';}else{b.innerText='AUTO';b.style.background='#0099FF';}}"
-            
-            "function rsh(ids){"
-            "var xhr=new XMLHttpRequest();"
-            "xhr.onreadystatechange=function(){"
-            "if(xhr.readyState!==4)return;"
-            "if(xhr.status===200){"
-            "lastGoodResponse=Date.now();"
-            "var html=xhr.responseText;"
-            "var doc=document.implementation.createHTMLDocument('new');"
-            "doc.documentElement.innerHTML=html;"
-            "var sys=doc.getElementById('sys-data');"
-            "if(sys){"
-            "dmp=parseInt(sys.getAttribute('data-dmp'), 10);"
-            "auto=parseInt(sys.getAttribute('data-auto'), 10);"
-            "}"
-            "for(var i=0; i<ids.length; i++){"
-            "var id=ids[i];"
-            "var oldEl=document.getElementById(id);"
-            "var newEl=doc.getElementById(id);"
-            "if(oldEl&&newEl){"
-            "if(oldEl.innerHTML!==newEl.innerHTML)oldEl.innerHTML=newEl.innerHTML;"
-            "oldEl.className=newEl.className;"
-            "oldEl.style.color=newEl.style.color;"
-            "oldEl.style.background=newEl.style.background;"
-            "}"
-            "}"
-            "doc=null;" // MODIFIED: Added this to force garbage collection
-            "}"
-            "};"
-            "xhr.open('GET','/index',true);"
-            "xhr.send();"
-            "}"
-            
-            "setInterval(function(){rsh(['d-va','d-pwr','d-est','d-bal','d-chg-box','d-sens-body','d-clk','inv-btn','chg-btn','chg-30-btn','chg-80-btn','m-btn']);}, 10000);"
-            "setInterval(function(){rsh(['d-graph','d-hist-body']);}, 30000);"
-            
-            "setInterval(function(){"
-            "if(Date.now()-lastGoodResponse>120000){"
-            "console.log('Watchdog reload');"
-            "location.reload(true);"
-            "}"
-            "},120000);"
-            "</script>"
-        );
-    }
-    
-    poststr(request, "</div>"); 
+    // Intentionally left empty. 
+    // Dashboard migrated to standalone JSON architecture on /dash
 }
+
 void BL09XX_SaveEmeteringStatistics()
 {
     ENERGY_METERING_DATA data;
@@ -1154,4 +853,254 @@ float DRV_GetReading(energySensor_t type)
 energySensorNames_t* DRV_GetEnergySensorNames(energySensor_t type)
 {
     return &sensors[type].names;
+}
+
+// ====================================================================
+// NEW JSON API ENDPOINT
+// ====================================================================
+int http_fn_api_dash(http_request_t *request) {
+    http_setup(request, "application/json");
+    poststr(request, "{");
+
+    // 1. Top Stats
+    hprintf255(request, "\"va\":\"%.0fV / %.2fA\",", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
+    hprintf255(request, "\"pwr\":\"%.0f W\",", sensors[OBK_POWER].lastReading);
+    hprintf255(request, "\"pwr_cls\":\"%s\",", (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp");
+    hprintf255(request, "\"bal\":\"%.0f Wh\",", sensors[OBK_POWER_REACTIVE].lastReading);
+    hprintf255(request, "\"bal_cls\":\"%s\",", (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp");
+    hprintf255(request, "\"est\":\"%i Wh\",", estimated_energy_period);
+    hprintf255(request, "\"est_cls\":\"%s\",", (estimated_energy_period < 0) ? "c-exp" : "c-imp");
+
+    // 2. Charger state
+    int dmp = dump_load_relay[5];
+    if (dmp == 0) {
+        poststr(request, "\"chg_lbl\":\"Charger\",\"chg_v\":\"Idle\",\"chg_c\":\"#888\",");
+    } else if (dmp == 5) {
+        poststr(request, "\"chg_lbl\":\"Charger\",\"chg_v\":\"Battery\",\"chg_c\":\"#4caf50\",");
+    } else {
+        hprintf255(request, "\"chg_lbl\":\"Charging\",\"chg_v\":\"%d%%\",\"chg_c\":\"#0099FF\",", dmp);
+    }
+
+    // 3. Control states & Clock
+    hprintf255(request, "\"dmp\":%d,\"auto\":%d,", dmp, charger_c_auto);
+    hprintf255(request, "\"clk\":\"%02d:%02d\"", NTP_GetHour(), NTP_GetMinute()); 
+
+    if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced()) {
+        poststr(request, ","); 
+        unsigned int minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
+        int current_interval_of_day = minutes_since_midnight / net_metering_period;
+
+        // 4. Sensor Table Body (Pre-formatted HTML chunk)
+        poststr(request, "\"sens\":\"");
+        for (int i = (OBK__FIRST); i <= (OBK_CONSUMPTION__DAILY_LAST); i++) {
+            if (i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))) { i++; }
+            if (i <= OBK__NUM_MEASUREMENTS || NTP_IsTimeSynced()) {
+                if (i == OBK_VOLTAGE || i == OBK_POWER || i == OBK_CURRENT || i == OBK_POWER_APPARENT || i == OBK_POWER_REACTIVE) continue;
+                if ((i == OBK_CONSUMPTION_TOTAL) || (i == OBK_GENERATION_TOTAL)) {
+                    hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f kWh</td></tr>",
+                               sensors[i].names.name_friendly, sensors[i].rounding_decimals, (0.001*sensors[i].lastReading));
+                } else {
+                    hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f %s</td></tr>",
+                               sensors[i].names.name_friendly, sensors[i].rounding_decimals, sensors[i].lastReading, sensors[i].names.units);
+                }
+            }
+        }
+        poststr(request, "\",");
+
+        // 5. Graph Data Elements (Pre-formatted SVG chunk)
+        poststr(request, "\"graph\":\"");
+        for (int i = 15; i >= 0; i--) {
+            int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
+            int v = net_matrix[interval_of_day % 32];
+            if (i == 0) { v += (int)(real_consumption - real_export); }
+            int x = (15 - i) * 32;
+            int h = abs(v) / 2;
+            if (h > 120) h = 120;
+            if (v != 0 || i == 0) {
+                const char* color = (v >= 0) ? "#d32f2f" : "#388e3c";
+                int rect_y = (v >= 0) ? (130 - h) : 130;
+                int text_y = (v >= 0) ? (130 - h - 5) : (130 + h + 5);
+                const char* anchor = (v >= 0) ? "start" : "end";
+                if (h > 0) {
+                    hprintf255(request, "<rect x='%d' y='%d' width='32' height='%d' fill='%s' rx='2'/>", x, rect_y, h, color);
+                }
+                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='24' font-family='sans-serif' text-anchor='%s' transform='rotate(-90 %d %d)' dy='8'>%d</text>",
+                           x + 16, text_y, anchor, x + 16, text_y, v);
+            } else {
+                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='24' font-family='sans-serif' text-anchor='start' transform='rotate(-90 %d 135)' dy='8'>0</text>",
+                           x + 16, x + 16);
+            }
+        }
+        poststr(request, "\",");
+
+        // 6. History Table Body (Pre-formatted HTML chunk)
+        poststr(request, "\"hist\":\"");
+        for (int i = 0; i < 4; i++) {
+            int interval_of_day = current_interval_of_day - i;
+            if (interval_of_day < 0) { interval_of_day += 96; }
+            int c_index = interval_of_day % 32;
+            int cons = consumption_matrix[c_index];
+            int exp = export_matrix[c_index];
+            int net = net_matrix[c_index];
+            if (i == 0) {
+                cons += (int)real_consumption;
+                exp += (int)real_export;
+                net += (int)(real_consumption - real_export);
+                int mins_left = 15 - (minutes_since_midnight % 15);
+                hprintf255(request, "<tr style='color:#0099FF; font-weight:bold;'><td>Now (-%dmin)</td><td>%dW / %dW</td><td>%dW</td></tr>",
+                           mins_left, cons, exp, net);
+            } else {
+                int row_mins = interval_of_day * 15;
+                hprintf255(request, "<tr><td>%02dh%02d</td><td>%dW / %dW</td><td>%dW</td></tr>",
+                           row_mins / 60, row_mins % 60, cons, exp, net);
+            }
+        }
+        poststr(request, "\""); 
+    }
+    
+    poststr(request, "}");
+    poststr(request, NULL);
+    return 0;
+}
+
+// ====================================================================
+// NEW STANDALONE DASHBOARD (HTML SHELL)
+// ====================================================================
+int http_fn_custom_dash(http_request_t *request) {
+    http_setup(request, "text/html");
+
+    // 1. Basic HTML Header ensuring full screen and zoom capabilities
+    poststr(request, 
+        "<!DOCTYPE html><html><head>"
+        "<meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+        "<title>Solar Dashboard</title>"
+        "<style>"
+        "body { margin: 0; background-color: #000; }"
+        "#my-dash { width: 100%; min-height: 100vh; background-color: #121212; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"
+        ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; }"
+        ".top-stats div { display: flex; flex-direction: column; justify-content: center; margin: 0 2px; }"
+        ".top-stats label { color: #888; font-size: 25px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }"
+        ".top-stats b { font-size: 45px; font-weight: 600; }"
+        ".c-exp { color: #4caf50; }"
+        ".c-imp { color: #f44336; }"
+        ".dash-row { display: flex; flex-direction: row; margin-top: 15px; height: 290px; align-items: stretch; }" 
+        ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; }"
+        ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }"
+        ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
+        ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow-x: auto; overflow-y: hidden; margin-right: 15px; }"
+        ".ctrl-col { flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; box-sizing: border-box; }"
+        ".btn-tgl { width: 100%; border: none; color: white; padding: 8px 0; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; text-align: center; line-height: 1.1; margin-bottom: 10px; }"
+        ".btn-tgl:last-child { margin-bottom: 0; }"
+        ".hist-tbl-wrapper { flex: 1; min-width: 180px; margin-right: 20px; }"
+        ".hist-tbl { width: 100%; text-align: center; font-size: 20px; border-collapse: collapse; }"
+        ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 6px; border-bottom: 1px solid #444; }"
+        ".hist-tbl td { padding: 10px 2px; border-bottom: 1px solid #333; }"
+        ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; }"
+        "</style></head><body>"
+    );
+
+    // 2. The DOM Skeleton (Empty placeholders)
+    poststr(request, 
+        "<div id='my-dash'>"
+        "<div class='close-btn' onclick='window.location.href=\"/index\"'>✕</div>"
+        
+        "<div class='top-stats'>"
+        "<div><label>Voltage & Current</label><b id='d-va'>--</b></div>"
+        "<div><label>Power</label><b id='d-pwr'>--</b></div>"
+        "<div><label>Now / 15min Est.</label><b><span id='d-bal'>--</span> / <span id='d-est'>--</span></b></div>"
+        "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v'>--</b></div>"
+        "</div>"
+    );
+
+    if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) {
+        poststr(request, 
+            "<div class='dash-row'>"
+            "<div class='left-col'>"
+            "<div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>"
+            "<table class='sens-tbl'><tbody id='d-sens-body'></tbody></table>"
+            "</div>"
+            
+            "<div class='graph-col'>"
+            "<svg viewBox='0 0 512 260' style='width:100%; height:auto; background:transparent;'>"
+            "<line x1='0' y1='130' x2='512' y2='130' stroke='#333' stroke-width='1'/>"
+            "<text x='470' y='40' font-size='32' opacity='0.35'>🔌</text>"
+            "<text x='470' y='245' font-size='32' opacity='0.35'>☀️</text>"
+            "<g id='d-graph-data'></g>"
+            "</svg></div>"
+            
+            "<div class='ctrl-col'>"
+            "<div style='font-size:10px; color:#888; text-transform:uppercase; text-align:center; margin-bottom:10px;'>Controls</div>"
+            "<button id='m-btn' class='btn-tgl' onclick='tm()'>--</button>"
+            "<button id='inv-btn' class='btn-tgl' onclick='t_inv()'>INVERTER</button>"
+            "<button id='chg-btn' class='btn-tgl' onclick='t_chg()'>CHARGER</button>"
+            "<div style='display:flex; width:100%; margin-top:auto;'>"
+            "<button id='chg-30-btn' class='btn-tgl' style='flex:1; font-size:11px; padding:4px 0; margin-right:4px; margin-bottom:0;' onclick='upd(30)'>30%</button>"
+            "<button id='chg-80-btn' class='btn-tgl' style='flex:1; font-size:11px; padding:4px 0; margin-bottom:0;' onclick='upd(80)'>80%</button>"
+            "</div></div></div>"
+
+            "<div style='display:flex; width:100%; margin-top:20px; align-items:stretch;'>"
+            "<div class='hist-tbl-wrapper'>"
+            "<table class='hist-tbl'>"
+            "<tr><th>Time</th><th>Import / Export</th><th>Net</th></tr>"
+            "<tbody id='d-hist-body'></tbody></table></div>"
+            "<div style='flex:0 0 340px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:10px; overflow:hidden;'>"
+            "<div id='d-clk' style='font-size:110px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>--:--</div>"
+            "</div></div>"
+        );
+    }
+    poststr(request, "</div>"); 
+
+    // 3. Ultra-lightweight JSON Parser
+    poststr(request, "<script>");
+    poststr(request, 
+        "var dmp=0, auto=0;"
+        "function upd(v){if(auto===1)return; dmp=parseInt(v, 10);var xhr=new XMLHttpRequest();"
+        "xhr.open('GET','/cm?cmnd=SetDumpLoad%20'+dmp,true); xhr.send(); btnColor();}"
+        "function t_inv(){upd(dmp===5?0:5);}"
+        "function t_chg(){upd(dmp>=10?0:18);}"
+        "function tm(){auto=(auto===1)?0:1; var xhr=new XMLHttpRequest();"
+        "xhr.open('GET','/cm?cmnd=ToggleAuto',true); xhr.send(); btnColor();}"
+        
+        "function btnColor(){"
+        "var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),c3=document.getElementById('chg-30-btn'),c8=document.getElementById('chg-80-btn'),m=document.getElementById('m-btn');"
+        "if(i) i.style.background=(dmp===5)?'#4caf50':'#555';"
+        "if(c) c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#ffeb3b':'#555');"
+        "if(c3) c3.style.background=(dmp>=30)?'#4caf50':'#555';"
+        "if(c8) c8.style.background=(dmp>=80)?'#4caf50':'#555';"
+        "if(m){ m.innerText=(auto===1)?'AUTO':'MANUAL'; m.style.background=(auto===1)?'#0099FF':'#f44336'; }"
+        "}"
+        
+        "function refresh(){"
+        "var xhr=new XMLHttpRequest();"
+        "xhr.onreadystatechange=function(){"
+        "if(xhr.readyState===4 && xhr.status===200){"
+        "var d=JSON.parse(xhr.responseText);"
+        "document.getElementById('d-va').innerText=d.va;"
+        "document.getElementById('d-pwr').innerText=d.pwr;"
+        "document.getElementById('d-pwr').className=d.pwr_cls;"
+        "document.getElementById('d-bal').innerText=d.bal;"
+        "document.getElementById('d-bal').className=d.bal_cls;"
+        "document.getElementById('d-est').innerText=d.est;"
+        "document.getElementById('d-est').className=d.est_cls;"
+        "document.getElementById('c-lbl').innerText=d.chg_lbl;"
+        "document.getElementById('c-v').innerText=d.chg_v;"
+        "document.getElementById('c-v').style.color=d.chg_c;"
+        "document.getElementById('d-clk').innerText=d.clk;"
+        "dmp=d.dmp; auto=d.auto; btnColor();"
+        "if(d.sens){"
+        "document.getElementById('d-sens-body').innerHTML=d.sens;"
+        "document.getElementById('d-graph-data').innerHTML=d.graph;"
+        "document.getElementById('d-hist-body').innerHTML=d.hist;"
+        "}"
+        "}"
+        "};"
+        "xhr.open('GET','/api/dash',true);"
+        "xhr.send();"
+        "}"
+        "refresh(); setInterval(refresh, 10000);"
+    );
+    poststr(request, "</script></body></html>");
+    poststr(request, NULL);
+    return 0;
 }
