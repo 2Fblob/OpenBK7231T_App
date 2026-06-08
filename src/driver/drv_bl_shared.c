@@ -263,7 +263,8 @@ void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
         // MODIFIED: Changed width and height from 100% to fixed 512px and 260px
         poststr(request, 
             "<div class='graph-col' id='d-graph'>"
-            "<svg viewBox='0 0 512 260' style='width:512px; height:260px; background:transparent;'>"
+            // CHANGED: Removed the double %%. Changed height to auto.
+            "<svg viewBox='0 0 512 260' style='width:100%; height:auto; background:transparent;'>"
             "<line x1='0' y1='130' x2='512' y2='130' stroke='#333' stroke-width='1'/>"
             "<text x='470' y='40' font-size='32' opacity='0.35'>🔌</text>"
             "<text x='470' y='245' font-size='32' opacity='0.35'>☀️</text>"
