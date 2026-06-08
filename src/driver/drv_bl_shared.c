@@ -445,7 +445,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         net_energy = (real_consumption - real_export);                               
 
         // ======================================================================================================
-        // THE 30-SECOND CALCULATION LOOP (Asymmetric Proportional Control)
+        // THE 30-SECOND CALCULATION LOOP (Target -20Wh, Asymmetric Control, Split Red/Green rendering)
         // ======================================================================================================
         static portTickType last_control_tick = 0;
         portTickType current_tick = xTaskGetTickCount();
@@ -469,9 +469,9 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             }
 
             // 3. Update Base Solar State
-            if (net_energy <= -26.0f) {
+            if (net_energy < -30.0f) {
                 solar_available = 1;
-            } else if (net_energy > 14.0f) {
+            } else if (net_energy > 10.0f) {
                 solar_available = 0;
             }
 
@@ -479,38 +479,42 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             // ISOLATED LOGIC BLOCK (ONLY RUNS IN AUTO MODE)
             // ====================================================================
             if (charger_c_auto == 1) {
-                static int persistent_charger_pwm = 18; 
-                int floor_pwm = 18;
+                static int solar_excess = 0; 
+                static int persistent_state = 0; // Tracks 0, 5, or 18+
 
                 if (solar_available == 0) {
-                    if (net_energy >= 6.0f) {
-                        floor_pwm = 5;
-                    } else if (net_energy <= -6.0f) {
-                        floor_pwm = 0;
+                    if (net_energy < -10.0f) {
+                        persistent_state = 0;
+                    } else if (net_energy > 5.0f) {
+                        persistent_state = 5;
                     }
+                    solar_excess = 0; // Zero the accumulator for when solar returns
                 } 
                 else {
-                    floor_pwm = 18;
-                }
-
-                if (net_energy > 0) {
-                    persistent_charger_pwm = floor_pwm;
-                } 
-                else if (solar_available == 1) {
-                    int error_w = (abs(estimated_energy_period) * 60) / check_time_estimate_mins;
-                    int pwm_step = (error_w / 10) / 2; 
-                    
-                    if (estimated_energy_period < 0) {
-                        persistent_charger_pwm += pwm_step;
+                    // solar_available == 1 -> Charger Floor is 18
+                    if (net_energy > -20.0f) {
+                        // Instant safety drop if we drift above the target threshold
+                        solar_excess = 0; 
                     } else {
-                        persistent_charger_pwm -= pwm_step;
+                        // Calculate Watts needed to hit the -20Wh target
+                        int excess_wh = abs(estimated_energy_period + 20); 
+                        int error_w = (excess_wh * 60) / check_time_estimate_mins; 
+                        
+                        // Increase by 50% of the required adjustment in PWM units (100% = 1000W)
+                        int pwm_step = (error_w / 10) / 2;
+                        if (pwm_step < 1) pwm_step = 1; // Enforce movement
+                        
+                        solar_excess += pwm_step;
                     }
+                    
+                    // Enforce absolute constraints
+                    if (solar_excess > 82) solar_excess = 82;
+                    if (solar_excess < 0) solar_excess = 0;
+                    
+                    persistent_state = 18 + solar_excess;
                 }
                 
-                if (persistent_charger_pwm < floor_pwm) persistent_charger_pwm = floor_pwm;
-                if (persistent_charger_pwm > 100) persistent_charger_pwm = 100;
-                
-                dump_load_relay[5] = persistent_charger_pwm;
+                dump_load_relay[5] = persistent_state;
             } // END OF AUTO MODE BLOCK
 
             // ====================================================================
@@ -846,7 +850,7 @@ energySensorNames_t* DRV_GetEnergySensorNames(energySensor_t type)
 }
 
 // ====================================================================
-// NEW JSON API ENDPOINT (Optimized Stacked SVG Graph)
+// NEW JSON API ENDPOINT (Side-by-Side Dual-Bar SVG)
 // ====================================================================
 int http_fn_api_dash(http_request_t *request) {
     http_setup(request, "application/json");
@@ -905,171 +909,39 @@ int http_fn_api_dash(http_request_t *request) {
                 net += (int)(real_consumption - real_export); 
             }
             
-            int x = (23 - i) * 21 + 4; 
-            int h = abs(net) / 2;
-            if (h > 120) h = 120;
+            int x = (23 - i) * 21 + 2; 
+            int h_imp = abs(cons) / 2;
+            int h_exp = abs(exp) / 2;
+            
+            if (h_imp > 120) h_imp = 120;
+            if (h_exp > 120) h_exp = 120;
+            
+            int h_max = (h_imp > h_exp) ? h_imp : h_exp;
             
             if (net != 0 || i == 0) {
-                int abs_cons = abs(cons);
-                int abs_exp = abs(exp);
-                int total_ce = abs_cons + abs_exp;
-                if (total_ce == 0) total_ce = 1;
-                
-                int h_cons = (abs_cons * h) / total_ce;
-                int h_exp = h - h_cons;
-                
                 if (net >= 0) {
-                    int rect_y = 130 - h;
-                    hprintf255(request, "<rect x='%d' y='%d' width='18' height='%d' fill='#f44336' rx='1'/>", x, rect_y, h_exp);
-                    hprintf255(request, "<rect x='%d' y='%d' width='18' height='%d' fill='#4caf50' rx='1'/>", x, rect_y + h_exp, h_cons);
+                    // Both bars point upwards
+                    if (h_imp > 0) hprintf255(request, "<rect x='%d' y='%d' width='8' height='%d' fill='#f44336' rx='1'/>", x, 130 - h_imp, h_imp);
+                    if (h_exp > 0) hprintf255(request, "<rect x='%d' y='%d' width='8' height='%d' fill='#4caf50' rx='1'/>", x + 9, 130 - h_exp, h_exp);
                 } 
                 else {
-                    hprintf255(request, "<rect x='%d' y='130' width='18' height='%d' fill='#4caf50' rx='1'/>", x, h_cons);
-                    hprintf255(request, "<rect x='%d' y='%d' width='18' height='%d' fill='#f44336' rx='1'/>", x, 130 + h_cons, h_exp);
+                    // Both bars point downwards
+                    if (h_imp > 0) hprintf255(request, "<rect x='%d' y='130' width='8' height='%d' fill='#f44336' rx='1'/>", x, h_imp);
+                    if (h_exp > 0) hprintf255(request, "<rect x='%d' y='130' width='8' height='%d' fill='#4caf50' rx='1'/>", x + 9, h_exp);
                 }
                 
-                int text_y = (net >= 0) ? (130 - h - 5) : (130 + h + 5);
+                int text_y = (net >= 0) ? (130 - h_max - 5) : (130 + h_max + 5);
                 const char* anchor = (net >= 0) ? "start" : "end";
                 hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='14' font-family='sans-serif' text-anchor='%s' transform='rotate(-90 %d %d)' dy='5'>%d</text>",
-                           x + 9, text_y, anchor, x + 9, text_y, net);
+                           x + 8, text_y, anchor, x + 8, text_y, net);
             } else {
-                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='14' font-family='sans-serif' text-anchor='start' transform='rotate(-90 %d 135)' dy='5'>0</text>", x + 9, x + 9);
+                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='14' font-family='sans-serif' text-anchor='start' transform='rotate(-90 %d 135)' dy='5'>0</text>", x + 8, x + 8);
             }
         }
         poststr(request, "\"");
     }
     
     poststr(request, "}");
-    poststr(request, NULL);
-    return 0;
-}
-
-// ====================================================================
-// NEW STANDALONE DASHBOARD (HTML SHELL)
-// ====================================================================
-int http_fn_custom_dash(http_request_t *request) {
-    http_setup(request, "text/html");
-
-    poststr(request, 
-        "<!DOCTYPE html><html><head>"
-        "<meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
-        "<title>Solar Dashboard</title>"
-        "<style>"
-        "body { margin: 0; background-color: #000; }"
-        "#my-dash { width: 100%; min-height: 100vh; background-color: #121212; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"
-        ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; }"
-        ".top-stats div { display: flex; flex-direction: column; justify-content: center; margin: 0 2px; }"
-        ".top-stats label { color: #888; font-size: 25px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }"
-        ".top-stats b { font-size: 45px; font-weight: 600; }"
-        ".c-exp { color: #4caf50; }"
-        ".c-imp { color: #f44336; }"
-        ".dash-row { display: flex; flex-direction: row; margin-top: 15px; height: 380px; align-items: stretch; }" 
-        ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; }"
-        ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }"
-        ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
-        ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }"
-        ".ctrl-row { display: flex; flex-direction: row; margin-top: 15px; align-items: stretch; height: 100px; }"
-        ".ctrl-col { flex: 1; background: #222; padding: 15px; border-radius: 8px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; margin-right: 15px; box-sizing: border-box; gap: 10px; }"
-        ".btn-tgl { flex: 1; height: 100%; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; }"
-        ".clk-col { flex: 0 0 340px; display: flex; justify-content: center; align-items: center; background: #222; border-radius: 8px; overflow: hidden; }"
-        ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; }"
-        "</style></head><body>"
-    );
-
-    poststr(request, 
-        "<div id='my-dash'>"
-        "<div class='close-btn' onclick='window.location.href=\"/index\"'>✕</div>"
-        
-        "<div class='top-stats'>"
-        "<div><label>Voltage & Current</label><b id='d-va'>--</b></div>"
-        "<div><label>Power</label><b id='d-pwr'>--</b></div>"
-        "<div><label>Now / 15min Est.</label><b><span id='d-bal'>--</span> / <span id='d-est'>--</span></b></div>"
-        "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v'>--</b></div>"
-        "</div>"
-    );
-
-    if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) {
-        poststr(request, 
-            "<div class='dash-row'>"
-            "<div class='left-col'>"
-            "<div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>"
-            "<table class='sens-tbl'><tbody id='d-sens-body'></tbody></table>"
-            "</div>"
-            
-            "<div class='graph-col'>"
-            "<svg viewBox='0 0 512 260' preserveAspectRatio='none' style='width:100%; height:100%; background:transparent;'>"
-            "<line x1='0' y1='130' x2='512' y2='130' stroke='#333' stroke-width='1'/>"
-            "<g id='d-graph-data'></g>"
-            "</svg></div>"
-            "</div>"
-
-            "<div class='ctrl-row'>"
-            "<div class='ctrl-col'>"
-            "<button id='m-btn' class='btn-tgl' onclick='tm()'>--</button>"
-            "<button id='inv-btn' class='btn-tgl' onclick='t_inv()'>INVERTER</button>"
-            "<button id='chg-btn' class='btn-tgl' onclick='t_chg()'>CHARGER</button>"
-            "<button id='chg-30-btn' class='btn-tgl' onclick='upd(30)'>30%</button>"
-            "<button id='chg-80-btn' class='btn-tgl' onclick='upd(80)'>80%</button>"
-            "</div>"
-
-            "<div class='clk-col'>"
-            "<div id='d-clk' style='font-size:100px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>--:--</div>"
-            "</div></div>"
-        );
-    }
-    poststr(request, "</div>"); 
-
-    poststr(request, "<script>");
-    poststr(request, 
-        "var dmp=0, auto=0;"
-        "function upd(v){if(auto===1)return; dmp=parseInt(v, 10);var xhr=new XMLHttpRequest();"
-        "xhr.open('GET','/cm?cmnd=SetDumpLoad%20'+dmp,true); xhr.send(); btnColor();}"
-        "function t_inv(){upd(dmp===5?0:5);}"
-        "function t_chg(){upd(dmp>=10?0:18);}"
-        "function tm(){auto=(auto===1)?0:1; var xhr=new XMLHttpRequest();"
-        "xhr.open('GET','/cm?cmnd=ToggleAuto',true); xhr.send(); btnColor();}"
-        
-        "function btnColor(){"
-        "var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),c3=document.getElementById('chg-30-btn'),c8=document.getElementById('chg-80-btn'),m=document.getElementById('m-btn');"
-        "if(i) i.style.background=(dmp===5)?'#4caf50':'#555';"
-        "if(c) c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#ffeb3b':'#555');"
-        "if(c3) c3.style.background=(dmp>=30)?'#4caf50':'#555';"
-        "if(c8) c8.style.background=(dmp>=80)?'#4caf50':'#555';"
-        "if(m){ m.innerText=(auto===1)?'AUTO':'MANUAL'; m.style.background=(auto===1)?'#0099FF':'#f44336'; }"
-        "}"
-        
-        "function refresh(){"
-        "var xhr=new XMLHttpRequest();"
-        "xhr.onreadystatechange=function(){"
-        "if(xhr.readyState===4 && xhr.status===200){"
-        "try {"
-        "var d=JSON.parse(xhr.responseText);"
-        "document.getElementById('d-va').innerText=d.va;"
-        "document.getElementById('d-pwr').innerText=d.pwr;"
-        "document.getElementById('d-pwr').className=d.pwr_cls;"
-        "document.getElementById('d-bal').innerText=d.bal;"
-        "document.getElementById('d-bal').className=d.bal_cls;"
-        "document.getElementById('d-est').innerText=d.est;"
-        "document.getElementById('d-est').className=d.est_cls;"
-        "document.getElementById('c-lbl').innerText=d.chg_lbl;"
-        "document.getElementById('c-v').innerText=d.chg_v;"
-        "document.getElementById('c-v').style.color=d.chg_c;"
-        "document.getElementById('d-clk').innerText=d.clk;"
-        "dmp=d.dmp; auto=d.auto; btnColor();"
-        "if(d.sens){"
-        "document.getElementById('d-sens-body').innerHTML=d.sens;"
-        "document.getElementById('d-graph-data').innerHTML=d.graph;"
-        "}"
-        "} catch(e) { console.error('JSON parse error: ', e); }"
-        "}"
-        "};"
-        "xhr.open('GET','/api_dash?t='+Date.now(),true);"
-        "xhr.send();"
-        "}"
-        "refresh(); setInterval(refresh, 10000);"
-    );
-    poststr(request, "</script></body></html>");
     poststr(request, NULL);
     return 0;
 }
