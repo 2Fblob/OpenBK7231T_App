@@ -23,8 +23,6 @@ int save_to_flash_flag = 0;
 int solar_available = 0;
 static int estimated_energy_start = 0;
 static int last_run_calc = 0;
-int current_minute = 0;
-int last_minute = 0;
 int output_index = 0;
 
 int estimated_energy_period = 0;
@@ -141,7 +139,6 @@ int changeDoNotSendMinFrames = 5;
 
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 {
-    // Intentionally left empty. 
     // Dashboard migrated to standalone JSON architecture on /dash
 }
 
@@ -210,16 +207,13 @@ commandResult_t BL09XX_ResetEnergyCounter(const void *context, const char *cmd, 
     return CMD_RES_OK;
 }
 
-// Custom handler to set Dump Load relay manually via JS
 commandResult_t BL09XX_SetDumpLoad(const void *context, const char *cmd, const char *args, int cmdFlags)
 {
-    // The Iron-Clad Guard: Refuse manual HTTP updates if the system is in AUTO mode.
     if (charger_c_auto == 1) return CMD_RES_OK; 
     
     if(args && *args) {
         dump_load_relay[5] = atoi(args);
         
-        // Push the command instantly when updated in manual mode
         char dgr_cmd[64];
         snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
         CMD_ExecuteCommand(dgr_cmd, 0);
@@ -231,7 +225,6 @@ commandResult_t BL09XX_SetDumpLoad(const void *context, const char *cmd, const c
     return CMD_RES_OK;
 }
 
-// Toggle Auto Command Handler
 commandResult_t BL09XX_ToggleAuto(const void *context, const char *cmd, const char *args, int cmdFlags)
 {
     charger_c_auto = !charger_c_auto;
@@ -416,7 +409,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         int minutes_since_midnight_tracker = (check_hour * 60) + check_time;
         int interval_of_day_tracker = minutes_since_midnight_tracker / 15;
         
-        // Maps the interval to our expanded 32-slot circular buffer
         int current_matrix_index = interval_of_day_tracker % 32; 
 
         if (last_matrix_index == -1) {
@@ -425,30 +417,23 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
 
         if (current_matrix_index != last_matrix_index) {
             
-            // 1. Write the final accumulated values to the outgoing slot
             consumption_matrix[last_matrix_index] = (int)real_consumption;
             export_matrix[last_matrix_index] = (int)real_export;
             net_matrix[last_matrix_index] = (int)real_consumption - (int)real_export;
 
-            // 2. Clear variables for the new period
             real_export = 0;
             real_consumption = 0;
             net_energy = 0;
             energyCounterMinutesIndex = 0;
             lastsync = 0; 
             
-            // Wipe the incoming block 
             consumption_matrix[current_matrix_index] = 0;
             export_matrix[current_matrix_index] = 0;
             net_matrix[current_matrix_index] = 0;
 
-            // 3. Update index and flag
             last_matrix_index = current_matrix_index;
             savetoflash = 1;
-
-            // Charger C reset handled in calculation
         }
-        // ------------------------------------------------------------------------------------------------------
 
         if (!(check_time == old_time))
         {
@@ -459,17 +444,19 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                                                          
         net_energy = (real_consumption - real_export);                               
 
-        current_minute = check_time;
+        // ======================================================================================================
+        // THE 30-SECOND CALCULATION LOOP (Asymmetric Proportional Control)
+        // ======================================================================================================
+        static portTickType last_control_tick = 0;
+        portTickType current_tick = xTaskGetTickCount();
         
-        // ======================================================================================================
-        // THE 1-MINUTE CALCULATION LOOP (Cleaned and Simplified)
-        // ======================================================================================================
-        if (current_minute != last_minute) 
+        if ((current_tick - last_control_tick) >= (30000 / portTICK_PERIOD_MS) || last_control_tick == 0) 
         {
-            last_minute = current_minute;
+            last_control_tick = current_tick;
             
-            int min_in_block = current_minute % 15; 
+            int min_in_block = check_time % 15; 
             int check_time_estimate_mins = 15 - min_in_block; 
+            if (check_time_estimate_mins <= 0) check_time_estimate_mins = 1;
             
             // 1. Predict total Wh accumulated by the end of the 15-minute period
             estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
@@ -481,7 +468,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 net_energy_equivalent = (int)net_energy; 
             }
 
-            // 3. NEW SOLAR STATUS LOGIC
+            // 3. Update Base Solar State
             if (net_energy <= -26.0f) {
                 solar_available = 1;
             } else if (net_energy > 14.0f) {
@@ -492,36 +479,42 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             // ISOLATED LOGIC BLOCK (ONLY RUNS IN AUTO MODE)
             // ====================================================================
             if (charger_c_auto == 1) {
+                static int persistent_charger_pwm = 18; 
+                int floor_pwm = 18;
 
                 if (solar_available == 0) {
                     if (net_energy >= 6.0f) {
-                        dump_load_relay[5] = 5;
+                        floor_pwm = 5;
                     } else if (net_energy <= -6.0f) {
-                        dump_load_relay[5] = 0;
+                        floor_pwm = 0;
                     }
                 } 
                 else {
-                    if (net_energy > -10.0f) {
-                        if (dump_load_relay[5] > 18) {
-                            dump_load_relay[5] = 18;
-                        }
-                    } 
-                    else if (net_energy <= -10.0f && net_energy > -20.0f) {
-                        dump_load_relay[5] = 18;
-                    } 
-                    else if (net_energy <= -20.0f) {
-                        int calculated_pwr = (abs((int)net_energy) * 60 / check_time_estimate_mins) / 10;
-                        
-                        if (calculated_pwr > 100) calculated_pwr = 100;
-                        if (calculated_pwr < 20) calculated_pwr = 20;
-                        
-                        dump_load_relay[5] = calculated_pwr;
+                    floor_pwm = 18;
+                }
+
+                if (net_energy > 0) {
+                    persistent_charger_pwm = floor_pwm;
+                } 
+                else if (solar_available == 1) {
+                    int error_w = (abs(estimated_energy_period) * 60) / check_time_estimate_mins;
+                    int pwm_step = (error_w / 10) / 2; 
+                    
+                    if (estimated_energy_period < 0) {
+                        persistent_charger_pwm += pwm_step;
+                    } else {
+                        persistent_charger_pwm -= pwm_step;
                     }
                 }
+                
+                if (persistent_charger_pwm < floor_pwm) persistent_charger_pwm = floor_pwm;
+                if (persistent_charger_pwm > 100) persistent_charger_pwm = 100;
+                
+                dump_load_relay[5] = persistent_charger_pwm;
             } // END OF AUTO MODE BLOCK
 
             // ====================================================================
-            // UNCONDITIONAL SEND: Runs every 1-minute regardless of Auto/Manual
+            // UNCONDITIONAL SEND: Runs every 30-seconds regardless of Auto/Manual
             // ====================================================================
             char dgr_cmd[64];
             snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
@@ -530,9 +523,8 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             char fallback_cmd[64];
             snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
             CMD_ExecuteCommand(fallback_cmd, 0);
-
         }
-    } // end of negative flag loop
+    } 
 
     if (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) 
     {
@@ -833,9 +825,7 @@ void BL_Shared_Init(void)
     ConsumptionSaveCounter = data.save_counter;
     lastConsumptionSaveStamp = xTaskGetTickCount();
 
-    // Register our newly created JS backend handler
     CMD_RegisterCommand("SetDumpLoad", BL09XX_SetDumpLoad, NULL);
-    
     CMD_RegisterCommand("EnergyCntReset", BL09XX_ResetEnergyCounter, NULL);
     CMD_RegisterCommand("ToggleAuto", BL09XX_ToggleAuto, NULL);
     CMD_RegisterCommand("SetupEnergyStats", BL09XX_SetupEnergyStatistic, NULL);
@@ -856,13 +846,12 @@ energySensorNames_t* DRV_GetEnergySensorNames(energySensor_t type)
 }
 
 // ====================================================================
-// NEW JSON API ENDPOINT
+// NEW JSON API ENDPOINT (Optimized Stacked SVG Graph)
 // ====================================================================
 int http_fn_api_dash(http_request_t *request) {
     http_setup(request, "application/json");
     poststr(request, "{");
 
-    // 1. Top Stats
     hprintf255(request, "\"va\":\"%.0fV / %.2fA\",", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
     hprintf255(request, "\"pwr\":\"%.0f W\",", sensors[OBK_POWER].lastReading);
     hprintf255(request, "\"pwr_cls\":\"%s\",", (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp");
@@ -871,7 +860,6 @@ int http_fn_api_dash(http_request_t *request) {
     hprintf255(request, "\"est\":\"%i Wh\",", estimated_energy_period);
     hprintf255(request, "\"est_cls\":\"%s\",", (estimated_energy_period < 0) ? "c-exp" : "c-imp");
 
-    // 2. Charger state
     int dmp = dump_load_relay[5];
     if (dmp == 0) {
         poststr(request, "\"chg_lbl\":\"Charger\",\"chg_v\":\"Idle\",\"chg_c\":\"#888\",");
@@ -881,16 +869,13 @@ int http_fn_api_dash(http_request_t *request) {
         hprintf255(request, "\"chg_lbl\":\"Charging\",\"chg_v\":\"%d%%\",\"chg_c\":\"#0099FF\",", dmp);
     }
 
-    // 3. Control states & Clock
     hprintf255(request, "\"dmp\":%d,\"auto\":%d,", dmp, charger_c_auto);
     hprintf255(request, "\"clk\":\"%02d:%02d\"", NTP_GetHour(), NTP_GetMinute()); 
 
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced()) {
         poststr(request, ","); 
         unsigned int minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
-        int current_interval_of_day = minutes_since_midnight / net_metering_period;
 
-        // 4. Sensor Table Body (Pre-formatted HTML chunk)
         poststr(request, "\"sens\":\"");
         for (int i = (OBK__FIRST); i <= (OBK_CONSUMPTION__DAILY_LAST); i++) {
             if (i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))) { i++; }
@@ -907,55 +892,51 @@ int http_fn_api_dash(http_request_t *request) {
         }
         poststr(request, "\",");
 
-        // 5. Graph Data Elements (Pre-formatted SVG chunk)
         poststr(request, "\"graph\":\"");
-        for (int i = 15; i >= 0; i--) {
+        for (int i = 23; i >= 0; i--) {
             int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-            int v = net_matrix[interval_of_day % 32];
-            if (i == 0) { v += (int)(real_consumption - real_export); }
-            int x = (15 - i) * 32;
-            int h = abs(v) / 2;
-            if (h > 120) h = 120;
-            if (v != 0 || i == 0) {
-                const char* color = (v >= 0) ? "#d32f2f" : "#388e3c";
-                int rect_y = (v >= 0) ? (130 - h) : 130;
-                int text_y = (v >= 0) ? (130 - h - 5) : (130 + h + 5);
-                const char* anchor = (v >= 0) ? "start" : "end";
-                if (h > 0) {
-                    hprintf255(request, "<rect x='%d' y='%d' width='32' height='%d' fill='%s' rx='2'/>", x, rect_y, h, color);
-                }
-                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='24' font-family='sans-serif' text-anchor='%s' transform='rotate(-90 %d %d)' dy='8'>%d</text>",
-                           x + 16, text_y, anchor, x + 16, text_y, v);
-            } else {
-                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='24' font-family='sans-serif' text-anchor='start' transform='rotate(-90 %d 135)' dy='8'>0</text>",
-                           x + 16, x + 16);
-            }
-        }
-        poststr(request, "\",");
-
-        // 6. History Table Body (Pre-formatted HTML chunk)
-        poststr(request, "\"hist\":\"");
-        for (int i = 0; i < 4; i++) {
-            int interval_of_day = current_interval_of_day - i;
-            if (interval_of_day < 0) { interval_of_day += 96; }
             int c_index = interval_of_day % 32;
             int cons = consumption_matrix[c_index];
             int exp = export_matrix[c_index];
             int net = net_matrix[c_index];
-            if (i == 0) {
+            if (i == 0) { 
                 cons += (int)real_consumption;
                 exp += (int)real_export;
-                net += (int)(real_consumption - real_export);
-                int mins_left = 15 - (minutes_since_midnight % 15);
-                hprintf255(request, "<tr style='color:#0099FF; font-weight:bold;'><td>Now (-%dmin)</td><td>%dW / %dW</td><td>%dW</td></tr>",
-                           mins_left, cons, exp, net);
+                net += (int)(real_consumption - real_export); 
+            }
+            
+            int x = (23 - i) * 21 + 4; 
+            int h = abs(net) / 2;
+            if (h > 120) h = 120;
+            
+            if (net != 0 || i == 0) {
+                int abs_cons = abs(cons);
+                int abs_exp = abs(exp);
+                int total_ce = abs_cons + abs_exp;
+                if (total_ce == 0) total_ce = 1;
+                
+                int h_cons = (abs_cons * h) / total_ce;
+                int h_exp = h - h_cons;
+                
+                if (net >= 0) {
+                    int rect_y = 130 - h;
+                    hprintf255(request, "<rect x='%d' y='%d' width='18' height='%d' fill='#f44336' rx='1'/>", x, rect_y, h_exp);
+                    hprintf255(request, "<rect x='%d' y='%d' width='18' height='%d' fill='#4caf50' rx='1'/>", x, rect_y + h_exp, h_cons);
+                } 
+                else {
+                    hprintf255(request, "<rect x='%d' y='130' width='18' height='%d' fill='#4caf50' rx='1'/>", x, h_cons);
+                    hprintf255(request, "<rect x='%d' y='%d' width='18' height='%d' fill='#f44336' rx='1'/>", x, 130 + h_cons, h_exp);
+                }
+                
+                int text_y = (net >= 0) ? (130 - h - 5) : (130 + h + 5);
+                const char* anchor = (net >= 0) ? "start" : "end";
+                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='14' font-family='sans-serif' text-anchor='%s' transform='rotate(-90 %d %d)' dy='5'>%d</text>",
+                           x + 9, text_y, anchor, x + 9, text_y, net);
             } else {
-                int row_mins = interval_of_day * 15;
-                hprintf255(request, "<tr><td>%02dh%02d</td><td>%dW / %dW</td><td>%dW</td></tr>",
-                           row_mins / 60, row_mins % 60, cons, exp, net);
+                hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='14' font-family='sans-serif' text-anchor='start' transform='rotate(-90 %d 135)' dy='5'>0</text>", x + 9, x + 9);
             }
         }
-        poststr(request, "\""); 
+        poststr(request, "\"");
     }
     
     poststr(request, "}");
@@ -969,7 +950,6 @@ int http_fn_api_dash(http_request_t *request) {
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
 
-    // 1. Basic HTML Header ensuring full screen and zoom capabilities
     poststr(request, 
         "<!DOCTYPE html><html><head>"
         "<meta charset='utf-8'>"
@@ -984,23 +964,19 @@ int http_fn_custom_dash(http_request_t *request) {
         ".top-stats b { font-size: 45px; font-weight: 600; }"
         ".c-exp { color: #4caf50; }"
         ".c-imp { color: #f44336; }"
-        ".dash-row { display: flex; flex-direction: row; margin-top: 15px; height: 290px; align-items: stretch; }" 
+        ".dash-row { display: flex; flex-direction: row; margin-top: 15px; height: 380px; align-items: stretch; }" 
         ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; }"
         ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }"
         ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
-        ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow-x: auto; overflow-y: hidden; margin-right: 15px; }"
-        ".ctrl-col { flex: 0 0 100px; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: stretch; box-sizing: border-box; }"
-        ".btn-tgl { width: 100%; border: none; color: white; padding: 8px 0; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; text-align: center; line-height: 1.1; margin-bottom: 10px; }"
-        ".btn-tgl:last-child { margin-bottom: 0; }"
-        ".hist-tbl-wrapper { flex: 1; min-width: 180px; margin-right: 20px; }"
-        ".hist-tbl { width: 100%; text-align: center; font-size: 20px; border-collapse: collapse; }"
-        ".hist-tbl th { color: #888; font-weight: normal; padding-bottom: 6px; border-bottom: 1px solid #444; }"
-        ".hist-tbl td { padding: 10px 2px; border-bottom: 1px solid #333; }"
+        ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }"
+        ".ctrl-row { display: flex; flex-direction: row; margin-top: 15px; align-items: stretch; height: 100px; }"
+        ".ctrl-col { flex: 1; background: #222; padding: 15px; border-radius: 8px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; margin-right: 15px; box-sizing: border-box; gap: 10px; }"
+        ".btn-tgl { flex: 1; height: 100%; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; }"
+        ".clk-col { flex: 0 0 340px; display: flex; justify-content: center; align-items: center; background: #222; border-radius: 8px; overflow: hidden; }"
         ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; }"
         "</style></head><body>"
     );
 
-    // 2. The DOM Skeleton (Empty placeholders)
     poststr(request, 
         "<div id='my-dash'>"
         "<div class='close-btn' onclick='window.location.href=\"/index\"'>✕</div>"
@@ -1022,36 +998,28 @@ int http_fn_custom_dash(http_request_t *request) {
             "</div>"
             
             "<div class='graph-col'>"
-            "<svg viewBox='0 0 512 260' style='width:100%; height:auto; background:transparent;'>"
+            "<svg viewBox='0 0 512 260' preserveAspectRatio='none' style='width:100%; height:100%; background:transparent;'>"
             "<line x1='0' y1='130' x2='512' y2='130' stroke='#333' stroke-width='1'/>"
-            "<text x='470' y='40' font-size='32' opacity='0.35'>🔌</text>"
-            "<text x='470' y='245' font-size='32' opacity='0.35'>☀️</text>"
             "<g id='d-graph-data'></g>"
             "</svg></div>"
-            
+            "</div>"
+
+            "<div class='ctrl-row'>"
             "<div class='ctrl-col'>"
-            "<div style='font-size:10px; color:#888; text-transform:uppercase; text-align:center; margin-bottom:10px;'>Controls</div>"
             "<button id='m-btn' class='btn-tgl' onclick='tm()'>--</button>"
             "<button id='inv-btn' class='btn-tgl' onclick='t_inv()'>INVERTER</button>"
             "<button id='chg-btn' class='btn-tgl' onclick='t_chg()'>CHARGER</button>"
-            "<div style='display:flex; width:100%; margin-top:auto;'>"
-            "<button id='chg-30-btn' class='btn-tgl' style='flex:1; font-size:11px; padding:4px 0; margin-right:4px; margin-bottom:0;' onclick='upd(30)'>30%</button>"
-            "<button id='chg-80-btn' class='btn-tgl' style='flex:1; font-size:11px; padding:4px 0; margin-bottom:0;' onclick='upd(80)'>80%</button>"
-            "</div></div></div>"
+            "<button id='chg-30-btn' class='btn-tgl' onclick='upd(30)'>30%</button>"
+            "<button id='chg-80-btn' class='btn-tgl' onclick='upd(80)'>80%</button>"
+            "</div>"
 
-            "<div style='display:flex; width:100%; margin-top:20px; align-items:stretch;'>"
-            "<div class='hist-tbl-wrapper'>"
-            "<table class='hist-tbl'>"
-            "<tr><th>Time</th><th>Import / Export</th><th>Net</th></tr>"
-            "<tbody id='d-hist-body'></tbody></table></div>"
-            "<div style='flex:0 0 340px; display:flex; justify-content:center; align-items:center; background:#222; border-radius:8px; padding:10px; overflow:hidden;'>"
-            "<div id='d-clk' style='font-size:110px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>--:--</div>"
+            "<div class='clk-col'>"
+            "<div id='d-clk' style='font-size:100px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>--:--</div>"
             "</div></div>"
         );
     }
     poststr(request, "</div>"); 
 
-// 3. Ultra-lightweight JSON Parser
     poststr(request, "<script>");
     poststr(request, 
         "var dmp=0, auto=0;"
@@ -1092,7 +1060,6 @@ int http_fn_custom_dash(http_request_t *request) {
         "if(d.sens){"
         "document.getElementById('d-sens-body').innerHTML=d.sens;"
         "document.getElementById('d-graph-data').innerHTML=d.graph;"
-        "document.getElementById('d-hist-body').innerHTML=d.hist;"
         "}"
         "} catch(e) { console.error('JSON parse error: ', e); }"
         "}"
