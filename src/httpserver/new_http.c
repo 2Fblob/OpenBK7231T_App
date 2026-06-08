@@ -744,7 +744,8 @@ int HTTP_ProcessPacket(http_request_t* request) {
 
 	// ---> NEW DASHBOARD ROUTES <---
 	if (http_checkUrlBase(urlStr, "dash")) return http_fn_custom_dash(request);
-	if (http_checkUrlBase(urlStr, "api/dash")) return http_fn_api_dash(request);
+	if (http_checkUrlBase(urlStr, "api_dash")) return http_fn_api_dash(request);
+	// --------------------------------------
 	// --------------------------------------
 
 	if (http_checkUrlBase(urlStr, "about")) return http_fn_about(request);
