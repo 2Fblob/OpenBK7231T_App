@@ -1051,7 +1051,7 @@ int http_fn_custom_dash(http_request_t *request) {
     }
     poststr(request, "</div>"); 
 
-    // 3. Ultra-lightweight JSON Parser
+// 3. Ultra-lightweight JSON Parser
     poststr(request, "<script>");
     poststr(request, 
         "var dmp=0, auto=0;"
@@ -1075,6 +1075,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "var xhr=new XMLHttpRequest();"
         "xhr.onreadystatechange=function(){"
         "if(xhr.readyState===4 && xhr.status===200){"
+        "try {"
         "var d=JSON.parse(xhr.responseText);"
         "document.getElementById('d-va').innerText=d.va;"
         "document.getElementById('d-pwr').innerText=d.pwr;"
@@ -1093,9 +1094,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "document.getElementById('d-graph-data').innerHTML=d.graph;"
         "document.getElementById('d-hist-body').innerHTML=d.hist;"
         "}"
+        "} catch(e) { console.error('JSON parse error: ', e); }"
         "}"
         "};"
-        "xhr.open('GET','/api/dash',true);"
+        "xhr.open('GET','/api_dash?t='+Date.now(),true);"
         "xhr.send();"
         "}"
         "refresh(); setInterval(refresh, 10000);"
