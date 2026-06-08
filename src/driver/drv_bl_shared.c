@@ -212,13 +212,14 @@ commandResult_t BL09XX_SetDumpLoad(const void *context, const char *cmd, const c
     if (charger_c_auto == 1) return CMD_RES_OK; 
     
     if(args && *args) {
+        char dgr_cmd[64];
+        char fallback_cmd[64];
+
         dump_load_relay[5] = atoi(args);
         
-        char dgr_cmd[64];
         snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
         CMD_ExecuteCommand(dgr_cmd, 0);
 
-        char fallback_cmd[64];
         snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
         CMD_ExecuteCommand(fallback_cmd, 0);
     }
@@ -406,33 +407,33 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         // ------------------------------------------------------------------------------------------------------
         // THE 15-MINUTE RESET & CIRCULAR MATRIX LOGIC 
         // ------------------------------------------------------------------------------------------------------
-        int minutes_since_midnight_tracker = (check_hour * 60) + check_time;
-        int interval_of_day_tracker = minutes_since_midnight_tracker / 15;
-        
-        int current_matrix_index = interval_of_day_tracker % 32; 
+        {
+            int minutes_since_midnight_tracker = (check_hour * 60) + check_time;
+            int interval_of_day_tracker = minutes_since_midnight_tracker / 15;
+            int current_matrix_index = interval_of_day_tracker % 32; 
 
-        if (last_matrix_index == -1) {
-            last_matrix_index = current_matrix_index;
-        }
+            if (last_matrix_index == -1) {
+                last_matrix_index = current_matrix_index;
+            }
 
-        if (current_matrix_index != last_matrix_index) {
-            
-            consumption_matrix[last_matrix_index] = (int)real_consumption;
-            export_matrix[last_matrix_index] = (int)real_export;
-            net_matrix[last_matrix_index] = (int)real_consumption - (int)real_export;
+            if (current_matrix_index != last_matrix_index) {
+                consumption_matrix[last_matrix_index] = (int)real_consumption;
+                export_matrix[last_matrix_index] = (int)real_export;
+                net_matrix[last_matrix_index] = (int)real_consumption - (int)real_export;
 
-            real_export = 0;
-            real_consumption = 0;
-            net_energy = 0;
-            energyCounterMinutesIndex = 0;
-            lastsync = 0; 
-            
-            consumption_matrix[current_matrix_index] = 0;
-            export_matrix[current_matrix_index] = 0;
-            net_matrix[current_matrix_index] = 0;
+                real_export = 0;
+                real_consumption = 0;
+                net_energy = 0;
+                energyCounterMinutesIndex = 0;
+                lastsync = 0; 
+                
+                consumption_matrix[current_matrix_index] = 0;
+                export_matrix[current_matrix_index] = 0;
+                net_matrix[current_matrix_index] = 0;
 
-            last_matrix_index = current_matrix_index;
-            savetoflash = 1;
+                last_matrix_index = current_matrix_index;
+                savetoflash = 1;
+            }
         }
 
         if (!(check_time == old_time))
@@ -447,86 +448,93 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         // ======================================================================================================
         // THE 30-SECOND CALCULATION LOOP (Target -20Wh, Asymmetric Control, Split Red/Green rendering)
         // ======================================================================================================
-        static portTickType last_control_tick = 0;
-        portTickType current_tick = xTaskGetTickCount();
-        
-        if ((current_tick - last_control_tick) >= (30000 / portTICK_PERIOD_MS) || last_control_tick == 0) 
         {
-            last_control_tick = current_tick;
+            static portTickType last_control_tick = 0;
+            portTickType current_tick = xTaskGetTickCount();
             
-            int min_in_block = check_time % 15; 
-            int check_time_estimate_mins = 15 - min_in_block; 
-            if (check_time_estimate_mins <= 0) check_time_estimate_mins = 1;
-            
-            // 1. Predict total Wh accumulated by the end of the 15-minute period
-            estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
-            
-            // 2. Extrapolate immediate equivalent energy
-            if (min_in_block > 0) {
-                net_energy_equivalent = (int)((float)net_energy * (15.0f / min_in_block));                                               
-            } else {
-                net_energy_equivalent = (int)net_energy; 
-            }
+            if ((current_tick - last_control_tick) >= (30000 / portTICK_PERIOD_MS) || last_control_tick == 0) 
+            {
+                int min_in_block;
+                int check_time_estimate_mins;
+                char dgr_cmd[64];
+                char fallback_cmd[64];
 
-            // 3. Update Base Solar State
-            if (net_energy < -30.0f) {
-                solar_available = 1;
-            } else if (net_energy > 10.0f) {
-                solar_available = 0;
-            }
-
-            // ====================================================================
-            // ISOLATED LOGIC BLOCK (ONLY RUNS IN AUTO MODE)
-            // ====================================================================
-            if (charger_c_auto == 1) {
-                static int solar_excess = 0; 
-                static int persistent_state = 0; // Tracks 0, 5, or 18+
-
-                if (solar_available == 0) {
-                    if (net_energy < -10.0f) {
-                        persistent_state = 0;
-                    } else if (net_energy > 5.0f) {
-                        persistent_state = 5;
-                    }
-                    solar_excess = 0; // Zero the accumulator for when solar returns
-                } 
-                else {
-                    // solar_available == 1 -> Charger Floor is 18
-                    if (net_energy > -20.0f) {
-                        // Instant safety drop if we drift above the target threshold
-                        solar_excess = 0; 
-                    } else {
-                        // Calculate Watts needed to hit the -20Wh target
-                        int excess_wh = abs(estimated_energy_period + 20); 
-                        int error_w = (excess_wh * 60) / check_time_estimate_mins; 
-                        
-                        // Increase by 50% of the required adjustment in PWM units (100% = 1000W)
-                        int pwm_step = (error_w / 10) / 2;
-                        if (pwm_step < 1) pwm_step = 1; // Enforce movement
-                        
-                        solar_excess += pwm_step;
-                    }
-                    
-                    // Enforce absolute constraints
-                    if (solar_excess > 82) solar_excess = 82;
-                    if (solar_excess < 0) solar_excess = 0;
-                    
-                    persistent_state = 18 + solar_excess;
-                }
+                last_control_tick = current_tick;
                 
-                dump_load_relay[5] = persistent_state;
-            } // END OF AUTO MODE BLOCK
+                min_in_block = check_time % 15; 
+                check_time_estimate_mins = 15 - min_in_block; 
+                if (check_time_estimate_mins <= 0) check_time_estimate_mins = 1;
+                
+                // 1. Predict total Wh accumulated by the end of the 15-minute period
+                estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
+                
+                // 2. Extrapolate immediate equivalent energy
+                if (min_in_block > 0) {
+                    net_energy_equivalent = (int)((float)net_energy * (15.0f / min_in_block));                                               
+                } else {
+                    net_energy_equivalent = (int)net_energy; 
+                }
 
-            // ====================================================================
-            // UNCONDITIONAL SEND: Runs every 30-seconds regardless of Auto/Manual
-            // ====================================================================
-            char dgr_cmd[64];
-            snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
-            CMD_ExecuteCommand(dgr_cmd, 0);
+                // 3. Update Base Solar State
+                if (net_energy < -30.0f) {
+                    solar_available = 1;
+                } else if (net_energy > 10.0f) {
+                    solar_available = 0;
+                }
 
-            char fallback_cmd[64];
-            snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
-            CMD_ExecuteCommand(fallback_cmd, 0);
+                // ====================================================================
+                // ISOLATED LOGIC BLOCK (ONLY RUNS IN AUTO MODE)
+                // ====================================================================
+                if (charger_c_auto == 1) {
+                    static int solar_excess = 0; 
+                    static int persistent_state = 0; // Tracks 0, 5, or 18+
+
+                    if (solar_available == 0) {
+                        if (net_energy < -10.0f) {
+                            persistent_state = 0;
+                        } else if (net_energy > 5.0f) {
+                            persistent_state = 5;
+                        }
+                        solar_excess = 0; // Zero the accumulator for when solar returns
+                    } 
+                    else {
+                        // solar_available == 1 -> Charger Floor is 18
+                        if (net_energy > -20.0f) {
+                            // Instant safety drop if we drift above the target threshold
+                            solar_excess = 0; 
+                        } else {
+                            int excess_wh, error_w, pwm_step;
+
+                            // Calculate Watts needed to hit the -20Wh target
+                            excess_wh = abs(estimated_energy_period + 20); 
+                            error_w = (excess_wh * 60) / check_time_estimate_mins; 
+                            
+                            // Increase by 50% of the required adjustment in PWM units (100% = 1000W)
+                            pwm_step = (error_w / 10) / 2;
+                            if (pwm_step < 1) pwm_step = 1; // Enforce movement
+                            
+                            solar_excess += pwm_step;
+                        }
+                        
+                        // Enforce absolute constraints
+                        if (solar_excess > 82) solar_excess = 82;
+                        if (solar_excess < 0) solar_excess = 0;
+                        
+                        persistent_state = 18 + solar_excess;
+                    }
+                    
+                    dump_load_relay[5] = persistent_state;
+                } // END OF AUTO MODE BLOCK
+
+                // ====================================================================
+                // UNCONDITIONAL SEND: Runs every 30-seconds regardless of Auto/Manual
+                // ====================================================================
+                snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
+                CMD_ExecuteCommand(dgr_cmd, 0);
+
+                snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
+                CMD_ExecuteCommand(fallback_cmd, 0);
+            }
         }
     } 
 
@@ -625,8 +633,8 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         {
             if (energyCounterMinutes != NULL) {
                 sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading = 0;
-                for(int i = 0; i < energyCounterSampleCount; i++) {
-                    sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading  += energyCounterMinutes[i];
+                for(int j = 0; j < energyCounterSampleCount; j++) {
+                    sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading  += energyCounterMinutes[j];
                 }
             }
             if ((energyCounterStatsJSONEnable == true) && (MQTT_IsReady() == true))
@@ -659,9 +667,9 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 if (energyCounterMinutes != NULL)
                 {
                     stats = cJSON_CreateArray();
-                    for(i = 0; i < energyCounterSampleCount; i++)
+                    for(int k = 0; k < energyCounterSampleCount; k++)
                     {
-                        cJSON_AddItemToArray(stats, cJSON_CreateNumber(energyCounterMinutes[i]));
+                        cJSON_AddItemToArray(stats, cJSON_CreateNumber(energyCounterMinutes[k]));
                     }
                     cJSON_AddItemToObject(root, "consumption_samples", stats);
                 }
@@ -669,9 +677,9 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 if(NTP_IsTimeSynced() == true)
                 {
                     stats = cJSON_CreateArray();
-                    for(i = OBK_CONSUMPTION__DAILY_FIRST; i <= OBK_CONSUMPTION__DAILY_LAST; i++)
+                    for(int m = OBK_CONSUMPTION__DAILY_FIRST; m <= OBK_CONSUMPTION__DAILY_LAST; m++)
                     {
-                        cJSON_AddItemToArray(stats, cJSON_CreateNumber(DRV_GetReading(i)));
+                        cJSON_AddItemToArray(stats, cJSON_CreateNumber(DRV_GetReading(m)));
                     }
                     cJSON_AddItemToObject(root, "consumption_daily", stats);
                 }
@@ -686,9 +694,9 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
 
             if (energyCounterMinutes != NULL)
             {
-                for (i=energyCounterSampleCount-1;i>0;i--)
+                for (int n=energyCounterSampleCount-1; n>0; n--)
                 {
-                    energyCounterMinutes[i] = energyCounterMinutes[i-1];   
+                    energyCounterMinutes[n] = energyCounterMinutes[n-1];   
                 }
                 energyCounterMinutes[0] = 0.0;
             }
@@ -707,9 +715,9 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
               (sensors[i].noChangeFrame >= changeDoNotSendMinFrames)) ||
             (sensors[i].noChangeFrame >= changeSendAlwaysFrames) )
         {
+            enum EventCode eventChangeCode;
             sensors[i].noChangeFrame = 0;
 
-            enum EventCode eventChangeCode;
             switch (i) {
             case OBK_VOLTAGE:                               eventChangeCode = CMD_EVENT_CHANGE_VOLTAGE;                       break;
             case OBK_CURRENT:                               eventChangeCode = CMD_EVENT_CHANGE_CURRENT;                       break;
@@ -722,11 +730,13 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             switch (eventChangeCode) {
             case CMD_EVENT_NONE:
                 break;
-            case CMD_EVENT_CHANGE_CURRENT: ;
+            case CMD_EVENT_CHANGE_CURRENT: 
+            {
                 int prev_mA = sensors[i].lastSentValue * 1000;
                 int now_mA = sensors[i].lastReading * 1000;
                 EventHandlers_ProcessVariableChange_Integer(eventChangeCode, prev_mA,now_mA);
                 break;
+            }
             default:
                 EventHandlers_ProcessVariableChange_Integer(eventChangeCode, sensors[i].lastSentValue, sensors[i].lastReading);
                 break;
@@ -853,6 +863,7 @@ energySensorNames_t* DRV_GetEnergySensorNames(energySensor_t type)
 // NEW JSON API ENDPOINT (Side-by-Side Dual-Bar SVG)
 // ====================================================================
 int http_fn_api_dash(http_request_t *request) {
+    int dmp;
     http_setup(request, "application/json");
     poststr(request, "{");
 
@@ -864,7 +875,7 @@ int http_fn_api_dash(http_request_t *request) {
     hprintf255(request, "\"est\":\"%i Wh\",", estimated_energy_period);
     hprintf255(request, "\"est_cls\":\"%s\",", (estimated_energy_period < 0) ? "c-exp" : "c-imp");
 
-    int dmp = dump_load_relay[5];
+    dmp = dump_load_relay[5];
     if (dmp == 0) {
         poststr(request, "\"chg_lbl\":\"Charger\",\"chg_v\":\"Idle\",\"chg_c\":\"#888\",");
     } else if (dmp == 5) {
@@ -877,20 +888,22 @@ int http_fn_api_dash(http_request_t *request) {
     hprintf255(request, "\"clk\":\"%02d:%02d\"", NTP_GetHour(), NTP_GetMinute()); 
 
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced()) {
-        poststr(request, ","); 
         unsigned int minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
+        int p_i;
 
+        poststr(request, ","); 
         poststr(request, "\"sens\":\"");
-        for (int i = (OBK__FIRST); i <= (OBK_CONSUMPTION__DAILY_LAST); i++) {
-            if (i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))) { i++; }
-            if (i <= OBK__NUM_MEASUREMENTS || NTP_IsTimeSynced()) {
-                if (i == OBK_VOLTAGE || i == OBK_POWER || i == OBK_CURRENT || i == OBK_POWER_APPARENT || i == OBK_POWER_REACTIVE) continue;
-                if ((i == OBK_CONSUMPTION_TOTAL) || (i == OBK_GENERATION_TOTAL)) {
+        
+        for (p_i = (OBK__FIRST); p_i <= (OBK_CONSUMPTION__DAILY_LAST); p_i++) {
+            if (p_i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))) { p_i++; }
+            if (p_i <= OBK__NUM_MEASUREMENTS || NTP_IsTimeSynced()) {
+                if (p_i == OBK_VOLTAGE || p_i == OBK_POWER || p_i == OBK_CURRENT || p_i == OBK_POWER_APPARENT || p_i == OBK_POWER_REACTIVE) continue;
+                if ((p_i == OBK_CONSUMPTION_TOTAL) || (p_i == OBK_GENERATION_TOTAL)) {
                     hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f kWh</td></tr>",
-                               sensors[i].names.name_friendly, sensors[i].rounding_decimals, (0.001*sensors[i].lastReading));
+                               sensors[p_i].names.name_friendly, sensors[p_i].rounding_decimals, (0.001*sensors[p_i].lastReading));
                 } else {
                     hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f %s</td></tr>",
-                               sensors[i].names.name_friendly, sensors[i].rounding_decimals, sensors[i].lastReading, sensors[i].names.units);
+                               sensors[p_i].names.name_friendly, sensors[p_i].rounding_decimals, sensors[p_i].lastReading, sensors[p_i].names.units);
                 }
             }
         }
@@ -898,40 +911,43 @@ int http_fn_api_dash(http_request_t *request) {
 
         poststr(request, "\"graph\":\"");
         for (int i = 23; i >= 0; i--) {
-            int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-            int c_index = interval_of_day % 32;
-            int cons = consumption_matrix[c_index];
-            int exp = export_matrix[c_index];
-            int net = net_matrix[c_index];
+            int interval_of_day, c_index, cons, exp, net, x, h_imp, h_exp, h_max;
+            
+            interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
+            c_index = interval_of_day % 32;
+            cons = consumption_matrix[c_index];
+            exp = export_matrix[c_index];
+            net = net_matrix[c_index];
             if (i == 0) { 
                 cons += (int)real_consumption;
                 exp += (int)real_export;
                 net += (int)(real_consumption - real_export); 
             }
             
-            int x = (23 - i) * 21 + 2; 
-            int h_imp = abs(cons) / 2;
-            int h_exp = abs(exp) / 2;
+            x = (23 - i) * 21 + 2; 
+            h_imp = abs(cons) / 2;
+            h_exp = abs(exp) / 2;
             
             if (h_imp > 120) h_imp = 120;
             if (h_exp > 120) h_exp = 120;
             
-            int h_max = (h_imp > h_exp) ? h_imp : h_exp;
+            h_max = (h_imp > h_exp) ? h_imp : h_exp;
             
             if (net != 0 || i == 0) {
+                int text_y;
+                const char* anchor;
+                
                 if (net >= 0) {
-                    // Both bars point upwards
                     if (h_imp > 0) hprintf255(request, "<rect x='%d' y='%d' width='8' height='%d' fill='#f44336' rx='1'/>", x, 130 - h_imp, h_imp);
                     if (h_exp > 0) hprintf255(request, "<rect x='%d' y='%d' width='8' height='%d' fill='#4caf50' rx='1'/>", x + 9, 130 - h_exp, h_exp);
                 } 
                 else {
-                    // Both bars point downwards
                     if (h_imp > 0) hprintf255(request, "<rect x='%d' y='130' width='8' height='%d' fill='#f44336' rx='1'/>", x, h_imp);
                     if (h_exp > 0) hprintf255(request, "<rect x='%d' y='130' width='8' height='%d' fill='#4caf50' rx='1'/>", x + 9, h_exp);
                 }
                 
-                int text_y = (net >= 0) ? (130 - h_max - 5) : (130 + h_max + 5);
-                const char* anchor = (net >= 0) ? "start" : "end";
+                text_y = (net >= 0) ? (130 - h_max - 5) : (130 + h_max + 5);
+                anchor = (net >= 0) ? "start" : "end";
                 hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='14' font-family='sans-serif' text-anchor='%s' transform='rotate(-90 %d %d)' dy='5'>%d</text>",
                            x + 8, text_y, anchor, x + 8, text_y, net);
             } else {
@@ -942,6 +958,136 @@ int http_fn_api_dash(http_request_t *request) {
     }
     
     poststr(request, "}");
+    poststr(request, NULL);
+    return 0;
+}
+
+// ====================================================================
+// NEW STANDALONE DASHBOARD (HTML SHELL)
+// ====================================================================
+int http_fn_custom_dash(http_request_t *request) {
+    http_setup(request, "text/html");
+
+    poststr(request, 
+        "<!DOCTYPE html><html><head>"
+        "<meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
+        "<title>Solar Dashboard</title>"
+        "<style>"
+        "body { margin: 0; background-color: #000; }"
+        "#my-dash { width: 100%; min-height: 100vh; background-color: #121212; padding: 10px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; }"
+        ".top-stats { display: flex; justify-content: space-between; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; }"
+        ".top-stats div { display: flex; flex-direction: column; justify-content: center; margin: 0 2px; }"
+        ".top-stats label { color: #888; font-size: 25px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }"
+        ".top-stats b { font-size: 45px; font-weight: 600; }"
+        ".c-exp { color: #4caf50; }"
+        ".c-imp { color: #f44336; }"
+        ".dash-row { display: flex; flex-direction: row; margin-top: 15px; height: 380px; align-items: stretch; }" 
+        ".left-col { flex: 0 0 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; }"
+        ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }"
+        ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
+        ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }"
+        ".ctrl-row { display: flex; flex-direction: row; margin-top: 15px; align-items: stretch; height: 100px; }"
+        ".ctrl-col { flex: 1; background: #222; padding: 15px; border-radius: 8px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; margin-right: 15px; box-sizing: border-box; gap: 10px; }"
+        ".btn-tgl { flex: 1; height: 100%; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; }"
+        ".clk-col { flex: 0 0 340px; display: flex; justify-content: center; align-items: center; background: #222; border-radius: 8px; overflow: hidden; }"
+        ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; }"
+        "</style></head><body>"
+    );
+
+    poststr(request, 
+        "<div id='my-dash'>"
+        "<div class='close-btn' onclick='window.location.href=\"/index\"'>✕</div>"
+        
+        "<div class='top-stats'>"
+        "<div><label>Voltage & Current</label><b id='d-va'>--</b></div>"
+        "<div><label>Power</label><b id='d-pwr'>--</b></div>"
+        "<div><label>Now / 15min Est.</label><b><span id='d-bal'>--</span> / <span id='d-est'>--</span></b></div>"
+        "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v'>--</b></div>"
+        "</div>"
+    );
+
+    if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) {
+        poststr(request, 
+            "<div class='dash-row'>"
+            "<div class='left-col'>"
+            "<div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>"
+            "<table class='sens-tbl'><tbody id='d-sens-body'></tbody></table>"
+            "</div>"
+            
+            "<div class='graph-col'>"
+            "<svg viewBox='0 0 512 260' preserveAspectRatio='none' style='width:100%; height:100%; background:transparent;'>"
+            "<line x1='0' y1='130' x2='512' y2='130' stroke='#333' stroke-width='1'/>"
+            "<g id='d-graph-data'></g>"
+            "</svg></div>"
+            "</div>"
+
+            "<div class='ctrl-row'>"
+            "<div class='ctrl-col'>"
+            "<button id='m-btn' class='btn-tgl' onclick='tm()'>--</button>"
+            "<button id='inv-btn' class='btn-tgl' onclick='t_inv()'>INVERTER</button>"
+            "<button id='chg-btn' class='btn-tgl' onclick='t_chg()'>CHARGER</button>"
+            "<button id='chg-30-btn' class='btn-tgl' onclick='upd(30)'>30%</button>"
+            "<button id='chg-80-btn' class='btn-tgl' onclick='upd(80)'>80%</button>"
+            "</div>"
+
+            "<div class='clk-col'>"
+            "<div id='d-clk' style='font-size:100px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>--:--</div>"
+            "</div></div>"
+        );
+    }
+    poststr(request, "</div>"); 
+
+    poststr(request, "<script>");
+    poststr(request, 
+        "var dmp=0, auto=0;"
+        "function upd(v){if(auto===1)return; dmp=parseInt(v, 10);var xhr=new XMLHttpRequest();"
+        "xhr.open('GET','/cm?cmnd=SetDumpLoad%20'+dmp,true); xhr.send(); btnColor();}"
+        "function t_inv(){upd(dmp===5?0:5);}"
+        "function t_chg(){upd(dmp>=10?0:18);}"
+        "function tm(){auto=(auto===1)?0:1; var xhr=new XMLHttpRequest();"
+        "xhr.open('GET','/cm?cmnd=ToggleAuto',true); xhr.send(); btnColor();}"
+        
+        "function btnColor(){"
+        "var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),c3=document.getElementById('chg-30-btn'),c8=document.getElementById('chg-80-btn'),m=document.getElementById('m-btn');"
+        "if(i) i.style.background=(dmp===5)?'#4caf50':'#555';"
+        "if(c) c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#ffeb3b':'#555');"
+        "if(c3) c3.style.background=(dmp>=30)?'#4caf50':'#555';"
+        "if(c8) c8.style.background=(dmp>=80)?'#4caf50':'#555';"
+        "if(m){ m.innerText=(auto===1)?'AUTO':'MANUAL'; m.style.background=(auto===1)?'#0099FF':'#f44336'; }"
+        "}"
+        
+        "function refresh(){"
+        "var xhr=new XMLHttpRequest();"
+        "xhr.onreadystatechange=function(){"
+        "if(xhr.readyState===4 && xhr.status===200){"
+        "try {"
+        "var d=JSON.parse(xhr.responseText);"
+        "document.getElementById('d-va').innerText=d.va;"
+        "document.getElementById('d-pwr').innerText=d.pwr;"
+        "document.getElementById('d-pwr').className=d.pwr_cls;"
+        "document.getElementById('d-bal').innerText=d.bal;"
+        "document.getElementById('d-bal').className=d.bal_cls;"
+        "document.getElementById('d-est').innerText=d.est;"
+        "document.getElementById('d-est').className=d.est_cls;"
+        "document.getElementById('c-lbl').innerText=d.chg_lbl;"
+        "document.getElementById('c-v').innerText=d.chg_v;"
+        "document.getElementById('c-v').style.color=d.chg_c;"
+        "document.getElementById('d-clk').innerText=d.clk;"
+        "dmp=d.dmp; auto=d.auto; btnColor();"
+        "if(d.sens){"
+        "document.getElementById('d-sens-body').innerHTML=d.sens;"
+        "document.getElementById('d-graph-data').innerHTML=d.graph;"
+        "}"
+        "} catch(e) { console.error('JSON parse error: ', e); }"
+        "}"
+        "};"
+        "xhr.open('GET','/api_dash?t='+Date.now(),true);"
+        "xhr.send();"
+        "}"
+        "refresh(); setInterval(refresh, 10000);"
+    );
+    poststr(request, "</script></body></html>");
     poststr(request, NULL);
     return 0;
 }
