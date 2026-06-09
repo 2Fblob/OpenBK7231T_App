@@ -213,7 +213,7 @@ commandResult_t BL09XX_SetDumpLoad(const void *context, const char *cmd, const c
     
     if(args && *args) {
         //char dgr_cmd[64];
-        //char fallback_cmd[64];
+        char fallback_cmd[64];
 
         dump_load_relay[5] = atoi(args);
         
