@@ -229,8 +229,21 @@ commandResult_t BL09XX_SetDumpLoad(const void *context, const char *cmd, const c
 commandResult_t BL09XX_SetTargetPower(const void *context, const char *cmd, const char *args, int cmdFlags)
 {
     if(args && *args) {
-        target_power = atoi(args);
-        if (charger_c_auto == 0) dump_load_relay[5] = target_power;
+        int val = atoi(args);
+        
+        // Ensure values fall into logic limits
+        if (val > 5 && val < 18) val = 18;
+        if (val > 100) val = 100;
+        
+        target_power = val;
+        
+        // Instant execution if manual
+        if (charger_c_auto == 0) {
+            char fallback_cmd[64];
+            dump_load_relay[5] = target_power;
+            snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
+            CMD_ExecuteCommand(fallback_cmd, 0);
+        }
     }
     return CMD_RES_OK;
 }
@@ -469,95 +482,88 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         net_energy = (real_consumption - real_export);                               
 
         // ======================================================================================================
-        // THE 30-SECOND CALCULATION LOOP (Target Export, Asymmetric Control)
+        // CONTROL LOGIC (Target Export, Asymmetric Control)
         // ======================================================================================================
-        {
-            static portTickType last_control_tick = 0;
-            portTickType current_tick = xTaskGetTickCount();
-            
-            if ((current_tick - last_control_tick) >= (30000 / portTICK_PERIOD_MS) || last_control_tick == 0) 
-            {
-                int min_in_block;
-                int check_time_estimate_mins;
-                char dgr_cmd[64];
-                char fallback_cmd[64];
-
-                last_control_tick = current_tick;
-                
-                min_in_block = check_time % 15; 
-                check_time_estimate_mins = 15 - min_in_block; 
-                if (check_time_estimate_mins <= 0) check_time_estimate_mins = 1;
-                
-                // 1. Predict total Wh accumulated by the end of the 15-minute period
-                estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
-                
-                // 2. Extrapolate immediate equivalent energy
-                if (min_in_block > 0) {
-                    net_energy_equivalent = (int)((float)net_energy * (15.0f / min_in_block));                                               
-                } else {
-                    net_energy_equivalent = (int)net_energy; 
-                }
-
-                // 3. Update Base Solar State
-                if (net_energy < -((float)target_export + 10.0f)) {
-                    solar_available = 1;
-                } else if (net_energy > 10.0f) {
-                    solar_available = 0;
-                }
-
-                // ====================================================================
-                // ISOLATED LOGIC BLOCK (AUTO / MANUAL)
-                // ====================================================================
-                if (charger_c_auto == 1) {
-                    static int solar_excess = 0; 
-                    static int persistent_state = 0; // Tracks 0, 5, or 18+
-
-                    if (solar_available == 0) {
-                        if (net_energy < -10.0f) {
-                            persistent_state = 0;
-                        } else if (net_energy > 5.0f) {
-                            persistent_state = 5;
-                        }
-                        solar_excess = 0; 
-                    } 
-                    else {
-                        if (net_energy > -((float)target_export)) {
-                            solar_excess = 0; 
-                        } else {
-                            int excess_wh, error_w, pwm_step;
-
-                            // Calculate Watts needed to hit the target
-                            excess_wh = abs(estimated_energy_period + target_export); 
-                            error_w = (excess_wh * 60) / check_time_estimate_mins; 
-                            
-                            // Increase by 50% of the required adjustment in PWM units
-                            pwm_step = (error_w / 10) / 2;
-                            if (pwm_step < 1) pwm_step = 1; // Enforce movement
-                            
-                            solar_excess += pwm_step;
-                        }
-                        
-                        // Enforce absolute constraints
-                        if (solar_excess > 82) solar_excess = 82;
-                        if (solar_excess < 0) solar_excess = 0;
-                        
-                        persistent_state = 18 + solar_excess;
-                        if (persistent_state > target_power) persistent_state = target_power;
-                    }
-                    
-                    dump_load_relay[5] = persistent_state;
-                } else {
-                    dump_load_relay[5] = target_power;
-                } // END OF AUTO/MANUAL BLOCK
-
-                // UNCONDITIONAL SEND: Runs every 30-seconds regardless of Auto/Manual
-                snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
-                CMD_ExecuteCommand(dgr_cmd, 0);
-
-                snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
-                CMD_ExecuteCommand(fallback_cmd, 0);
-            }
+        int min_in_block;
+        int check_time_estimate_mins;
+        char dgr_cmd[64];
+        char fallback_cmd[64];
+        
+        min_in_block = check_time % 15; 
+        check_time_estimate_mins = 15 - min_in_block; 
+        if (check_time_estimate_mins <= 0) check_time_estimate_mins = 1;
+        
+        // 1. Predict total Wh accumulated by the end of the 15-minute period
+        estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
+        
+        // 2. Extrapolate immediate equivalent energy
+        if (min_in_block > 0) {
+            net_energy_equivalent = (int)((float)net_energy * (15.0f / min_in_block));                                               
+        } else {
+            net_energy_equivalent = (int)net_energy; 
         }
+
+        // 3. Update Base Solar State
+        if (net_energy < -((float)target_export + 10.0f)) {
+            solar_available = 1;
+        } else if (net_energy > 10.0f) {
+            solar_available = 0;
+        }
+
+        // ====================================================================
+        // ISOLATED LOGIC BLOCK (AUTO / MANUAL)
+        // ====================================================================
+        if (charger_c_auto == 1) {
+            static int solar_excess = 0; 
+            static int persistent_state = 0; // Tracks 0, 5, or 18+
+
+            if (solar_available == 0) {
+                if (net_energy < -10.0f) {
+                    persistent_state = 0;
+                } else if (net_energy > 5.0f) {
+                    persistent_state = 5;
+                }
+                solar_excess = 0; 
+            } 
+            else {
+                if (net_energy > -((float)target_export)) {
+                    solar_excess = 0; 
+                } else {
+                    int excess_wh, error_w, pwm_step;
+
+                    // Calculate Watts needed to hit the target
+                    excess_wh = abs(estimated_energy_period + target_export); 
+                    error_w = (excess_wh * 60) / check_time_estimate_mins; 
+                    
+                    // Increase by 50% of the required adjustment in PWM units
+                    pwm_step = (error_w / 10) / 2;
+                    if (pwm_step < 1) pwm_step = 1; // Enforce movement
+                    
+                    solar_excess += pwm_step;
+                }
+                
+                // Enforce absolute constraints
+                if (solar_excess > 82) solar_excess = 82;
+                if (solar_excess < 0) solar_excess = 0;
+                
+                persistent_state = 18 + solar_excess;
+                
+                // Fail-safe: if left in 0/5 manual before going auto, treat max as 100
+                int active_max = target_power;
+                if (active_max < 18) active_max = 100;
+                
+                if (persistent_state > active_max) persistent_state = active_max;
+            }
+            
+            dump_load_relay[5] = persistent_state;
+
+            // Send Commands (Only in AUTO mode via process loop, MANUAL handles itself instantly)
+            snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
+            CMD_ExecuteCommand(dgr_cmd, 0);
+
+            snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
+            CMD_ExecuteCommand(fallback_cmd, 0);
+        } // END OF AUTO BLOCK
     } 
 
     if (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) 
@@ -1064,12 +1070,10 @@ int http_fn_custom_dash(http_request_t *request) {
             "<button id='m-btn' class='btn-tgl' onclick='tm()'>--</button>"
             "<button id='inv-btn' class='btn-tgl' onclick='t_inv()'>INVERTER</button>"
             "<button id='chg-btn' class='btn-tgl' onclick='t_chg()'>CHARGER</button>"
-            "<button id='chg-30-btn' class='btn-tgl' onclick='upd(30)'>30%</button>"
-            "<button id='chg-80-btn' class='btn-tgl' onclick='upd(80)'>80%</button>"
             "</div>"
             "<div class='sld-row'>"
             "<div style='flex:1;'><label style='display:block; font-size:12px; color:#888; margin-bottom:5px;'>MAX POWER / MANUAL (<span id='lbl-pwr'></span>%)</label>"
-            "<input type='range' id='sld-pwr' min='0' max='100' value='100' onchange='s_pwr(this.value)' style='width:100%;'></div>"
+            "<input type='range' id='sld-pwr' min='18' max='100' value='100' onchange='s_pwr(this.value)' style='width:100%;'></div>"
             "<div style='flex:1;'><label style='display:block; font-size:12px; color:#888; margin-bottom:5px;'>TARGET EXPORT (<span id='lbl-exp'></span> Wh)</label>"
             "<input type='range' id='sld-exp' min='10' max='100' value='20' onchange='s_exp(this.value)' style='width:100%;'></div>"
             "</div></div>"
@@ -1086,17 +1090,15 @@ int http_fn_custom_dash(http_request_t *request) {
         "var dmp=0, auto=0;"
         "function s_pwr(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetPower%20'+v,true); xhr.send(); document.getElementById('lbl-pwr').innerText=v; }"
         "function s_exp(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetExport%20'+v,true); xhr.send(); document.getElementById('lbl-exp').innerText=v; }"
-        "function upd(v){if(auto===1)return; document.getElementById('sld-pwr').value=v; s_pwr(v); dmp=parseInt(v, 10); btnColor();}"
+        "function upd(v){if(auto===1)return; if(v>=18){document.getElementById('sld-pwr').value=v;} s_pwr(v); dmp=parseInt(v, 10); btnColor();}"
         "function t_inv(){upd(dmp===5?0:5);}"
         "function t_chg(){upd(dmp>=10?0:18);}"
         "function tm(){auto=(auto===1)?0:1; var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=ToggleAuto',true); xhr.send(); btnColor();}"
         
         "function btnColor(){"
-        "var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),c3=document.getElementById('chg-30-btn'),c8=document.getElementById('chg-80-btn'),m=document.getElementById('m-btn');"
+        "var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),m=document.getElementById('m-btn');"
         "if(i) i.style.background=(dmp===5)?'#4caf50':'#555';"
         "if(c) c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#ffeb3b':'#555');"
-        "if(c3) c3.style.background=(dmp>=30)?'#4caf50':'#555';"
-        "if(c8) c8.style.background=(dmp>=80)?'#4caf50':'#555';"
         "if(m){ m.innerText=(auto===1)?'AUTO':'MANUAL'; m.style.background=(auto===1)?'#0099FF':'#f44336'; }"
         "}"
         
@@ -1117,10 +1119,8 @@ int http_fn_custom_dash(http_request_t *request) {
         "document.getElementById('c-v').innerText=d.chg_v;"
         "document.getElementById('c-v').style.color=d.chg_c;"
         "document.getElementById('d-clk').innerText=d.clk;"
-        "document.getElementById('sld-pwr').value=d.t_pwr;"
-        "document.getElementById('lbl-pwr').innerText=d.t_pwr;"
-        "document.getElementById('sld-exp').value=d.t_exp;"
-        "document.getElementById('lbl-exp').innerText=d.t_exp;"
+        "if(d.t_pwr>=18){document.getElementById('sld-pwr').value=d.t_pwr;} document.getElementById('lbl-pwr').innerText=d.t_pwr;"
+        "document.getElementById('sld-exp').value=d.t_exp; document.getElementById('lbl-exp').innerText=d.t_exp;"
         "dmp=d.dmp; auto=d.auto; btnColor();"
         "if(d.sens){"
         "document.getElementById('d-sens-body').innerHTML=d.sens;"
