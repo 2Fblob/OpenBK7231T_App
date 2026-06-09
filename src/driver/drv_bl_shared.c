@@ -936,20 +936,24 @@ int http_fn_api_dash(http_request_t *request) {
             if (net != 0 || i == 0) {
                 int text_y;
                 const char* anchor;
+                char loop_buffer[256] = {0}; 
+                int offset = 0;
                 
                 if (net >= 0) {
-                    if (h_imp > 0) hprintf255(request, "<rect x='%d' y='%d' width='8' height='%d' fill='#f44336' rx='1'/>", x, 130 - h_imp, h_imp);
-                    if (h_exp > 0) hprintf255(request, "<rect x='%d' y='%d' width='8' height='%d' fill='#4caf50' rx='1'/>", x + 9, 130 - h_exp, h_exp);
+                    if (h_imp > 0) offset += snprintf(loop_buffer + offset, sizeof(loop_buffer) - offset, "<rect x='%d' y='%d' width='8' height='%d' fill='#f44336' rx='1'/>", x, 130 - h_imp, h_imp);
+                    if (h_exp > 0) offset += snprintf(loop_buffer + offset, sizeof(loop_buffer) - offset, "<rect x='%d' y='%d' width='8' height='%d' fill='#4caf50' rx='1'/>", x + 9, 130 - h_exp, h_exp);
                 } 
                 else {
-                    if (h_imp > 0) hprintf255(request, "<rect x='%d' y='130' width='8' height='%d' fill='#f44336' rx='1'/>", x, h_imp);
-                    if (h_exp > 0) hprintf255(request, "<rect x='%d' y='130' width='8' height='%d' fill='#4caf50' rx='1'/>", x + 9, h_exp);
+                    if (h_imp > 0) offset += snprintf(loop_buffer + offset, sizeof(loop_buffer) - offset, "<rect x='%d' y='130' width='8' height='%d' fill='#f44336' rx='1'/>", x, h_imp);
+                    if (h_exp > 0) offset += snprintf(loop_buffer + offset, sizeof(loop_buffer) - offset, "<rect x='%d' y='130' width='8' height='%d' fill='#4caf50' rx='1'/>", x + 9, h_exp);
                 }
                 
                 text_y = (net >= 0) ? (130 - h_max - 5) : (130 + h_max + 5);
                 anchor = (net >= 0) ? "start" : "end";
-                hprintf255(request, "<text x='%d' y='%d' fill='#ddd' font-size='14' font-family='sans-serif' text-anchor='%s' transform='rotate(-90 %d %d)' dy='5'>%d</text>",
+                snprintf(loop_buffer + offset, sizeof(loop_buffer) - offset, "<text x='%d' y='%d' fill='#ddd' font-size='14' font-family='sans-serif' text-anchor='%s' transform='rotate(-90 %d %d)' dy='5'>%d</text>",
                            x + 8, text_y, anchor, x + 8, text_y, net);
+                           
+                poststr(request, loop_buffer);
             } else {
                 hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='14' font-family='sans-serif' text-anchor='start' transform='rotate(-90 %d 135)' dy='5'>0</text>", x + 8, x + 8);
             }
