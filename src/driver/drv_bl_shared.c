@@ -27,6 +27,10 @@ int output_index = 0;
 
 int estimated_energy_period = 0;
 
+// NEW GLOBAL TARGETS
+static int target_export = 20;
+static int target_power = 100;
+
 // Initialize temp variables
 int total_net_consumption = 0;
 int total_net_export = 0;
@@ -212,16 +216,29 @@ commandResult_t BL09XX_SetDumpLoad(const void *context, const char *cmd, const c
     if (charger_c_auto == 1) return CMD_RES_OK; 
     
     if(args && *args) {
-        //char dgr_cmd[64];
         char fallback_cmd[64];
 
         dump_load_relay[5] = atoi(args);
         
-        //snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
-        //CMD_ExecuteCommand(dgr_cmd, 0);
-
         snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
         CMD_ExecuteCommand(fallback_cmd, 0);
+    }
+    return CMD_RES_OK;
+}
+
+commandResult_t BL09XX_SetTargetPower(const void *context, const char *cmd, const char *args, int cmdFlags)
+{
+    if(args && *args) {
+        target_power = atoi(args);
+        if (charger_c_auto == 0) dump_load_relay[5] = target_power;
+    }
+    return CMD_RES_OK;
+}
+
+commandResult_t BL09XX_SetTargetExport(const void *context, const char *cmd, const char *args, int cmdFlags)
+{
+    if(args && *args) {
+        target_export = atoi(args);
     }
     return CMD_RES_OK;
 }
@@ -389,6 +406,8 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     int i;
     int xPassedTicks;
     float energy_counter_data = 0;
+    float period_net = 0;
+    int process_net_stats = 0;
               
     cJSON* root;
     cJSON* stats;
@@ -421,6 +440,10 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 export_matrix[last_matrix_index] = (int)real_export;
                 net_matrix[last_matrix_index] = (int)real_consumption - (int)real_export;
 
+                // Process Net Metering for the interval
+                period_net = real_consumption - real_export;
+                process_net_stats = 1;
+
                 real_export = 0;
                 real_consumption = 0;
                 net_energy = 0;
@@ -446,7 +469,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         net_energy = (real_consumption - real_export);                               
 
         // ======================================================================================================
-        // THE 30-SECOND CALCULATION LOOP (Target -20Wh, Asymmetric Control, Split Red/Green rendering)
+        // THE 30-SECOND CALCULATION LOOP (Target Export, Asymmetric Control)
         // ======================================================================================================
         {
             static portTickType last_control_tick = 0;
@@ -476,14 +499,14 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 }
 
                 // 3. Update Base Solar State
-                if (net_energy < -30.0f) {
+                if (net_energy < -((float)target_export + 10.0f)) {
                     solar_available = 1;
                 } else if (net_energy > 10.0f) {
                     solar_available = 0;
                 }
 
                 // ====================================================================
-                // ISOLATED LOGIC BLOCK (ONLY RUNS IN AUTO MODE)
+                // ISOLATED LOGIC BLOCK (AUTO / MANUAL)
                 // ====================================================================
                 if (charger_c_auto == 1) {
                     static int solar_excess = 0; 
@@ -495,21 +518,19 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                         } else if (net_energy > 5.0f) {
                             persistent_state = 5;
                         }
-                        solar_excess = 0; // Zero the accumulator for when solar returns
+                        solar_excess = 0; 
                     } 
                     else {
-                        // solar_available == 1 -> Charger Floor is 18
-                        if (net_energy > -20.0f) {
-                            // Instant safety drop if we drift above the target threshold
+                        if (net_energy > -((float)target_export)) {
                             solar_excess = 0; 
                         } else {
                             int excess_wh, error_w, pwm_step;
 
-                            // Calculate Watts needed to hit the -20Wh target
-                            excess_wh = abs(estimated_energy_period + 20); 
+                            // Calculate Watts needed to hit the target
+                            excess_wh = abs(estimated_energy_period + target_export); 
                             error_w = (excess_wh * 60) / check_time_estimate_mins; 
                             
-                            // Increase by 50% of the required adjustment in PWM units (100% = 1000W)
+                            // Increase by 50% of the required adjustment in PWM units
                             pwm_step = (error_w / 10) / 2;
                             if (pwm_step < 1) pwm_step = 1; // Enforce movement
                             
@@ -521,14 +542,15 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                         if (solar_excess < 0) solar_excess = 0;
                         
                         persistent_state = 18 + solar_excess;
+                        if (persistent_state > target_power) persistent_state = target_power;
                     }
                     
                     dump_load_relay[5] = persistent_state;
-                } // END OF AUTO MODE BLOCK
+                } else {
+                    dump_load_relay[5] = target_power;
+                } // END OF AUTO/MANUAL BLOCK
 
-                // ====================================================================
                 // UNCONDITIONAL SEND: Runs every 30-seconds regardless of Auto/Manual
-                // ====================================================================
                 snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
                 CMD_ExecuteCommand(dgr_cmd, 0);
 
@@ -562,7 +584,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     lastReadingFrequency = frequency;
 
     float energy = 0;
-    float energy_today_temp = 0;
     if (isnan(energyWh)) {
         xPassedTicks = (int)(xTaskGetTickCount() - energyCounterStamp);
         if (xPassedTicks <= 0)
@@ -573,25 +594,31 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     {
         if ((int)power>0)
         {
-            sensors[OBK_CONSUMPTION_TOTAL].lastReading += energyWh;
             real_consumption += energyWh;
-            energy_counter_data += energyWh;
-            energy_today_temp = energyWh;
         }
         else
         {
             if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
             {
-                sensors[OBK_GENERATION_TOTAL].lastReading += energyWh;         
                 real_export += energyWh;
-                energy_counter_data -= energyWh;
             }
         }
     }
               
+    // Apply the deferred net calculation to standard counters
+    if (process_net_stats == 1) {
+        if (period_net > 0) {
+            sensors[OBK_CONSUMPTION_TOTAL].lastReading += period_net;
+            sensors[OBK_CONSUMPTION_TODAY].lastReading += period_net;
+            energy_counter_data = period_net;
+        } else if (period_net < 0) {
+            sensors[OBK_GENERATION_TOTAL].lastReading += (-period_net);
+            energy_counter_data = period_net;
+        }
+    }
+
     energyCounterStamp = xTaskGetTickCount();
     HAL_FlashVars_SaveTotalConsumption(sensors[OBK_CONSUMPTION_TOTAL].lastReading);
-    sensors[OBK_CONSUMPTION_TODAY].lastReading  += energy_today_temp;
 
     if (NTP_IsTimeSynced()) {
         ntpTime = (time_t)NTP_GetCurrentTime();
@@ -719,13 +746,13 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             sensors[i].noChangeFrame = 0;
 
             switch (i) {
-            case OBK_VOLTAGE:                               eventChangeCode = CMD_EVENT_CHANGE_VOLTAGE;                       break;
-            case OBK_CURRENT:                               eventChangeCode = CMD_EVENT_CHANGE_CURRENT;                       break;
-            case OBK_POWER:                                 eventChangeCode = CMD_EVENT_CHANGE_POWER;                         break;
-            case OBK_CONSUMPTION_TOTAL:                     eventChangeCode = CMD_EVENT_CHANGE_CONSUMPTION_TOTAL;             break;
-            case OBK_GENERATION_TOTAL:                      eventChangeCode = CMD_EVENT_CHANGE_GENERATION_TOTAL;              break;
-            case OBK_CONSUMPTION_LAST_HOUR:                 eventChangeCode = CMD_EVENT_CHANGE_CONSUMPTION_LAST_HOUR;         break;
-            default:                                        eventChangeCode = CMD_EVENT_NONE;                                 break;
+            case OBK_VOLTAGE:                                   eventChangeCode = CMD_EVENT_CHANGE_VOLTAGE;                       break;
+            case OBK_CURRENT:                                   eventChangeCode = CMD_EVENT_CHANGE_CURRENT;                       break;
+            case OBK_POWER:                                     eventChangeCode = CMD_EVENT_CHANGE_POWER;                         break;
+            case OBK_CONSUMPTION_TOTAL:                         eventChangeCode = CMD_EVENT_CHANGE_CONSUMPTION_TOTAL;             break;
+            case OBK_GENERATION_TOTAL:                          eventChangeCode = CMD_EVENT_CHANGE_GENERATION_TOTAL;              break;
+            case OBK_CONSUMPTION_LAST_HOUR:                     eventChangeCode = CMD_EVENT_CHANGE_CONSUMPTION_LAST_HOUR;         break;
+            default:                                            eventChangeCode = CMD_EVENT_NONE;                                 break;
             }
             switch (eventChangeCode) {
             case CMD_EVENT_NONE:
@@ -842,6 +869,8 @@ void BL_Shared_Init(void)
     CMD_RegisterCommand("SetDumpLoad", BL09XX_SetDumpLoad, NULL);
     CMD_RegisterCommand("EnergyCntReset", BL09XX_ResetEnergyCounter, NULL);
     CMD_RegisterCommand("ToggleAuto", BL09XX_ToggleAuto, NULL);
+    CMD_RegisterCommand("SetTargetPower", BL09XX_SetTargetPower, NULL);
+    CMD_RegisterCommand("SetTargetExport", BL09XX_SetTargetExport, NULL);
     CMD_RegisterCommand("SetupEnergyStats", BL09XX_SetupEnergyStatistic, NULL);
     CMD_RegisterCommand("ConsumptionThreshold", BL09XX_SetupConsumptionThreshold, NULL);
     CMD_RegisterCommand("VCPPublishThreshold", BL09XX_VCPPublishThreshold, NULL);
@@ -885,6 +914,7 @@ int http_fn_api_dash(http_request_t *request) {
     }
 
     hprintf255(request, "\"dmp\":%d,\"auto\":%d,", dmp, charger_c_auto);
+    hprintf255(request, "\"t_pwr\":%d,\"t_exp\":%d,", target_power, target_export);
     hprintf255(request, "\"clk\":\"%02d:%02d\"", NTP_GetHour(), NTP_GetMinute()); 
 
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced()) {
@@ -952,7 +982,7 @@ int http_fn_api_dash(http_request_t *request) {
                 anchor = (net >= 0) ? "start" : "end";
                 snprintf(loop_buffer + offset, sizeof(loop_buffer) - offset, "<text x='%d' y='%d' fill='#ddd' font-size='14' font-family='sans-serif' text-anchor='%s' transform='rotate(-90 %d %d)' dy='5'>%d</text>",
                            x + 8, text_y, anchor, x + 8, text_y, net);
-                           
+                            
                 poststr(request, loop_buffer);
             } else {
                 hprintf255(request, "<text x='%d' y='135' fill='#555' font-size='14' font-family='sans-serif' text-anchor='start' transform='rotate(-90 %d 135)' dy='5'>0</text>", x + 8, x + 8);
@@ -991,8 +1021,10 @@ int http_fn_custom_dash(http_request_t *request) {
         ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }"
         ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
         ".graph-col { flex: 1; background: #222; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }"
-        ".ctrl-row { display: flex; flex-direction: row; margin-top: 15px; align-items: stretch; height: 100px; }"
-        ".ctrl-col { flex: 1; background: #222; padding: 15px; border-radius: 8px; display: flex; flex-direction: row; align-items: center; justify-content: space-between; margin-right: 15px; box-sizing: border-box; gap: 10px; }"
+        ".ctrl-wrapper { display: flex; flex-direction: row; margin-top: 15px; gap: 15px; align-items: stretch; }"
+        ".ctrl-main { flex: 1; display: flex; flex-direction: column; gap: 10px; background: #222; padding: 15px; border-radius: 8px; }"
+        ".btn-row { display: flex; gap: 10px; height: 50px; }"
+        ".sld-row { display: flex; gap: 20px; align-items: center; margin-top: 10px; }"
         ".btn-tgl { flex: 1; height: 100%; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; }"
         ".clk-col { flex: 0 0 340px; display: flex; justify-content: center; align-items: center; background: #222; border-radius: 8px; overflow: hidden; }"
         ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; }"
@@ -1026,14 +1058,21 @@ int http_fn_custom_dash(http_request_t *request) {
             "</svg></div>"
             "</div>"
 
-            "<div class='ctrl-row'>"
-            "<div class='ctrl-col'>"
+            "<div class='ctrl-wrapper'>"
+            "<div class='ctrl-main'>"
+            "<div class='btn-row'>"
             "<button id='m-btn' class='btn-tgl' onclick='tm()'>--</button>"
             "<button id='inv-btn' class='btn-tgl' onclick='t_inv()'>INVERTER</button>"
             "<button id='chg-btn' class='btn-tgl' onclick='t_chg()'>CHARGER</button>"
             "<button id='chg-30-btn' class='btn-tgl' onclick='upd(30)'>30%</button>"
             "<button id='chg-80-btn' class='btn-tgl' onclick='upd(80)'>80%</button>"
             "</div>"
+            "<div class='sld-row'>"
+            "<div style='flex:1;'><label style='display:block; font-size:12px; color:#888; margin-bottom:5px;'>MAX POWER / MANUAL (<span id='lbl-pwr'></span>%)</label>"
+            "<input type='range' id='sld-pwr' min='0' max='100' value='100' onchange='s_pwr(this.value)' style='width:100%;'></div>"
+            "<div style='flex:1;'><label style='display:block; font-size:12px; color:#888; margin-bottom:5px;'>TARGET EXPORT (<span id='lbl-exp'></span> Wh)</label>"
+            "<input type='range' id='sld-exp' min='10' max='100' value='20' onchange='s_exp(this.value)' style='width:100%;'></div>"
+            "</div></div>"
 
             "<div class='clk-col'>"
             "<div id='d-clk' style='font-size:100px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>--:--</div>"
@@ -1045,12 +1084,12 @@ int http_fn_custom_dash(http_request_t *request) {
     poststr(request, "<script>");
     poststr(request, 
         "var dmp=0, auto=0;"
-        "function upd(v){if(auto===1)return; dmp=parseInt(v, 10);var xhr=new XMLHttpRequest();"
-        "xhr.open('GET','/cm?cmnd=SetDumpLoad%20'+dmp,true); xhr.send(); btnColor();}"
+        "function s_pwr(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetPower%20'+v,true); xhr.send(); document.getElementById('lbl-pwr').innerText=v; }"
+        "function s_exp(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetExport%20'+v,true); xhr.send(); document.getElementById('lbl-exp').innerText=v; }"
+        "function upd(v){if(auto===1)return; document.getElementById('sld-pwr').value=v; s_pwr(v); dmp=parseInt(v, 10); btnColor();}"
         "function t_inv(){upd(dmp===5?0:5);}"
         "function t_chg(){upd(dmp>=10?0:18);}"
-        "function tm(){auto=(auto===1)?0:1; var xhr=new XMLHttpRequest();"
-        "xhr.open('GET','/cm?cmnd=ToggleAuto',true); xhr.send(); btnColor();}"
+        "function tm(){auto=(auto===1)?0:1; var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=ToggleAuto',true); xhr.send(); btnColor();}"
         
         "function btnColor(){"
         "var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),c3=document.getElementById('chg-30-btn'),c8=document.getElementById('chg-80-btn'),m=document.getElementById('m-btn');"
@@ -1078,12 +1117,16 @@ int http_fn_custom_dash(http_request_t *request) {
         "document.getElementById('c-v').innerText=d.chg_v;"
         "document.getElementById('c-v').style.color=d.chg_c;"
         "document.getElementById('d-clk').innerText=d.clk;"
+        "document.getElementById('sld-pwr').value=d.t_pwr;"
+        "document.getElementById('lbl-pwr').innerText=d.t_pwr;"
+        "document.getElementById('sld-exp').value=d.t_exp;"
+        "document.getElementById('lbl-exp').innerText=d.t_exp;"
         "dmp=d.dmp; auto=d.auto; btnColor();"
         "if(d.sens){"
         "document.getElementById('d-sens-body').innerHTML=d.sens;"
         "document.getElementById('d-graph-data').innerHTML=d.graph;"
         "}"
-        "} catch(e) { console.error('JSON parse error: ', e); }"
+        "} catch(e) {}"
         "}"
         "};"
         "xhr.open('GET','/api_dash?t='+Date.now(),true);"
