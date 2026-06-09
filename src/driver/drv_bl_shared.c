@@ -134,8 +134,8 @@ long ConsumptionSaveCounter = 0;
 portTickType lastConsumptionSaveStamp;
 time_t ConsumptionResetTime = 0;
 
-int changeSendAlwaysFrames = 60;
-int changeDoNotSendMinFrames = 5;
+int changeSendAlwaysFrames = 300;
+int changeDoNotSendMinFrames = 20;
 
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 {
@@ -212,13 +212,13 @@ commandResult_t BL09XX_SetDumpLoad(const void *context, const char *cmd, const c
     if (charger_c_auto == 1) return CMD_RES_OK; 
     
     if(args && *args) {
-        char dgr_cmd[64];
-        char fallback_cmd[64];
+        //char dgr_cmd[64];
+        //char fallback_cmd[64];
 
         dump_load_relay[5] = atoi(args);
         
-        snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
-        CMD_ExecuteCommand(dgr_cmd, 0);
+        //snprintf(dgr_cmd, sizeof(dgr_cmd), "DGR_SendDimmer solar_dump %d", dump_load_relay[5]);
+        //CMD_ExecuteCommand(dgr_cmd, 0);
 
         snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
         CMD_ExecuteCommand(fallback_cmd, 0);
