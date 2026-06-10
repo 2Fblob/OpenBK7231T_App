@@ -458,7 +458,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             if (current_dmp >= 18 && current_dmp <= 100) {
                 current_charger_c_accum += current_dmp;
             } else if (current_dmp == 5) {
-                current_inverter_accum += 250; 
+                current_inverter_accum += 100; // Increment directly as percentage representation
             }
             sample_count_30s++;
         }
@@ -994,7 +994,7 @@ int http_fn_api_dash(http_request_t *request) {
         poststr(request, "\"graph\":\"");
         
         // 1. Draw the filled area (polygon) mapped to the red/green gradient
-        poststr(request, "<polygon fill='url(#splitFade)' points='60,170 ");
+        poststr(request, "<polygon fill='url(#splitFade)' points='60,250 ");
         for (int i = 47; i >= 0; i--) {
             int interval_of_day, c_index, net, x, h, y;
             char point_str[32];
@@ -1004,16 +1004,16 @@ int http_fn_api_dash(http_request_t *request) {
             net = net_matrix[c_index];
             if (i == 0) { net += (int)(real_consumption - real_export); }
             
-            x = (47 - i) * 10 + 60; 
+            x = (47 - i) * 11 + 60; 
             h = net / 2;
             if (h > 150) h = 150;
             if (h < -75) h = -75;
-            y = 170 - h;
+            y = 250 - h;
             
             snprintf(point_str, sizeof(point_str), "%d,%d ", x, y);
             poststr(request, point_str);
         }
-        poststr(request, "530,170'/>");
+        poststr(request, "577,250'/>");
 
         // 2. Draw the crisp defining line on top
         poststr(request, "<polyline fill='none' stroke='#888' stroke-width='2' points='");
@@ -1026,39 +1026,39 @@ int http_fn_api_dash(http_request_t *request) {
             net = net_matrix[c_index];
             if (i == 0) { net += (int)(real_consumption - real_export); }
             
-            x = (47 - i) * 10 + 60; 
+            x = (47 - i) * 11 + 60; 
             h = net / 2;
             if (h > 150) h = 150;
             if (h < -75) h = -75;
-            y = 170 - h;
+            y = 250 - h;
             
             snprintf(point_str, sizeof(point_str), "%d,%d ", x, y);
             poststr(request, point_str);
         }
         poststr(request, "'/>");
 
-        // 3. Draw the Charger Average overlay line (mapped 18-100 directly visually up to 100px)
-        poststr(request, "<polyline fill='none' stroke='#0099FF' stroke-dasharray='4,2' stroke-width='2' points='");
+        // 3. Draw the Charger Overlay (0-100 scale, single line, 50px tall floating graph)
+        poststr(request, "<polyline fill='none' stroke='#4caf50' stroke-width='1' points='");
         for (int i = 47; i >= 0; i--) {
             int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
             int c_index = interval_of_day % MATRIX_SIZE;
             int val = charger_c_matrix[c_index];
             if (i == 0 && sample_count_30s > 0) { val = current_charger_c_accum / sample_count_30s; }
-            int x = (47 - i) * 10 + 60;
-            int y = 170 - val; 
+            int x = (47 - i) * 11 + 60;
+            int y = 70 - (val / 2); 
             hprintf255(request, "%d,%d ", x, y);
         }
         poststr(request, "'/>");
 
-        // 4. Draw the Inverter Average overlay line (facing down, scaled so 250W = 75px visual drop)
-        poststr(request, "<polyline fill='none' stroke='#ffeb3b' stroke-dasharray='4,2' stroke-width='2' points='");
+        // 4. Draw the Inverter Overlay (0-100 scale, single line, 50px tall floating graph)
+        poststr(request, "<polyline fill='none' stroke='#ff9800' stroke-width='1' points='");
         for (int i = 47; i >= 0; i--) {
             int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
             int c_index = interval_of_day % MATRIX_SIZE;
             int val = inverter_matrix[c_index];
             if (i == 0 && sample_count_30s > 0) { val = current_inverter_accum / sample_count_30s; }
-            int x = (47 - i) * 10 + 60;
-            int y = 170 + (val * 75 / 250); 
+            int x = (47 - i) * 11 + 60;
+            int y = 70 - (val / 2); 
             hprintf255(request, "%d,%d ", x, y);
         }
         poststr(request, "'/>\"");
@@ -1089,7 +1089,7 @@ int http_fn_custom_dash(http_request_t *request) {
         ".top-stats b { font-size: 38px; font-weight: 600; }"
         ".c-exp { color: #4caf50; }"
         ".c-imp { color: #f44336; }"
-        ".dash-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; margin-top: 15px; height: 380px; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; }"
+        ".dash-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; margin-top: 15px; height: 460px; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; }"
         ".left-col { -webkit-box-flex: 0; -webkit-flex: 0 0 230px; flex: 0 0 230px; width: 230px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; box-sizing: border-box; }"
         ".sens-tbl { width: 100%; font-size: 14px; border-collapse: collapse; }"
         ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
@@ -1128,55 +1128,63 @@ int http_fn_custom_dash(http_request_t *request) {
             "</div>"
             
             "<div class='graph-col'>"
-            "<div style='position:absolute; top:15px; left:70px; font-size:12px; color:#f44336; text-transform:uppercase;'>PAYING 🔌</div>"
-            "<div style='position:absolute; bottom:30px; left:70px; font-size:12px; color:#4caf50; text-transform:uppercase;'>SAVING ☀️</div>"
             
-            "<svg viewBox='0 0 542 280' preserveAspectRatio='xMinYMid meet' style='width:100%; height:100%; background:transparent;'>"
+            "<div style='position:absolute; bottom:30px; right:20px; font-size:10px; color:#aaa; text-align:right; z-index:10; background:rgba(34,34,34,0.8); padding:5px; border-radius:4px;'>"
+            "<div><span style='display:inline-block; width:12px; height:2px; background:#888; margin-right:5px; vertical-align:middle;'></span>Total Energy</div>"
+            "<div style='margin-top:4px;'><span style='display:inline-block; width:12px; height:1px; background:#4caf50; margin-right:5px; vertical-align:middle;'></span>Charger average</div>"
+            "<div style='margin-top:4px;'><span style='display:inline-block; width:12px; height:1px; background:#ff9800; margin-right:5px; vertical-align:middle;'></span>Inverter average</div>"
+            "</div>"
+
+            "<svg viewBox='0 0 592 360' preserveAspectRatio='xMinYMid meet' style='width:100%; height:100%; background:transparent;'>"
             "<defs>"
-            "<linearGradient id='splitFade' x1='0' y1='0' x2='0' y2='280' gradientUnits='userSpaceOnUse'>"
+            "<linearGradient id='splitFade' x1='0' y1='0' x2='0' y2='360' gradientUnits='userSpaceOnUse'>"
             "<stop offset='0' stop-color='#f44336' stop-opacity='0.6'/>"
-            "<stop offset='170' stop-color='#f44336' stop-opacity='0'/>"
-            "<stop offset='170' stop-color='#4caf50' stop-opacity='0'/>"
-            "<stop offset='280' stop-color='#4caf50' stop-opacity='0.6'/>"
+            "<stop offset='250' stop-color='#f44336' stop-opacity='0'/>"
+            "<stop offset='250' stop-color='#4caf50' stop-opacity='0'/>"
+            "<stop offset='360' stop-color='#4caf50' stop-opacity='0.6'/>"
             "</linearGradient>"
             "</defs>"
             
             "<g stroke='#333' stroke-width='1' stroke-dasharray='5,5'>"
-            "<line x1='60' y1='20' x2='530' y2='20'/>" 
-            "<line x1='60' y1='95' x2='530' y2='95'/>" 
-            "<line x1='60' y1='245' x2='530' y2='245'/>" 
+            "<line x1='60' y1='100' x2='577' y2='100'/>" 
+            "<line x1='60' y1='175' x2='577' y2='175'/>" 
+            "<line x1='60' y1='325' x2='577' y2='325'/>" 
+            "<line x1='60' y1='20' x2='577' y2='20' stroke-dasharray='1,2'/>"
+            "<line x1='60' y1='70' x2='577' y2='70'/>"
             "</g>"
-            "<line x1='60' y1='170' x2='530' y2='170' stroke='#777' stroke-width='1.5'/>" 
+            "<line x1='60' y1='250' x2='577' y2='250' stroke='#777' stroke-width='1.5'/>" 
             
             // Vertical Y-Axis Line
-            "<line x1='60' y1='20' x2='60' y2='260' stroke='#777' stroke-width='1'/>"
+            "<line x1='60' y1='20' x2='60' y2='340' stroke='#777' stroke-width='1'/>"
             
             "<g fill='#888' font-size='12' font-family='monospace' text-anchor='end'>"
-            "<text x='50' y='24'>+300</text>"
-            "<text x='50' y='99'>+150</text>"
-            "<text x='50' y='174' fill='#aaa'>0 Wh</text>"
-            "<text x='50' y='249'>-150</text>"
+            "<text x='50' y='24'>100</text>"
+            "<text x='50' y='74'>0</text>"
+            "<text x='50' y='104'>+300</text>"
+            "<text x='50' y='179'>+150</text>"
+            "<text x='50' y='254' fill='#aaa'>0 Wh</text>"
+            "<text x='50' y='329'>-150</text>"
             "</g>"
             
             "<g id='d-graph-data'></g>"
         );
 
         // Generate the Time Scale Legend dynamically
-        poststr(request, "<g stroke='#777' stroke-width='1'><line x1='60' y1='260' x2='530' y2='260'/></g>");
+        poststr(request, "<g stroke='#777' stroke-width='1'><line x1='60' y1='340' x2='577' y2='340'/></g>");
         poststr(request, "<g fill='#888' font-size='10' font-family='sans-serif'>");
         for (int i = 0; i <= 47; i++) {
-            int x = (47 - i) * 10 + 60;
+            int x = (47 - i) * 11 + 60;
             if (i % 4 == 0) {
                 // Major tick mark (Hour intervals)
-                hprintf255(request, "<line x1='%d' y1='260' x2='%d' y2='266' stroke='#777'/>", x, x);
+                hprintf255(request, "<line x1='%d' y1='340' x2='%d' y2='346' stroke='#777'/>", x, x);
                 if (i == 0) {
-                    hprintf255(request, "<text x='%d' y='278' text-anchor='end'>Now</text>", x);
+                    hprintf255(request, "<text x='%d' y='358' text-anchor='end'>Now</text>", x);
                 } else {
-                    hprintf255(request, "<text x='%d' y='278' text-anchor='middle'>-%dh</text>", x, i/4);
+                    hprintf255(request, "<text x='%d' y='358' text-anchor='middle'>-%dh</text>", x, i/4);
                 }
             } else {
                 // Minor tick mark (15 min intervals)
-                hprintf255(request, "<line x1='%d' y1='260' x2='%d' y2='263' stroke='#777'/>", x, x);
+                hprintf255(request, "<line x1='%d' y1='340' x2='%d' y2='343' stroke='#777'/>", x, x);
             }
         }
         poststr(request, "</g>");
@@ -1218,8 +1226,8 @@ int http_fn_custom_dash(http_request_t *request) {
         
         "function btnColor(){"
         "var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),m=document.getElementById('m-btn');"
-        "if(i) i.style.background=(dmp===5)?'#4caf50':'#555';"
-        "if(c) c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#ffeb3b':'#555');"
+        "if(i) i.style.background=(dmp===5)?'#ff9800':'#555';"
+        "if(c) c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#8bc34a':'#555');"
         "if(m){ m.innerText=(auto===1)?'AUTO':'MANUAL'; m.style.background=(auto===1)?'#0099FF':'#f44336'; }"
         "}"
         
