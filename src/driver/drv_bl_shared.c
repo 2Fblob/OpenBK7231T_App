@@ -1139,16 +1139,22 @@ int http_fn_custom_dash(http_request_t *request) {
             "</linearGradient>"
             "</defs>"
             
-            // SEPARATED GRAPH BACKGROUND / DIVIDER
-            "<rect x='50' y='5' width='530' height='55' fill='#151515' rx='4'/>"
+            // SEPARATED GRAPH BACKGROUNDS (Making them distinct boxes)
+            "<rect x='60' y='10' width='517' height='50' fill='#181818'/>"
+            "<rect x='60' y='75' width='517' height='235' fill='#181818'/>"
+            
+            // SEPARATED Y-AXES
+            "<line x1='60' y1='10' x2='60' y2='60' stroke='#777' stroke-width='1'/>"
+            "<line x1='60' y1='75' x2='60' y2='310' stroke='#777' stroke-width='1'/>"
+
+            // SEPARATED X-AXES BASELINES
+            "<line x1='60' y1='60' x2='577' y2='60' stroke='#777' stroke-width='1'/>"
             
             "<g stroke='#333' stroke-width='1' stroke-dasharray='5,5'>"
             // Top graph grid
-            "<line x1='60' y1='10' x2='577' y2='10' stroke-dasharray='1,2'/>"
             "<line x1='60' y1='35' x2='577' y2='35'/>"
-            "<line x1='60' y1='60' x2='577' y2='60' stroke-dasharray='1,2'/>"
             
-            // Bottom graph grid (Shifted up to close gap)
+            // Bottom graph grid
             "<line x1='60' y1='75' x2='577' y2='75'/>" 
             "<line x1='60' y1='150' x2='577' y2='150'/>" 
             "<line x1='60' y1='300' x2='577' y2='300'/>" 
@@ -1156,9 +1162,6 @@ int http_fn_custom_dash(http_request_t *request) {
             
             // Main graph 0-line
             "<line x1='60' y1='225' x2='577' y2='225' stroke='#777' stroke-width='1.5'/>" 
-            
-            // Vertical Y-Axis Line
-            "<line x1='60' y1='10' x2='60' y2='310' stroke='#777' stroke-width='1'/>"
             
             "<g fill='#888' font-size='12' font-family='monospace' text-anchor='end'>"
             // Top graph text
