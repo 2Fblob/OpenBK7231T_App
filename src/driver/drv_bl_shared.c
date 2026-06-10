@@ -458,7 +458,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             if (current_dmp >= 18 && current_dmp <= 100) {
                 current_charger_c_accum += current_dmp;
             } else if (current_dmp == 5) {
-                current_inverter_accum += 250; 
+                current_inverter_accum += 100; // Represent directly as full percentage state
             }
             sample_count_30s++;
         }
@@ -574,19 +574,14 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                     } else {
                         int excess_wh, error_w, pwm_step;
 
-                        // Calculate difference from target exactly (allowing negatives!).
-                        // If estimated is -50 and target is 20, excess_wh = 30 (We need to increase load).
-                        // If estimated is +10 and target is 20, excess_wh = -30 (We are importing, decrease load).
                         excess_wh = -(estimated_energy_period + target_export); 
                         
                         // Convert Wh error into Watts over the remaining time
                         error_w = (excess_wh * 60) / check_time_estimate_mins; 
                         
-                        // Convert Watts to PWM step (10W = 1 PWM unit)
-                        // Dampen by dividing by 2 to prevent oscillation
+                        // Convert Watts to PWM step (10W = 1 PWM unit) dampened by half
                         pwm_step = (error_w / 10) / 2; 
                         
-                        // Add OR subtract the step from the current state (Ratchet fixed!)
                         solar_excess += pwm_step;
                     }
                     
@@ -596,7 +591,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                     
                     persistent_state = 18 + solar_excess;
                     
-                    // Fail-safe: if left in 0/5 manual before going auto, treat max as 100
                     int active_max = target_power;
                     if (active_max < 18) active_max = 100;
                     
@@ -605,7 +599,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 
                 dump_load_relay[5] = persistent_state;
 
-                // Send Commands (Only in AUTO mode via process loop, MANUAL handles itself instantly)
+                // Send Commands via process loop
                 snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
                 CMD_ExecuteCommand(fallback_cmd, 0);
             } // END OF AUTO BLOCK
@@ -657,7 +651,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         }
     }
               
-    // Apply the deferred net calculation to standard counters
     if (process_net_stats == 1) {
         if (period_net > 0) {
             sensors[OBK_CONSUMPTION_TOTAL].lastReading += period_net;
@@ -994,7 +987,7 @@ int http_fn_api_dash(http_request_t *request) {
         poststr(request, "\"graph\":\"");
         
         // 1. Draw the filled area (polygon) mapped to the red/green gradient
-        poststr(request, "<polygon fill='url(#splitFade)' points='60,170 ");
+        poststr(request, "<polygon fill='url(#splitFade)' points='60,270 ");
         for (int i = 47; i >= 0; i--) {
             int interval_of_day, c_index, net, x, h, y;
             char point_str[32];
@@ -1004,16 +997,16 @@ int http_fn_api_dash(http_request_t *request) {
             net = net_matrix[c_index];
             if (i == 0) { net += (int)(real_consumption - real_export); }
             
-            x = (47 - i) * 10 + 60; 
+            x = (47 - i) * 11 + 60; 
             h = net / 2;
             if (h > 150) h = 150;
             if (h < -75) h = -75;
-            y = 170 - h;
+            y = 270 - h;
             
             snprintf(point_str, sizeof(point_str), "%d,%d ", x, y);
             poststr(request, point_str);
         }
-        poststr(request, "530,170'/>");
+        poststr(request, "577,270'/>");
 
         // 2. Draw the crisp defining line on top
         poststr(request, "<polyline fill='none' stroke='#888' stroke-width='2' points='");
@@ -1026,39 +1019,39 @@ int http_fn_api_dash(http_request_t *request) {
             net = net_matrix[c_index];
             if (i == 0) { net += (int)(real_consumption - real_export); }
             
-            x = (47 - i) * 10 + 60; 
+            x = (47 - i) * 11 + 60; 
             h = net / 2;
             if (h > 150) h = 150;
             if (h < -75) h = -75;
-            y = 170 - h;
+            y = 270 - h;
             
             snprintf(point_str, sizeof(point_str), "%d,%d ", x, y);
             poststr(request, point_str);
         }
         poststr(request, "'/>");
 
-        // 3. Draw the Charger Average overlay line (mapped 18-100 directly visually up to 100px)
-        poststr(request, "<polyline fill='none' stroke='#0099FF' stroke-dasharray='4,2' stroke-width='2' points='");
+        // 3. Draw the Charger Overlay (0-100 scale, single pixel solid green line)
+        poststr(request, "<polyline fill='none' stroke='#4caf50' stroke-width='1' points='");
         for (int i = 47; i >= 0; i--) {
             int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
             int c_index = interval_of_day % MATRIX_SIZE;
             int val = charger_c_matrix[c_index];
             if (i == 0 && sample_count_30s > 0) { val = current_charger_c_accum / sample_count_30s; }
-            int x = (47 - i) * 10 + 60;
-            int y = 170 - val; 
+            int x = (47 - i) * 11 + 60;
+            int y = 70 - (val / 2); 
             hprintf255(request, "%d,%d ", x, y);
         }
         poststr(request, "'/>");
 
-        // 4. Draw the Inverter Average overlay line (facing down, scaled so 250W = 75px visual drop)
-        poststr(request, "<polyline fill='none' stroke='#ffeb3b' stroke-dasharray='4,2' stroke-width='2' points='");
+        // 4. Draw the Inverter Overlay (0-100 scale, single pixel solid orange line)
+        poststr(request, "<polyline fill='none' stroke='#ff9800' stroke-width='1' points='");
         for (int i = 47; i >= 0; i--) {
             int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
             int c_index = interval_of_day % MATRIX_SIZE;
             int val = inverter_matrix[c_index];
             if (i == 0 && sample_count_30s > 0) { val = current_inverter_accum / sample_count_30s; }
-            int x = (47 - i) * 10 + 60;
-            int y = 170 + (val * 75 / 250); 
+            int x = (47 - i) * 11 + 60;
+            int y = 70 - (val / 2); 
             hprintf255(request, "%d,%d ", x, y);
         }
         poststr(request, "'/>\"");
@@ -1070,7 +1063,7 @@ int http_fn_api_dash(http_request_t *request) {
 }
 
 // ====================================================================
-// NEW STANDALONE DASHBOARD (Legacy Browser Compatible & Time Legend)
+// NEW STANDALONE DASHBOARD (Legacy Browser Compatible & Vertical Controls)
 // ====================================================================
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
@@ -1082,27 +1075,26 @@ int http_fn_custom_dash(http_request_t *request) {
         "<title>Solar Dashboard</title>"
         "<style>"
         "body { margin: 0; background-color: #000; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; }"
-        "#dash-container { max-width: 800px; width: 100%; min-height: 100vh; background-color: #121212; padding: 10px 20px 20px 20px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; position: relative; }"
-        ".top-stats { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between; -webkit-box-align: center; -webkit-align-items: center; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; margin-top: 15px; }"
-        ".top-stats div { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; margin: 0 2px; }"
-        ".top-stats label { color: #888; font-size: 20px; text-transform: uppercase; margin-bottom: 6px; display: block; white-space: nowrap; }"
+        "#dash-container { max-width: 1200px; width: 100%; min-height: 100vh; background-color: #121212; padding: 10px 20px 20px 20px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; position: relative; }"
+        ".top-stats { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between; -webkit-box-align: center; -webkit-align-items: center; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; margin-top: 15px; width: 100%; box-sizing: border-box; -webkit-flex-wrap: nowrap; flex-wrap: nowrap; white-space: nowrap; }"
+        ".top-stats div { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; margin: 0 10px; }"
+        ".top-stats label { color: #888; font-size: 20px; text-transform: uppercase; margin-bottom: 6px; display: block; }"
         ".top-stats b { font-size: 38px; font-weight: 600; }"
         ".c-exp { color: #4caf50; }"
         ".c-imp { color: #f44336; }"
-        ".dash-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; margin-top: 15px; height: 380px; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; }"
+        ".dash-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; margin-top: 15px; height: 460px; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; }"
         ".left-col { -webkit-box-flex: 0; -webkit-flex: 0 0 230px; flex: 0 0 230px; width: 230px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; box-sizing: border-box; }"
         ".sens-tbl { width: 100%; font-size: 14px; border-collapse: collapse; }"
         ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
-        ".graph-col { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; position: relative; box-sizing: border-box; }"
-        ".ctrl-wrapper { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; margin-top: 15px; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; }"
-        ".ctrl-main { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; background: #222; padding: 15px; border-radius: 8px; margin-right: 15px; box-sizing: border-box; }"
-        ".btn-row { display: -webkit-box; display: -webkit-flex; display: flex; height: 50px; margin-bottom: 10px; }"
-        ".sld-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-align: center; -webkit-align-items: center; align-items: center; margin-top: 10px; }"
-        ".btn-tgl { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; height: 100%; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-right: 10px; }"
-        ".btn-tgl:last-child { margin-right: 0; }"
-        ".sld-col { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; margin-right: 20px; }"
-        ".sld-col:last-child { margin-right: 0; }"
-        ".clk-col { -webkit-box-flex: 0; -webkit-flex: 0 0 340px; flex: 0 0 340px; width: 340px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; -webkit-box-align: center; -webkit-align-items: center; align-items: center; background: #222; border-radius: 8px; overflow: hidden; box-sizing: border-box; }"
+        ".graph-col { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; position: relative; box-sizing: border-box; margin-right: 15px; }"
+        ".right-col { -webkit-box-flex: 0; -webkit-flex: 0 0 280px; flex: 0 0 280px; width: 280px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; box-sizing: border-box; }"
+        ".btn-tgl { width: 100%; height: 50px; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-bottom: 12px; display: block; }"
+        ".sld-v-block { margin-top: 10px; width: 100%; }"
+        ".sld-v-block label { display: block; font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }"
+        ".bottom-clk-row { background: #222; border-radius: 8px; padding: 25px; margin-top: 15px; text-align: center; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; box-sizing: border-box; width: 100%; }"
+        "#d-clk { font-size: 120px; font-weight: bold; color: #0099FF; font-family: monospace; line-height: 1; letter-spacing: -3px; }"
+        "#d-day { font-size: 26px; font-weight: 600; color: #eee; text-transform: uppercase; margin-top: 8px; font-family: sans-serif; letter-spacing: 2px; }"
+        "#d-date { font-size: 15px; color: #888; margin-top: 5px; font-family: sans-serif; }"
         ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; z-index: 10; }"
         "</style></head><body>"
     );
@@ -1128,80 +1120,93 @@ int http_fn_custom_dash(http_request_t *request) {
             "</div>"
             
             "<div class='graph-col'>"
-            "<div style='position:absolute; top:15px; left:70px; font-size:12px; color:#f44336; text-transform:uppercase;'>PAYING 🔌</div>"
-            "<div style='position:absolute; bottom:30px; left:70px; font-size:12px; color:#4caf50; text-transform:uppercase;'>SAVING ☀️</div>"
             
-            "<svg viewBox='0 0 542 280' preserveAspectRatio='xMinYMid meet' style='width:100%; height:100%; background:transparent;'>"
+            "<div style='position:absolute; bottom:40px; right:20px; font-size:10px; color:#aaa; text-align:right; z-index:10; background:rgba(34,34,34,0.85); padding:6px 10px; border-radius:4px; border:1px solid #333;'>"
+            "<div><span style='display:inline-block; width:12px; height:2px; background:#888; margin-right:6px; vertical-align:middle;'></span>Total Energy</div>"
+            "<div style='margin-top:5px;'><span style='display:inline-block; width:12px; height:1px; background:#4caf50; margin-right:6px; vertical-align:middle;'></span>Charger average</div>"
+            "<div style='margin-top:5px;'><span style='display:inline-block; width:12px; height:1px; background:#ff9800; margin-right:6px; vertical-align:middle;'></span>Inverter average</div>"
+            "</div>"
+
+            "<svg viewBox='0 0 592 380' preserveAspectRatio='xMinYMid meet' style='width:100%; height:100%; background:transparent;'>"
             "<defs>"
-            "<linearGradient id='splitFade' x1='0' y1='0' x2='0' y2='280' gradientUnits='userSpaceOnUse'>"
-            "<stop offset='0' stop-color='#f44336' stop-opacity='0.6'/>"
-            "<stop offset='170' stop-color='#f44336' stop-opacity='0'/>"
-            "<stop offset='170' stop-color='#4caf50' stop-opacity='0'/>"
-            "<stop offset='280' stop-color='#4caf50' stop-opacity='0.6'/>"
+            "<linearGradient id='splitFade' x1='0' y1='0' x2='0' y2='380' gradientUnits='userSpaceOnUse'>"
+            "<stop offset='120' stop-color='#f44336' stop-opacity='0.6'/>"
+            "<stop offset='270' stop-color='#f44336' stop-opacity='0'/>"
+            "<stop offset='270' stop-color='#4caf50' stop-opacity='0'/>"
+            "<stop offset='345' stop-color='#4caf50' stop-opacity='0.6'/>"
             "</linearGradient>"
             "</defs>"
             
             "<g stroke='#333' stroke-width='1' stroke-dasharray='5,5'>"
-            "<line x1='60' y1='20' x2='530' y2='20'/>" 
-            "<line x1='60' y1='95' x2='530' y2='95'/>" 
-            "<line x1='60' y1='245' x2='530' y2='245'/>" 
+            "<line x1='60' y1='120' x2='577' y2='120'/>" 
+            "<line x1='60' y1='195' x2='577' y2='195'/>" 
+            "<line x1='60' y1='345' x2='577' y2='345'/>" 
+            "<line x1='60' y1='20' x2='577' y2='20' stroke-dasharray='1,2'/>"
+            "<line x1='60' y1='70' x2='577' y2='70'/>"
             "</g>"
-            "<line x1='60' y1='170' x2='530' y2='170' stroke='#777' stroke-width='1.5'/>" 
+            "<line x1='60' y1='270' x2='577' y2='270' stroke='#777' stroke-width='1.5'/>" 
             
             // Vertical Y-Axis Line
-            "<line x1='60' y1='20' x2='60' y2='260' stroke='#777' stroke-width='1'/>"
+            "<line x1='60' y1='20' x2='60' y2='350' stroke='#777' stroke-width='1'/>"
             
             "<g fill='#888' font-size='12' font-family='monospace' text-anchor='end'>"
-            "<text x='50' y='24'>+300</text>"
-            "<text x='50' y='99'>+150</text>"
-            "<text x='50' y='174' fill='#aaa'>0 Wh</text>"
-            "<text x='50' y='249'>-150</text>"
+            "<text x='50' y='24'>100</text>"
+            "<text x='50' y='74'>0</text>"
+            "<text x='50' y='124'>+300</text>"
+            "<text x='50' y='199'>+150</text>"
+            "<text x='50' y='274' fill='#aaa'>0 Wh</text>"
+            "<text x='50' y='349'>-150</text>"
             "</g>"
             
             "<g id='d-graph-data'></g>"
         );
 
         // Generate the Time Scale Legend dynamically
-        poststr(request, "<g stroke='#777' stroke-width='1'><line x1='60' y1='260' x2='530' y2='260'/></g>");
+        poststr(request, "<g stroke='#777' stroke-width='1'><line x1='60' y1='350' x2='577' y2='350'/></g>");
         poststr(request, "<g fill='#888' font-size='10' font-family='sans-serif'>");
         for (int i = 0; i <= 47; i++) {
-            int x = (47 - i) * 10 + 60;
+            int x = (47 - i) * 11 + 60;
             if (i % 4 == 0) {
                 // Major tick mark (Hour intervals)
-                hprintf255(request, "<line x1='%d' y1='260' x2='%d' y2='266' stroke='#777'/>", x, x);
+                hprintf255(request, "<line x1='%d' y1='350' x2='%d' y2='356' stroke='#777'/>", x, x);
                 if (i == 0) {
-                    hprintf255(request, "<text x='%d' y='278' text-anchor='end'>Now</text>", x);
+                    hprintf255(request, "<text x='%d' y='368' text-anchor='end'>Now</text>", x);
                 } else {
-                    hprintf255(request, "<text x='%d' y='278' text-anchor='middle'>-%dh</text>", x, i/4);
+                    hprintf255(request, "<text x='%d' y='368' text-anchor='middle'>-%dh</text>", x, i/4);
                 }
             } else {
                 // Minor tick mark (15 min intervals)
-                hprintf255(request, "<line x1='%d' y1='260' x2='%d' y2='263' stroke='#777'/>", x, x);
+                hprintf255(request, "<line x1='%d' y1='350' x2='%d' y2='353' stroke='#777'/>", x, x);
             }
         }
         poststr(request, "</g>");
 
         poststr(request, 
             "</svg></div>"
-            "</div>"
-
-            "<div class='ctrl-wrapper'>"
-            "<div class='ctrl-main'>"
-            "<div class='btn-row'>"
+            
+            "<div class='right-col'>"
+            "<div style='font-size:12px; color:#888; text-transform:uppercase; margin-bottom:12px;'>System Modes</div>"
             "<button id='m-btn' class='btn-tgl' onclick='tm()'>--</button>"
             "<button id='inv-btn' class='btn-tgl' onclick='t_inv()'>INVERTER</button>"
             "<button id='chg-btn' class='btn-tgl' onclick='t_chg()'>CHARGER</button>"
+            
+            "<div style='font-size:12px; color:#888; text-transform:uppercase; margin-top:10px; margin-bottom:5px;'>Parameters</div>"
+            "<div class='sld-v-block'>"
+            "<label>Max Power / Manual (<span id='lbl-pwr'></span>%)</label>"
+            "<input type='range' id='sld-pwr' min='18' max='100' value='100' onchange='s_pwr(this.value)' style='width:100%;'>"
             "</div>"
-            "<div class='sld-row'>"
-            "<div class='sld-col'><label style='display:block; font-size:12px; color:#888; margin-bottom:5px;'>MAX POWER / MANUAL (<span id='lbl-pwr'></span>%)</label>"
-            "<input type='range' id='sld-pwr' min='18' max='100' value='100' onchange='s_pwr(this.value)' style='width:100%;'></div>"
-            "<div class='sld-col'><label style='display:block; font-size:12px; color:#888; margin-bottom:5px;'>TARGET EXPORT (<span id='lbl-exp'></span> Wh)</label>"
-            "<input type='range' id='sld-exp' min='10' max='100' value='20' onchange='s_exp(this.value)' style='width:100%;'></div>"
-            "</div></div>"
+            "<div class='sld-v-block' style='margin-top:15px;'>"
+            "<label>Target Export (<span id='lbl-exp'></span> Wh)</label>"
+            "<input type='range' id='sld-exp' min='10' max='100' value='20' onchange='s_exp(this.value)' style='width:100%;'>"
+            "</div>"
+            "</div>"
+            "</div>"
 
-            "<div class='clk-col'>"
-            "<div id='d-clk' style='font-size:100px; font-weight:bold; color:#0099FF; font-family:monospace; line-height:1; letter-spacing:-4px;'>--:--</div>"
-            "</div></div>"
+            "<div class='bottom-clk-row'>"
+            "<div id='d-clk'>--:--</div>"
+            "<div id='d-day'>--</div>"
+            "<div id='d-date'>--</div>"
+            "</div>"
         );
     }
     poststr(request, "</div>"); 
@@ -1218,8 +1223,8 @@ int http_fn_custom_dash(http_request_t *request) {
         
         "function btnColor(){"
         "var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),m=document.getElementById('m-btn');"
-        "if(i) i.style.background=(dmp===5)?'#4caf50':'#555';"
-        "if(c) c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#ffeb3b':'#555');"
+        "if(i) i.style.background=(dmp===5)?'#ff9800':'#555';"
+        "if(c) c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#8bc34a':'#555');"
         "if(m){ m.innerText=(auto===1)?'AUTO':'MANUAL'; m.style.background=(auto===1)?'#0099FF':'#f44336'; }"
         "}"
         
@@ -1247,6 +1252,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "document.getElementById('d-sens-body').innerHTML=d.sens;"
         "document.getElementById('d-graph-data').innerHTML=d.graph;"
         "}"
+        "var days=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
+        "var dt=new Date();"
+        "document.getElementById('d-day').innerText=days[dt.getDay()];"
+        "document.getElementById('d-date').innerText=dt.toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'});"
         "} catch(e) {}"
         "}"
         "};"
