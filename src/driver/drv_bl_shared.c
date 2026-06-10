@@ -8,10 +8,19 @@
 #define CHARGER_MIN_PWM   10      // lowest useful duty for the supply
 #define CHARGER_MAX_PWM  100
 
-// Set to 32 slots (8-hour circular buffer to match the new 8-hour graph)
-static int consumption_matrix [32] = {0}; 
-static int export_matrix[32] = {0};
-static int net_matrix[32] = {0};
+// Set to 48 slots (12-hour circular buffer to match the new 12-hour graph)
+#define MATRIX_SIZE 48
+
+static int consumption_matrix[MATRIX_SIZE] = {0}; 
+static int export_matrix[MATRIX_SIZE] = {0};
+static int net_matrix[MATRIX_SIZE] = {0};
+
+// New Averages matrices
+static int charger_c_matrix[MATRIX_SIZE] = {0};
+static int inverter_matrix[MATRIX_SIZE] = {0};
+static int current_charger_c_accum = 0;
+static int current_inverter_accum = 0;
+static int sample_count_30s = 0;
 
 static int old_export_energy = 0;
 static int old_real_consumption = 0;
@@ -437,13 +446,30 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         check_time = NTP_GetMinute();
         check_hour = NTP_GetHour();
 
+        // ======================================================================================================
+        // 30-SECOND SAMPLER (Charger & Inverter Averages)
+        // ======================================================================================================
+        static portTickType last_30s_tick = 0;
+        portTickType current_sys_tick = xTaskGetTickCount();
+        if ((current_sys_tick - last_30s_tick) >= (30000 / portTICK_PERIOD_MS) || last_30s_tick == 0) {
+            last_30s_tick = current_sys_tick;
+            int current_dmp = dump_load_relay[5];
+            
+            if (current_dmp >= 18 && current_dmp <= 100) {
+                current_charger_c_accum += current_dmp;
+            } else if (current_dmp == 5) {
+                current_inverter_accum += 250; 
+            }
+            sample_count_30s++;
+        }
+
         // ------------------------------------------------------------------------------------------------------
         // THE 15-MINUTE RESET & CIRCULAR MATRIX LOGIC 
         // ------------------------------------------------------------------------------------------------------
         {
             int minutes_since_midnight_tracker = (check_hour * 60) + check_time;
             int interval_of_day_tracker = minutes_since_midnight_tracker / 15;
-            int current_matrix_index = interval_of_day_tracker % 32; 
+            int current_matrix_index = interval_of_day_tracker % MATRIX_SIZE; 
 
             if (last_matrix_index == -1) {
                 last_matrix_index = current_matrix_index;
@@ -453,6 +479,10 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 consumption_matrix[last_matrix_index] = (int)real_consumption;
                 export_matrix[last_matrix_index] = (int)real_export;
                 net_matrix[last_matrix_index] = (int)real_consumption - (int)real_export;
+
+                // Write averages for the interval
+                charger_c_matrix[last_matrix_index] = sample_count_30s ? (current_charger_c_accum / sample_count_30s) : 0;
+                inverter_matrix[last_matrix_index] = sample_count_30s ? (current_inverter_accum / sample_count_30s) : 0;
 
                 // Process Net Metering for the interval
                 period_net = real_consumption - real_export;
@@ -467,6 +497,12 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 consumption_matrix[current_matrix_index] = 0;
                 export_matrix[current_matrix_index] = 0;
                 net_matrix[current_matrix_index] = 0;
+                charger_c_matrix[current_matrix_index] = 0;
+                inverter_matrix[current_matrix_index] = 0;
+
+                current_charger_c_accum = 0;
+                current_inverter_accum = 0;
+                sample_count_30s = 0;
 
                 last_matrix_index = current_matrix_index;
                 savetoflash = 1;
@@ -959,16 +995,16 @@ int http_fn_api_dash(http_request_t *request) {
         
         // 1. Draw the filled area (polygon) mapped to the red/green gradient
         poststr(request, "<polygon fill='url(#splitFade)' points='60,170 ");
-        for (int i = 28; i >= 0; i--) {
+        for (int i = 47; i >= 0; i--) {
             int interval_of_day, c_index, net, x, h, y;
             char point_str[32];
             
             interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-            c_index = interval_of_day % 32;
+            c_index = interval_of_day % MATRIX_SIZE;
             net = net_matrix[c_index];
             if (i == 0) { net += (int)(real_consumption - real_export); }
             
-            x = (28 - i) * 16 + 60; 
+            x = (47 - i) * 10 + 60; 
             h = net / 2;
             if (h > 150) h = 150;
             if (h < -75) h = -75;
@@ -977,20 +1013,20 @@ int http_fn_api_dash(http_request_t *request) {
             snprintf(point_str, sizeof(point_str), "%d,%d ", x, y);
             poststr(request, point_str);
         }
-        poststr(request, "508,170'/>");
+        poststr(request, "530,170'/>");
 
         // 2. Draw the crisp defining line on top
         poststr(request, "<polyline fill='none' stroke='#888' stroke-width='2' points='");
-        for (int i = 28; i >= 0; i--) {
+        for (int i = 47; i >= 0; i--) {
             int interval_of_day, c_index, net, x, h, y;
             char point_str[32];
             
             interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-            c_index = interval_of_day % 32;
+            c_index = interval_of_day % MATRIX_SIZE;
             net = net_matrix[c_index];
             if (i == 0) { net += (int)(real_consumption - real_export); }
             
-            x = (28 - i) * 16 + 60; 
+            x = (47 - i) * 10 + 60; 
             h = net / 2;
             if (h > 150) h = 150;
             if (h < -75) h = -75;
@@ -998,6 +1034,32 @@ int http_fn_api_dash(http_request_t *request) {
             
             snprintf(point_str, sizeof(point_str), "%d,%d ", x, y);
             poststr(request, point_str);
+        }
+        poststr(request, "'/>");
+
+        // 3. Draw the Charger Average overlay line (mapped 18-100 directly visually up to 100px)
+        poststr(request, "<polyline fill='none' stroke='#0099FF' stroke-dasharray='4,2' stroke-width='2' points='");
+        for (int i = 47; i >= 0; i--) {
+            int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
+            int c_index = interval_of_day % MATRIX_SIZE;
+            int val = charger_c_matrix[c_index];
+            if (i == 0 && sample_count_30s > 0) { val = current_charger_c_accum / sample_count_30s; }
+            int x = (47 - i) * 10 + 60;
+            int y = 170 - val; 
+            hprintf255(request, "%d,%d ", x, y);
+        }
+        poststr(request, "'/>");
+
+        // 4. Draw the Inverter Average overlay line (facing down, scaled so 250W = 75px visual drop)
+        poststr(request, "<polyline fill='none' stroke='#ffeb3b' stroke-dasharray='4,2' stroke-width='2' points='");
+        for (int i = 47; i >= 0; i--) {
+            int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
+            int c_index = interval_of_day % MATRIX_SIZE;
+            int val = inverter_matrix[c_index];
+            if (i == 0 && sample_count_30s > 0) { val = current_inverter_accum / sample_count_30s; }
+            int x = (47 - i) * 10 + 60;
+            int y = 170 + (val * 75 / 250); 
+            hprintf255(request, "%d,%d ", x, y);
         }
         poststr(request, "'/>\"");
     }
@@ -1028,8 +1090,8 @@ int http_fn_custom_dash(http_request_t *request) {
         ".c-exp { color: #4caf50; }"
         ".c-imp { color: #f44336; }"
         ".dash-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; margin-top: 15px; height: 380px; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; }"
-        ".left-col { -webkit-box-flex: 0; -webkit-flex: 0 0 210px; flex: 0 0 210px; width: 210px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; box-sizing: border-box; }"
-        ".sens-tbl { width: 100%; font-size: 12px; border-collapse: collapse; }"
+        ".left-col { -webkit-box-flex: 0; -webkit-flex: 0 0 230px; flex: 0 0 230px; width: 230px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; box-sizing: border-box; }"
+        ".sens-tbl { width: 100%; font-size: 14px; border-collapse: collapse; }"
         ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
         ".graph-col { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; position: relative; box-sizing: border-box; }"
         ".ctrl-wrapper { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; margin-top: 15px; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; }"
@@ -1069,8 +1131,7 @@ int http_fn_custom_dash(http_request_t *request) {
             "<div style='position:absolute; top:15px; left:70px; font-size:12px; color:#f44336; text-transform:uppercase;'>PAYING 🔌</div>"
             "<div style='position:absolute; bottom:30px; left:70px; font-size:12px; color:#4caf50; text-transform:uppercase;'>SAVING ☀️</div>"
             
-            // Increased viewbox height to 280 to fit the time scale
-            "<svg viewBox='0 0 512 280' preserveAspectRatio='xMinYMid meet' style='width:100%; height:100%; background:transparent;'>"
+            "<svg viewBox='0 0 542 280' preserveAspectRatio='xMinYMid meet' style='width:100%; height:100%; background:transparent;'>"
             "<defs>"
             "<linearGradient id='splitFade' x1='0' y1='0' x2='0' y2='280' gradientUnits='userSpaceOnUse'>"
             "<stop offset='0' stop-color='#f44336' stop-opacity='0.6'/>"
@@ -1081,11 +1142,11 @@ int http_fn_custom_dash(http_request_t *request) {
             "</defs>"
             
             "<g stroke='#333' stroke-width='1' stroke-dasharray='5,5'>"
-            "<line x1='60' y1='20' x2='512' y2='20'/>" 
-            "<line x1='60' y1='95' x2='512' y2='95'/>" 
-            "<line x1='60' y1='245' x2='512' y2='245'/>" 
+            "<line x1='60' y1='20' x2='530' y2='20'/>" 
+            "<line x1='60' y1='95' x2='530' y2='95'/>" 
+            "<line x1='60' y1='245' x2='530' y2='245'/>" 
             "</g>"
-            "<line x1='60' y1='170' x2='512' y2='170' stroke='#777' stroke-width='1.5'/>" 
+            "<line x1='60' y1='170' x2='530' y2='170' stroke='#777' stroke-width='1.5'/>" 
             
             // Vertical Y-Axis Line
             "<line x1='60' y1='20' x2='60' y2='260' stroke='#777' stroke-width='1'/>"
@@ -1100,11 +1161,11 @@ int http_fn_custom_dash(http_request_t *request) {
             "<g id='d-graph-data'></g>"
         );
 
-        // Generate the Time Scale Legend dynamically (so we don't store a massive HTML string)
-        poststr(request, "<g stroke='#777' stroke-width='1'><line x1='60' y1='260' x2='508' y2='260'/></g>");
+        // Generate the Time Scale Legend dynamically
+        poststr(request, "<g stroke='#777' stroke-width='1'><line x1='60' y1='260' x2='530' y2='260'/></g>");
         poststr(request, "<g fill='#888' font-size='10' font-family='sans-serif'>");
-        for (int i = 0; i <= 28; i++) {
-            int x = (28 - i) * 16 + 60;
+        for (int i = 0; i <= 47; i++) {
+            int x = (47 - i) * 10 + 60;
             if (i % 4 == 0) {
                 // Major tick mark (Hour intervals)
                 hprintf255(request, "<line x1='%d' y1='260' x2='%d' y2='266' stroke='#777'/>", x, x);
