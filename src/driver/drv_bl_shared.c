@@ -483,7 +483,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         net_energy = (real_consumption - real_export);                               
 
         // ======================================================================================================
-        // CONTROL LOGIC (Target Export, Asymmetric Control)
+        // CONTROL LOGIC (Target Export, Proportional-Integral Control)
         // ======================================================================================================
         static portTickType last_control_tick = 0;
         portTickType current_tick = xTaskGetTickCount();
@@ -538,14 +538,19 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                     } else {
                         int excess_wh, error_w, pwm_step;
 
-                        // Calculate Watts needed to hit the target
-                        excess_wh = abs(estimated_energy_period + target_export); 
+                        // Calculate difference from target exactly (allowing negatives!).
+                        // If estimated is -50 and target is 20, excess_wh = 30 (We need to increase load).
+                        // If estimated is +10 and target is 20, excess_wh = -30 (We are importing, decrease load).
+                        excess_wh = -(estimated_energy_period + target_export); 
+                        
+                        // Convert Wh error into Watts over the remaining time
                         error_w = (excess_wh * 60) / check_time_estimate_mins; 
                         
-                        // Increase by 50% of the required adjustment in PWM units
-                        pwm_step = (error_w / 10) / 2;
-                        if (pwm_step < 1) pwm_step = 1; // Enforce movement
+                        // Convert Watts to PWM step (10W = 1 PWM unit)
+                        // Dampen by dividing by 2 to prevent oscillation
+                        pwm_step = (error_w / 10) / 2; 
                         
+                        // Add OR subtract the step from the current state (Ratchet fixed!)
                         solar_excess += pwm_step;
                     }
                     
@@ -1062,7 +1067,7 @@ int http_fn_custom_dash(http_request_t *request) {
             
             "<div class='graph-col'>"
             "<div style='position:absolute; top:15px; left:70px; font-size:12px; color:#f44336; text-transform:uppercase;'>PAYING 🔌</div>"
-            "<div style='position:absolute; bottom:30px; left:70px; font-size:12px; color:#4caf50; text-transform:uppercase;'>SAVINGS ☀️</div>"
+            "<div style='position:absolute; bottom:30px; left:70px; font-size:12px; color:#4caf50; text-transform:uppercase;'>SAVING ☀️</div>"
             
             // Increased viewbox height to 280 to fit the time scale
             "<svg viewBox='0 0 512 280' preserveAspectRatio='xMinYMid meet' style='width:100%; height:100%; background:transparent;'>"
