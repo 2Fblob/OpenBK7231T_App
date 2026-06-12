@@ -1086,7 +1086,7 @@ int http_fn_custom_dash(http_request_t *request) {
         ".left-col { -webkit-box-flex: 0; -webkit-flex: 0 0 230px; flex: 0 0 230px; width: 230px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; box-sizing: border-box; }"
         ".sens-tbl { width: 100%; font-size: 14px; border-collapse: collapse; }"
         ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
-        ".graph-col { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; position: relative; box-sizing: border-box; margin-right: 15px; }"
+        ".graph-col { -webkit-box-flex: 1; -webkit-flex: 1 1 0%; flex: 1 1 0%; min-width: 0; min-height: 0; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; position: relative; box-sizing: border-box; margin-right: 15px; }"
         ".right-col { -webkit-box-flex: 0; -webkit-flex: 0 0 280px; flex: 0 0 280px; width: 280px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; box-sizing: border-box; }"
         ".btn-tgl { width: 100%; height: 50px; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-bottom: 12px; display: block; }"
         ".sld-v-block { margin-top: 10px; width: 100%; }"
@@ -1119,7 +1119,6 @@ int http_fn_custom_dash(http_request_t *request) {
             "<div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>"
             "<table class='sens-tbl'><tbody id='d-sens-body'></tbody></table>"
             
-            // LEGEND RELOCATED HERE
             "<div style='margin-top:20px; font-size:11px; color:#aaa; padding:12px; background:#1a1a1a; border-radius:6px; border:1px solid #333;'>"
             "<div style='margin-bottom:8px; color:#888; text-transform:uppercase; font-size:10px; letter-spacing:1px;'>Graph Legend</div>"
             "<div><span style='display:inline-block; width:14px; height:2px; background:#888; margin-right:8px; vertical-align:middle;'></span>Total Energy</div>"
@@ -1139,36 +1138,28 @@ int http_fn_custom_dash(http_request_t *request) {
             "</linearGradient>"
             "</defs>"
             
-            // SEPARATED GRAPH BACKGROUNDS (Making them distinct boxes)
             "<rect x='60' y='10' width='517' height='50' fill='#181818'/>"
             "<rect x='60' y='75' width='517' height='235' fill='#181818'/>"
             
-            // SEPARATED Y-AXES
             "<line x1='60' y1='10' x2='60' y2='60' stroke='#777' stroke-width='1'/>"
             "<line x1='60' y1='75' x2='60' y2='310' stroke='#777' stroke-width='1'/>"
 
-            // SEPARATED X-AXES BASELINES
             "<line x1='60' y1='60' x2='577' y2='60' stroke='#777' stroke-width='1'/>"
             
             "<g stroke='#333' stroke-width='1' stroke-dasharray='5,5'>"
-            // Top graph grid
             "<line x1='60' y1='35' x2='577' y2='35'/>"
             
-            // Bottom graph grid
             "<line x1='60' y1='75' x2='577' y2='75'/>" 
             "<line x1='60' y1='150' x2='577' y2='150'/>" 
             "<line x1='60' y1='300' x2='577' y2='300'/>" 
             "</g>"
             
-            // Main graph 0-line
             "<line x1='60' y1='225' x2='577' y2='225' stroke='#777' stroke-width='1.5'/>" 
             
             "<g fill='#888' font-size='12' font-family='monospace' text-anchor='end'>"
-            // Top graph text
             "<text x='48' y='14'>100</text>"
             "<text x='48' y='64'>0</text>"
             
-            // Bottom graph text
             "<text x='48' y='79'>+300</text>"
             "<text x='48' y='154'>+150</text>"
             "<text x='48' y='229' fill='#aaa'>0 Wh</text>"
@@ -1178,13 +1169,11 @@ int http_fn_custom_dash(http_request_t *request) {
             "<g id='d-graph-data'></g>"
         );
 
-        // Generate the Time Scale Legend dynamically
         poststr(request, "<g stroke='#777' stroke-width='1'><line x1='60' y1='310' x2='577' y2='310'/></g>");
         poststr(request, "<g fill='#888' font-size='10' font-family='sans-serif'>");
         for (int i = 0; i <= 47; i++) {
             int x = (47 - i) * 11 + 60;
             if (i % 4 == 0) {
-                // Major tick mark (Hour intervals)
                 hprintf255(request, "<line x1='%d' y1='310' x2='%d' y2='316' stroke='#777'/>", x, x);
                 if (i == 0) {
                     hprintf255(request, "<text x='%d' y='328' text-anchor='end'>Now</text>", x);
@@ -1192,7 +1181,6 @@ int http_fn_custom_dash(http_request_t *request) {
                     hprintf255(request, "<text x='%d' y='328' text-anchor='middle'>-%dh</text>", x, i/4);
                 }
             } else {
-                // Minor tick mark (15 min intervals)
                 hprintf255(request, "<line x1='%d' y1='310' x2='%d' y2='313' stroke='#777'/>", x, x);
             }
         }
@@ -1219,7 +1207,6 @@ int http_fn_custom_dash(http_request_t *request) {
             "</div>"
             "</div>"
 
-            // CLOCK LAYOUT MODIFIED HERE (Horizontal stacking)
             "<div class='bottom-clk-row'>"
             "<div id='d-clk'>--:--</div>"
             "<div class='clk-text-wrap'>"
@@ -1234,8 +1221,8 @@ int http_fn_custom_dash(http_request_t *request) {
     poststr(request, "<script>");
     poststr(request, 
         "var dmp=0, auto=0;"
-        "function s_pwr(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetPower%20'+v,true); xhr.send(); document.getElementById('lbl-pwr').innerText=v; }"
-        "function s_exp(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetExport%20'+v,true); xhr.send(); document.getElementById('lbl-exp').innerText=v; }"
+        "function s_pwr(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetPower%20'+v,true); xhr.send(); document.getElementById('lbl-pwr').innerHTML=v; }"
+        "function s_exp(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetExport%20'+v,true); xhr.send(); document.getElementById('lbl-exp').innerHTML=v; }"
         "function upd(v){if(auto===1)return; if(v>=18){document.getElementById('sld-pwr').value=v;} s_pwr(v); dmp=parseInt(v, 10); btnColor();}"
         "function t_inv(){upd(dmp===5?0:5);}"
         "function t_chg(){upd(dmp>=10?0:18);}"
@@ -1245,7 +1232,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),m=document.getElementById('m-btn');"
         "if(i) i.style.background=(dmp===5)?'#ff9800':'#555';"
         "if(c) c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#8bc34a':'#555');"
-        "if(m){ m.innerText=(auto===1)?'AUTO':'MANUAL'; m.style.background=(auto===1)?'#0099FF':'#f44336'; }"
+        "if(m){ m.innerHTML=(auto===1)?'AUTO':'MANUAL'; m.style.background=(auto===1)?'#0099FF':'#f44336'; }"
         "}"
         
         "function refresh(){"
@@ -1254,28 +1241,29 @@ int http_fn_custom_dash(http_request_t *request) {
         "if(xhr.readyState===4 && xhr.status===200){"
         "try {"
         "var d=JSON.parse(xhr.responseText);"
-        "document.getElementById('d-va').innerText=d.va;"
-        "document.getElementById('d-pwr').innerText=d.pwr;"
+        "document.getElementById('d-va').innerHTML=d.va;"
+        "document.getElementById('d-pwr').innerHTML=d.pwr;"
         "document.getElementById('d-pwr').className=d.pwr_cls;"
-        "document.getElementById('d-bal').innerText=d.bal;"
+        "document.getElementById('d-bal').innerHTML=d.bal;"
         "document.getElementById('d-bal').className=d.bal_cls;"
-        "document.getElementById('d-est').innerText=d.est;"
+        "document.getElementById('d-est').innerHTML=d.est;"
         "document.getElementById('d-est').className=d.est_cls;"
-        "document.getElementById('c-lbl').innerText=d.chg_lbl;"
-        "document.getElementById('c-v').innerText=d.chg_v;"
+        "document.getElementById('c-lbl').innerHTML=d.chg_lbl;"
+        "document.getElementById('c-v').innerHTML=d.chg_v;"
         "document.getElementById('c-v').style.color=d.chg_c;"
-        "document.getElementById('d-clk').innerText=d.clk;"
-        "if(d.t_pwr>=18){document.getElementById('sld-pwr').value=d.t_pwr;} document.getElementById('lbl-pwr').innerText=d.t_pwr;"
-        "document.getElementById('sld-exp').value=d.t_exp; document.getElementById('lbl-exp').innerText=d.t_exp;"
+        "document.getElementById('d-clk').innerHTML=d.clk;"
+        "if(d.t_pwr>=18){document.getElementById('sld-pwr').value=d.t_pwr;} document.getElementById('lbl-pwr').innerHTML=d.t_pwr;"
+        "document.getElementById('sld-exp').value=d.t_exp; document.getElementById('lbl-exp').innerHTML=d.t_exp;"
         "dmp=d.dmp; auto=d.auto; btnColor();"
         "if(d.sens){"
         "document.getElementById('d-sens-body').innerHTML=d.sens;"
         "document.getElementById('d-graph-data').innerHTML=d.graph;"
         "}"
         "var days=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
+        "var mos=['January','February','March','April','May','June','July','August','September','October','November','December'];"
         "var dt=new Date();"
-        "document.getElementById('d-day').innerText=days[dt.getDay()];"
-        "document.getElementById('d-date').innerText=dt.toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'});"
+        "document.getElementById('d-day').innerHTML=days[dt.getDay()];"
+        "document.getElementById('d-date').innerHTML=mos[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear();"
         "} catch(e) {}"
         "}"
         "};"
