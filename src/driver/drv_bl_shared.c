@@ -934,7 +934,7 @@ energySensorNames_t* DRV_GetEnergySensorNames(energySensor_t type)
 }
 
 // ====================================================================
-// NEW JSON API ENDPOINT (Smooth Area Chart Generation)
+// NEW JSON API ENDPOINT (Now serves data arrays instead of SVG strings)
 // ====================================================================
 int http_fn_api_dash(http_request_t *request) {
     int dmp;
@@ -968,7 +968,6 @@ int http_fn_api_dash(http_request_t *request) {
 
         poststr(request, ","); 
         poststr(request, "\"sens\":\"");
-        
         for (p_i = (OBK__FIRST); p_i <= (OBK_CONSUMPTION__DAILY_LAST); p_i++) {
             if (p_i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))) { p_i++; }
             if (p_i <= OBK__NUM_MEASUREMENTS || NTP_IsTimeSynced()) {
@@ -984,77 +983,29 @@ int http_fn_api_dash(http_request_t *request) {
         }
         poststr(request, "\",");
 
-        poststr(request, "\"graph\":\"");
-        
-        // 1. Draw the filled area (polygon) mapped to the red/green gradient (Lower Main Graph)
-        poststr(request, "<polygon fill='url(#splitFade)' points='60,225 ");
-        for (int i = 47; i >= 0; i--) {
-            int interval_of_day, c_index, net, x, h, y;
-            char point_str[32];
-            
-            interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-            c_index = interval_of_day % MATRIX_SIZE;
-            net = net_matrix[c_index];
-            if (i == 0) { net += (int)(real_consumption - real_export); }
-            
-            x = (47 - i) * 11 + 60; 
-            h = net / 2;
-            if (h > 150) h = 150;
-            if (h < -75) h = -75;
-            y = 225 - h;
-            
-            snprintf(point_str, sizeof(point_str), "%d,%d ", x, y);
-            poststr(request, point_str);
-        }
-        poststr(request, "577,225'/>");
-
-        // 2. Draw the crisp defining line on top of the fill
-        poststr(request, "<polyline fill='none' stroke='#888' stroke-width='2' points='");
-        for (int i = 47; i >= 0; i--) {
-            int interval_of_day, c_index, net, x, h, y;
-            char point_str[32];
-            
-            interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-            c_index = interval_of_day % MATRIX_SIZE;
-            net = net_matrix[c_index];
-            if (i == 0) { net += (int)(real_consumption - real_export); }
-            
-            x = (47 - i) * 11 + 60; 
-            h = net / 2;
-            if (h > 150) h = 150;
-            if (h < -75) h = -75;
-            y = 225 - h;
-            
-            snprintf(point_str, sizeof(point_str), "%d,%d ", x, y);
-            poststr(request, point_str);
-        }
-        poststr(request, "'/>");
-
-        // 3. Draw the Charger Overlay (Top isolated graph box, Y:10 to Y:60)
-        poststr(request, "<polyline fill='none' stroke='#4caf50' stroke-width='1' points='");
+        // TRANSMIT RAW DATA ARRAYS FOR CANVAS
+        poststr(request, "\"net\":[");
         for (int i = 47; i >= 0; i--) {
             int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-            int c_index = interval_of_day % MATRIX_SIZE;
-            int val = charger_c_matrix[c_index];
+            int net = net_matrix[interval_of_day % MATRIX_SIZE];
+            if (i == 0) { net += (int)(real_consumption - real_export); }
+            hprintf255(request, "%d%s", net, (i==0)?"":",");
+        }
+        poststr(request, "],\"chg\":[");
+        for (int i = 47; i >= 0; i--) {
+            int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
+            int val = charger_c_matrix[interval_of_day % MATRIX_SIZE];
             if (i == 0 && sample_count_30s > 0) { val = current_charger_c_accum / sample_count_30s; }
-            int x = (47 - i) * 11 + 60;
-            int y = 60 - (val / 2); 
-            hprintf255(request, "%d,%d ", x, y);
+            hprintf255(request, "%d%s", val, (i==0)?"":",");
         }
-        poststr(request, "'/>");
-
-        // 4. Draw the Inverter Overlay (Top isolated graph box, Y:10 to Y:60)
-        poststr(request, "<polyline fill='none' stroke='#ff9800' stroke-width='1' points='");
+        poststr(request, "],\"inv\":[");
         for (int i = 47; i >= 0; i--) {
             int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-            int c_index = interval_of_day % MATRIX_SIZE;
-            int val = inverter_matrix[c_index];
+            int val = inverter_matrix[interval_of_day % MATRIX_SIZE];
             if (i == 0 && sample_count_30s > 0) { val = current_inverter_accum / sample_count_30s; }
-            int x = (47 - i) * 11 + 60;
-            int y = 60 - (val / 2); 
-            hprintf255(request, "%d,%d ", x, y);
+            hprintf255(request, "%d%s", val, (i==0)?"":",");
         }
-        poststr(request, "'/>\"");
+        poststr(request, "]");
     }
     
     poststr(request, "}");
@@ -1063,7 +1014,7 @@ int http_fn_api_dash(http_request_t *request) {
 }
 
 // ====================================================================
-// NEW STANDALONE DASHBOARD (Legacy Browser Compatible & Vertical Controls)
+// NEW STANDALONE DASHBOARD (HTML5 Canvas Fallback for iOS 5/9)
 // ====================================================================
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
@@ -1074,25 +1025,25 @@ int http_fn_custom_dash(http_request_t *request) {
         "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
         "<title>Solar Dashboard</title>"
         "<style>"
-        "body { margin: 0; background-color: #000; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; }"
+        "body { margin: 0; background-color: #000; display: -webkit-box; display: flex; -webkit-box-pack: center; justify-content: center; }"
         "#dash-container { max-width: 1200px; width: 100%; min-height: 100vh; background-color: #121212; padding: 10px 20px 20px 20px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; position: relative; }"
-        ".top-stats { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between; -webkit-box-align: center; -webkit-align-items: center; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; margin-top: 15px; width: 100%; box-sizing: border-box; -webkit-flex-wrap: nowrap; flex-wrap: nowrap; white-space: nowrap; }"
-        ".top-stats div { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; margin: 0 10px; }"
+        ".top-stats { display: -webkit-box; display: flex; -webkit-box-pack: justify; justify-content: space-between; -webkit-box-align: center; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; margin-top: 15px; width: 100%; box-sizing: border-box; white-space: nowrap; }"
+        ".top-stats div { display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; -webkit-box-pack: center; justify-content: center; margin: 0 10px; }"
         ".top-stats label { color: #888; font-size: 20px; text-transform: uppercase; margin-bottom: 6px; display: block; }"
         ".top-stats b { font-size: 38px; font-weight: 600; }"
         ".c-exp { color: #4caf50; }"
         ".c-imp { color: #f44336; }"
-        ".dash-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; margin-top: 15px; height: 400px; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; }"
-        ".left-col { -webkit-box-flex: 0; -webkit-flex: 0 0 230px; flex: 0 0 230px; width: 230px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; box-sizing: border-box; }"
+        ".dash-row { display: -webkit-box; display: flex; -webkit-box-orient: horizontal; flex-direction: row; margin-top: 15px; height: 400px; -webkit-box-align: stretch; align-items: stretch; }"
+        ".left-col { -webkit-box-flex: 0; flex: 0 0 230px; width: 230px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; box-sizing: border-box; }"
         ".sens-tbl { width: 100%; font-size: 14px; border-collapse: collapse; }"
         ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
-        ".graph-col { -webkit-box-flex: 1; -webkit-flex: 1 1 0%; flex: 1 1 0%; min-width: 0; min-height: 0; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; position: relative; box-sizing: border-box; margin-right: 15px; }"
-        ".right-col { -webkit-box-flex: 0; -webkit-flex: 0 0 280px; flex: 0 0 280px; width: 280px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; box-sizing: border-box; }"
+        ".graph-col { -webkit-box-flex: 1; flex: 1; background: #222; padding: 15px; border-radius: 8px; display: block; position: relative; box-sizing: border-box; margin-right: 15px; }"
+        ".right-col { -webkit-box-flex: 0; flex: 0 0 280px; width: 280px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; box-sizing: border-box; }"
         ".btn-tgl { width: 100%; height: 50px; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-bottom: 12px; display: block; }"
         ".sld-v-block { margin-top: 10px; width: 100%; }"
         ".sld-v-block label { display: block; font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }"
-        ".bottom-clk-row { background: #222; border-radius: 8px; padding: 25px; margin-top: 15px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; box-sizing: border-box; width: 100%; }"
-        ".clk-text-wrap { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: start; -webkit-align-items: flex-start; align-items: flex-start; margin-left: 20px; text-align: left; }"
+        ".bottom-clk-row { background: #222; border-radius: 8px; padding: 25px; margin-top: 15px; display: -webkit-box; display: flex; -webkit-box-orient: horizontal; flex-direction: row; -webkit-box-align: center; align-items: center; -webkit-box-pack: center; justify-content: center; box-sizing: border-box; width: 100%; }"
+        ".clk-text-wrap { display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; -webkit-box-align: start; align-items: flex-start; margin-left: 20px; text-align: left; }"
         "#d-clk { font-size: 120px; font-weight: bold; color: #0099FF; font-family: monospace; line-height: 1; letter-spacing: -3px; }"
         "#d-day { font-size: 26px; font-weight: 600; color: #eee; text-transform: uppercase; font-family: sans-serif; letter-spacing: 2px; margin-bottom: 4px; }"
         "#d-date { font-size: 16px; color: #888; font-family: sans-serif; }"
@@ -1128,27 +1079,16 @@ int http_fn_custom_dash(http_request_t *request) {
             "</div>"
             
             "<div class='graph-col'>"
-            "<svg viewBox='0 0 592 340' preserveAspectRatio='xMinYMid meet' style='width:100%; height:100%; background:transparent;'>"
-            "<defs>"
-            "<linearGradient id='splitFade' x1='0' y1='0' x2='0' y2='340' gradientUnits='userSpaceOnUse'>"
-            "<stop offset='75' stop-color='#f44336' stop-opacity='0.6'/>"
-            "<stop offset='225' stop-color='#f44336' stop-opacity='0'/>"
-            "<stop offset='225' stop-color='#4caf50' stop-opacity='0'/>"
-            "<stop offset='300' stop-color='#4caf50' stop-opacity='0.6'/>"
-            "</linearGradient>"
-            "</defs>"
-            
+            // STATIC GRID rendered immediately. This is perfectly safe for iOS 5.
+            "<svg viewBox='0 0 592 340' preserveAspectRatio='xMinYMid meet' style='width:100%; height:100%; background:transparent; position:absolute; top:0; left:0; z-index:1;'>"
             "<rect x='60' y='10' width='517' height='50' fill='#181818'/>"
             "<rect x='60' y='75' width='517' height='235' fill='#181818'/>"
-            
             "<line x1='60' y1='10' x2='60' y2='60' stroke='#777' stroke-width='1'/>"
             "<line x1='60' y1='75' x2='60' y2='310' stroke='#777' stroke-width='1'/>"
-
             "<line x1='60' y1='60' x2='577' y2='60' stroke='#777' stroke-width='1'/>"
             
             "<g stroke='#333' stroke-width='1' stroke-dasharray='5,5'>"
             "<line x1='60' y1='35' x2='577' y2='35'/>"
-            
             "<line x1='60' y1='75' x2='577' y2='75'/>" 
             "<line x1='60' y1='150' x2='577' y2='150'/>" 
             "<line x1='60' y1='300' x2='577' y2='300'/>" 
@@ -1159,14 +1099,11 @@ int http_fn_custom_dash(http_request_t *request) {
             "<g fill='#888' font-size='12' font-family='monospace' text-anchor='end'>"
             "<text x='48' y='14'>100</text>"
             "<text x='48' y='64'>0</text>"
-            
             "<text x='48' y='79'>+300</text>"
             "<text x='48' y='154'>+150</text>"
             "<text x='48' y='229' fill='#aaa'>0 Wh</text>"
             "<text x='48' y='304'>-150</text>"
             "</g>"
-            
-            "<g id='d-graph-data'></g>"
         );
 
         poststr(request, "<g stroke='#777' stroke-width='1'><line x1='60' y1='310' x2='577' y2='310'/></g>");
@@ -1184,10 +1121,12 @@ int http_fn_custom_dash(http_request_t *request) {
                 hprintf255(request, "<line x1='%d' y1='310' x2='%d' y2='313' stroke='#777'/>", x, x);
             }
         }
-        poststr(request, "</g>");
-
+        poststr(request, "</g></svg>");
+        
+        // CANVAS OVERLAY handles the dynamic lines safely
         poststr(request, 
-            "</svg></div>"
+            "<canvas id='dynCanvas' width='592' height='340' style='width:100%; height:100%; position:absolute; top:0; left:0; z-index:2;'></canvas>"
+            "</div>"
             
             "<div class='right-col'>"
             "<div style='font-size:12px; color:#888; text-transform:uppercase; margin-bottom:12px;'>System Modes</div>"
@@ -1258,14 +1197,47 @@ int http_fn_custom_dash(http_request_t *request) {
         "if(d.sens){"
         "document.getElementById('d-sens-body').innerHTML=d.sens;"
         
-        // --- iOS 9 SVG NAMESPACE PARSING FIX ---
-        "var g = document.getElementById('d-graph-data');"
-        "var dummy = document.createElement('div');"
-        "dummy.innerHTML = '<svg xmlns=\"http://www.w3.org/2000/svg\">' + d.graph + '</svg>';"
-        "while(g.firstChild) { g.removeChild(g.firstChild); }"
-        "var svgNode = dummy.firstChild;"
-        "while(svgNode && svgNode.firstChild) { g.appendChild(svgNode.firstChild); }"
-        // ---------------------------------------
+        // --- NATIVE CANVAS GRAPH RENDERER ---
+        "var c=document.getElementById('dynCanvas');"
+        "if(c && c.getContext){"
+        "var ctx=c.getContext('2d');"
+        "ctx.clearRect(0,0,592,340);"
+        "var grad=ctx.createLinearGradient(0,75,0,310);"
+        "grad.addColorStop(0,'rgba(244,67,54,0.6)');"
+        "grad.addColorStop(0.638,'rgba(244,67,54,0)');"
+        "grad.addColorStop(0.638,'rgba(76,175,80,0)');"
+        "grad.addColorStop(1,'rgba(76,175,80,0.6)');"
+        
+        // Fill net block
+        "ctx.beginPath(); ctx.moveTo(60,225);"
+        "for(var i=0; i<48; i++){"
+        "var h=d.net[i]/2; if(h>150)h=150; if(h<-75)h=-75;"
+        "ctx.lineTo(i*11+60, 225-h);"
+        "}"
+        "ctx.lineTo(577,225); ctx.fillStyle=grad; ctx.fill();"
+        
+        // Line net block
+        "ctx.beginPath();"
+        "for(var i=0; i<48; i++){"
+        "var h=d.net[i]/2; if(h>150)h=150; if(h<-75)h=-75;"
+        "if(i===0)ctx.moveTo(60,225-h); else ctx.lineTo(i*11+60,225-h);"
+        "}"
+        "ctx.strokeStyle='#888'; ctx.lineWidth=2; ctx.stroke();"
+
+        // Line Charger
+        "ctx.beginPath();"
+        "for(var i=0; i<48; i++){"
+        "if(i===0)ctx.moveTo(60,60-(d.chg[i]/2)); else ctx.lineTo(i*11+60,60-(d.chg[i]/2));"
+        "}"
+        "ctx.strokeStyle='#4caf50'; ctx.lineWidth=1; ctx.stroke();"
+
+        // Line Inverter
+        "ctx.beginPath();"
+        "for(var i=0; i<48; i++){"
+        "if(i===0)ctx.moveTo(60,60-(d.inv[i]/2)); else ctx.lineTo(i*11+60,60-(d.inv[i]/2));"
+        "}"
+        "ctx.strokeStyle='#ff9800'; ctx.lineWidth=1; ctx.stroke();"
+        "}"
         
         "}"
         "var days=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
