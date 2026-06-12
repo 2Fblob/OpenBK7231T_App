@@ -1063,7 +1063,7 @@ int http_fn_api_dash(http_request_t *request) {
 }
 
 // ====================================================================
-// NEW STANDALONE DASHBOARD (Pure Canvas Grid + Lines for iOS 5/9)
+// NEW STANDALONE DASHBOARD (Pure Canvas Grid + Smooth Curves)
 // ====================================================================
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
@@ -1129,8 +1129,6 @@ int http_fn_custom_dash(http_request_t *request) {
             "</div>"
             
             "<div class='graph-col'>"
-            // THE SVG HAS BEEN COMPLETELY REMOVED. 
-            // The Canvas will now draw its own grid, guaranteeing 100% perfect alignment.
             "<canvas id='dynCanvas' width='592' height='340'></canvas>"
             "</div>"
             
@@ -1202,18 +1200,16 @@ int http_fn_custom_dash(http_request_t *request) {
         "dmp=d.dmp; auto=d.auto; btnColor();"
         "if(d.sens){ document.getElementById('d-sens-body').innerHTML=d.sens; }"
         
-        // --- NATIVE CANVAS GRAPH + GRID RENDERER ---
+        // --- NATIVE CANVAS GRAPH + SMOOTH RENDERING ---
         "var c=document.getElementById('dynCanvas');"
         "if(c && c.getContext){"
         "var ctx=c.getContext('2d');"
         "ctx.clearRect(0,0,592,340);"
         
-        // Draw the dark background boxes
         "ctx.fillStyle='#181818';"
         "ctx.fillRect(60,10,517,50);"
         "ctx.fillRect(60,75,517,235);"
 
-        // Draw faint horizontal grid lines
         "ctx.lineWidth=1; ctx.strokeStyle='#333'; ctx.beginPath();"
         "ctx.moveTo(60,35); ctx.lineTo(577,35);"
         "ctx.moveTo(60,75); ctx.lineTo(577,75);"
@@ -1221,7 +1217,6 @@ int http_fn_custom_dash(http_request_t *request) {
         "ctx.moveTo(60,300); ctx.lineTo(577,300);"
         "ctx.stroke();"
 
-        // Draw main axes boundaries
         "ctx.strokeStyle='#777'; ctx.beginPath();"
         "ctx.moveTo(60,10); ctx.lineTo(60,60);"
         "ctx.moveTo(60,75); ctx.lineTo(60,310);"
@@ -1229,12 +1224,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "ctx.moveTo(60,310); ctx.lineTo(577,310);"
         "ctx.stroke();"
 
-        // Draw the primary 0 Wh line thicker
         "ctx.lineWidth=1.5; ctx.beginPath();"
         "ctx.moveTo(60,225); ctx.lineTo(577,225);"
         "ctx.stroke();"
 
-        // Draw Y-Axis Labels
         "ctx.fillStyle='#888'; ctx.font='12px monospace'; ctx.textAlign='right'; ctx.textBaseline='middle';"
         "ctx.fillText('100', 48, 10);"
         "ctx.fillText('0', 48, 60);"
@@ -1243,7 +1236,6 @@ int http_fn_custom_dash(http_request_t *request) {
         "ctx.fillStyle='#aaa'; ctx.fillText('0 Wh', 48, 225);"
         "ctx.fillStyle='#888'; ctx.fillText('-150', 48, 300);"
 
-        // Draw X-Axis Ticks & Labels
         "ctx.lineWidth=1; ctx.beginPath();"
         "ctx.font='10px sans-serif'; ctx.textBaseline='top';"
         "for(var i=0; i<=47; i++){"
@@ -1255,49 +1247,43 @@ int http_fn_custom_dash(http_request_t *request) {
         "}"
         "ctx.stroke();"
 
-        // --- DRAW THE DATA LINES ---
+        // Helper function mapping quadratic curves to midpoints
+        "function drawSmooth(ctx, arr, baseY, clamp, fill, col, lw){"
+        "var p=[];"
+        "for(var i=0; i<48; i++){"
+        "var h=arr[i]/2; if(clamp){if(h>150)h=150; if(h<-75)h=-75;}"
+        "p.push({x:i*11+60, y:baseY-h});"
+        "}"
+        "ctx.beginPath(); ctx.moveTo(p[0].x, p[0].y);"
+        "for(var i=0; i<47; i++){"
+        "var xc=(p[i].x+p[i+1].x)/2, yc=(p[i].y+p[i+1].y)/2;"
+        "ctx.quadraticCurveTo(p[i].x, p[i].y, xc, yc);"
+        "}"
+        "ctx.lineTo(p[47].x, p[47].y);"
+        "if(fill){"
+        "ctx.lineTo(577,baseY); ctx.lineTo(60,baseY); ctx.fillStyle=fill; ctx.fill();"
+        "ctx.beginPath(); ctx.moveTo(p[0].x, p[0].y);"
+        "for(var i=0; i<47; i++){"
+        "var xc=(p[i].x+p[i+1].x)/2, yc=(p[i].y+p[i+1].y)/2;"
+        "ctx.quadraticCurveTo(p[i].x, p[i].y, xc, yc);"
+        "}"
+        "ctx.lineTo(p[47].x, p[47].y);"
+        "}"
+        "ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.stroke();"
+        "}"
+
         "if(d.net){"
         "var grad=ctx.createLinearGradient(0,75,0,310);"
-        // Fixed: Raised the minimum opacity from 0.0 to 0.15 so values near 0 are visibly colored
         "grad.addColorStop(0,'rgba(244,67,54,0.5)');"
         "grad.addColorStop(0.638,'rgba(244,67,54,0.15)');"
         "grad.addColorStop(0.638,'rgba(76,175,80,0.15)');"
         "grad.addColorStop(1,'rgba(76,175,80,0.5)');"
-        
-        // Fill Net area
-        "ctx.beginPath(); ctx.moveTo(60,225);"
-        "for(var i=0; i<48; i++){"
-        "var h=d.net[i]/2; if(h>150)h=150; if(h<-75)h=-75;"
-        "ctx.lineTo(i*11+60, 225-h);"
+        "drawSmooth(ctx, d.net, 225, true, grad, '#aaa', 2);"
         "}"
-        "ctx.lineTo(577,225); ctx.fillStyle=grad; ctx.fill();"
-        
-        // Line Net boundary
-        "ctx.beginPath();"
-        "for(var i=0; i<48; i++){"
-        "var h=d.net[i]/2; if(h>150)h=150; if(h<-75)h=-75;"
-        "if(i===0)ctx.moveTo(60,225-h); else ctx.lineTo(i*11+60,225-h);"
-        "}"
-        "ctx.strokeStyle='#aaa'; ctx.lineWidth=2; ctx.stroke();" 
-        "}"
-
-        "if(d.chg){"
-        "ctx.beginPath();"
-        "for(var i=0; i<48; i++){"
-        "if(i===0)ctx.moveTo(60,60-(d.chg[i]/2)); else ctx.lineTo(i*11+60,60-(d.chg[i]/2));"
-        "}"
-        "ctx.strokeStyle='#4caf50'; ctx.lineWidth=1.5; ctx.stroke();"
-        "}"
-
-        "if(d.inv){"
-        "ctx.beginPath();"
-        "for(var i=0; i<48; i++){"
-        "if(i===0)ctx.moveTo(60,60-(d.inv[i]/2)); else ctx.lineTo(i*11+60,60-(d.inv[i]/2));"
-        "}"
-        "ctx.strokeStyle='#ff9800'; ctx.lineWidth=1.5; ctx.stroke();"
+        "if(d.chg) drawSmooth(ctx, d.chg, 60, false, null, '#4caf50', 1.5);"
+        "if(d.inv) drawSmooth(ctx, d.inv, 60, false, null, '#ff9800', 1.5);"
         "}"
         
-        "}"
         "var days=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
         "var mos=['January','February','March','April','May','June','July','August','September','October','November','December'];"
         "var dt=new Date();"
@@ -1315,4 +1301,3 @@ int http_fn_custom_dash(http_request_t *request) {
     poststr(request, NULL);
     return 0;
 }
-
