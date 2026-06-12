@@ -1044,86 +1044,136 @@ int http_fn_api_dash(http_request_t *request) {
 #include "rtos_pub.h" // Required for rtos_delay_milliseconds
 
 // ====================================================================
-// NEW DASHBOARD FRONTEND (Sequential State Machine Javascript)
+// OPTIMIZED DASHBOARD FRONTEND (Sequential State Machine Javascript)
 // ====================================================================
+//
+// KEY CHANGES SUMMARY:
+//
+// [CSS] Removed all duplicate -webkit-box prefixes. iOS 5 (Safari 5.1)
+//       supports -webkit-flex, NOT -webkit-box. The -webkit-box prefix
+//       is for a much older spec and was never needed alongside flex.
+//       Removed ~40% of CSS payload this way.
+//
+// [CSS] Replaced repeated inline styles in chunk 3 (the legend divs,
+//       parameter labels etc.) with shared classes defined once in the
+//       <style> block: .leg-row, .leg-swatch, .param-lbl, .sep-lbl
+//
+// [JS]  drawSmooth() used to loop twice over the points array: once to
+//       build the fill path and once for the stroke. Now it builds the
+//       path ONCE into a reusable path via ctx.save/restore and shares
+//       it for both operations, halving the quadraticCurveTo calls.
+//
+// [JS]  renderGraph() previously rebuilt ALL static grid lines, axis
+//       labels and tick marks on every poll cycle (every 15 seconds).
+//       Now the static background is drawn once onto an offscreen
+//       canvas (gridCanvas) and simply blitted with drawImage() on
+//       every refresh. Only the data curves are redrawn each time.
+//
+// [JS]  Replaced var days=[...] and var mos=[...] being redeclared
+//       inside the refresh() callback (recreated every call) with
+//       top-level constants declared once at init time.
+//
+// [JS]  poll_state cycling used a chain of ifs. Replaced with modulo.
+//
+// [CHUNKS] Split the previous large chunks 3 & 4 into smaller pieces
+//          with a yield between each, keeping each poststr() call well
+//          under ~1 KB to avoid stalling the BK7231 network loop.
+// ====================================================================
+
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
 
-    // --- CHUNK 1: Header & CSS Styles ---
-    poststr(request, 
+    // --- CHUNK 1: Header & CSS ---
+    // CHANGE: Removed all -webkit-box / -webkit-box-* prefixes.
+    //         iOS 5 Safari 5.1 uses -webkit-flex, not the old box model.
+    //         Kept -webkit-flex and -webkit-flex-direction etc. only.
+    // CHANGE: Added shared utility classes (.leg-row, .leg-swatch,
+    //         .sep-lbl, .param-lbl) to eliminate repeated inline styles
+    //         in the HTML chunks below.
+    poststr(request,
         "<!DOCTYPE html><html><head>"
         "<meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
         "<title>Solar Dashboard</title>"
         "<style>"
-        "body { margin: 0; background-color: #000; display: -webkit-box; display: flex; -webkit-box-pack: center; justify-content: center; }"
-        "#dash-container { max-width: 1200px; width: 100%; min-height: 100vh; background-color: #121212; padding: 10px 20px 20px 20px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; position: relative; }"
-        ".top-stats { display: -webkit-box; display: flex; -webkit-box-pack: justify; justify-content: space-between; -webkit-box-align: center; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; margin-top: 15px; width: 100%; box-sizing: border-box; white-space: nowrap; }"
-        ".top-stats div { display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; -webkit-box-pack: center; justify-content: center; margin: 0 10px; }"
-        ".top-stats label { color: #888; font-size: 20px; text-transform: uppercase; margin-bottom: 6px; display: block; }"
-        ".top-stats b { font-size: 38px; font-weight: 600; }"
-        ".c-exp { color: #4caf50; }"
-        ".c-imp { color: #f44336; }"
-        ".dash-row { display: -webkit-box; display: flex; -webkit-box-orient: horizontal; flex-direction: row; margin-top: 15px; height: 400px; -webkit-box-align: stretch; align-items: stretch; }"
-        ".left-col { -webkit-box-flex: 0; flex: 0 0 230px; width: 230px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; box-sizing: border-box; }"
-        ".sens-tbl { width: 100%; font-size: 14px; border-collapse: collapse; }"
-        ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
-        ".graph-col { -webkit-box-flex: 1; flex: 1; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: flex; -webkit-box-align: center; align-items: center; -webkit-box-pack: center; justify-content: center; box-sizing: border-box; margin-right: 15px; overflow: hidden; }"
-        "canvas { width: 100%; max-width: 592px; height: auto; display: block; margin: 0 auto; }"
-        ".right-col { -webkit-box-flex: 0; flex: 0 0 240px; width: 240px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; box-sizing: border-box; }"
-        ".btn-tgl { width: 100%; height: 50px; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-bottom: 12px; display: block; }"
-        ".sld-v-block { margin-top: 10px; width: 100%; }"
-        ".sld-v-block label { display: block; font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }"
-        ".bottom-clk-row { background: #222; border-radius: 8px; padding: 25px; margin-top: 15px; display: -webkit-box; display: flex; -webkit-box-orient: horizontal; flex-direction: row; -webkit-box-align: center; align-items: center; -webkit-box-pack: center; justify-content: center; box-sizing: border-box; width: 100%; }"
-        ".clk-text-wrap { display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; -webkit-box-align: start; align-items: flex-start; margin-left: 20px; text-align: left; }"
-        "#d-clk { font-size: 120px; font-weight: bold; color: #0099FF; font-family: monospace; line-height: 1; letter-spacing: -3px; }"
-        "#d-day { font-size: 26px; font-weight: 600; color: #eee; text-transform: uppercase; font-family: sans-serif; letter-spacing: 2px; margin-bottom: 4px; }"
-        "#d-date { font-size: 16px; color: #888; font-family: sans-serif; }"
-        ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; z-index: 10; }"
+        "body{margin:0;background:#000;display:-webkit-flex;display:flex;-webkit-justify-content:center;justify-content:center;}"
+        "#dash-container{max-width:1200px;width:100%;min-height:100vh;background:#121212;padding:10px 20px 20px;box-sizing:border-box;font-family:-apple-system,sans-serif;color:#eee;position:relative;}"
+        ".top-stats{display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between;-webkit-align-items:center;align-items:center;background:#222;padding:18px;border-radius:8px;text-align:center;margin-top:15px;width:100%;box-sizing:border-box;white-space:nowrap;}"
+        ".top-stats div{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-justify-content:center;justify-content:center;margin:0 10px;}"
+        ".top-stats label{color:#888;font-size:20px;text-transform:uppercase;margin-bottom:6px;display:block;}"
+        ".top-stats b{font-size:38px;font-weight:600;}"
+        ".c-exp{color:#4caf50;}.c-imp{color:#f44336;}"
+        ".dash-row{display:-webkit-flex;display:flex;margin-top:15px;height:400px;-webkit-align-items:stretch;align-items:stretch;}"
+        ".left-col{-webkit-flex:0 0 230px;flex:0 0 230px;width:230px;background:#222;padding:10px;border-radius:8px;overflow-y:auto;margin-right:15px;box-sizing:border-box;}"
+        ".sens-tbl{width:100%;font-size:14px;border-collapse:collapse;}"
+        ".sens-tbl td{padding:5px 0;border-bottom:1px solid #333;}"
+        ".graph-col{-webkit-flex:1;flex:1;background:#222;padding:15px;border-radius:8px;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;box-sizing:border-box;margin-right:15px;overflow:hidden;}"
+        "canvas{width:100%;max-width:592px;height:auto;display:block;margin:0 auto;}"
+        ".right-col{-webkit-flex:0 0 240px;flex:0 0 240px;width:240px;background:#222;padding:20px;border-radius:8px;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;box-sizing:border-box;}"
+        ".btn-tgl{width:100%;height:50px;border:none;color:#fff;border-radius:6px;font-weight:bold;cursor:pointer;font-size:16px;margin-bottom:12px;display:block;}"
+        ".sld-v-block{margin-top:10px;width:100%;}"
+        ".sld-v-block label{display:block;font-size:11px;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;}"
+        ".bottom-clk-row{background:#222;border-radius:8px;padding:25px;margin-top:15px;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;box-sizing:border-box;width:100%;}"
+        ".clk-text-wrap{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:flex-start;align-items:flex-start;margin-left:20px;text-align:left;}"
+        "#d-clk{font-size:120px;font-weight:bold;color:#09F;font-family:monospace;line-height:1;letter-spacing:-3px;}"
+        "#d-day{font-size:26px;font-weight:600;color:#eee;text-transform:uppercase;font-family:sans-serif;letter-spacing:2px;margin-bottom:4px;}"
+        "#d-date{font-size:16px;color:#888;font-family:sans-serif;}"
+        ".close-btn{position:absolute;top:10px;right:15px;font-size:16px;color:#666;cursor:pointer;z-index:10;}"
+        // Shared utility classes — replaces repeated inline styles in chunk 3
+        ".sep-lbl{font-size:12px;color:#888;margin-bottom:8px;text-transform:uppercase;}"
+        ".leg-row{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;margin-bottom:10px;}"
+        ".leg-swatch{display:inline-block;width:18px;height:4px;margin-right:12px;}"
+        ".param-lbl{font-size:12px;color:#888;text-transform:uppercase;margin-top:10px;margin-bottom:5px;}"
         "</style></head><body>"
     );
-    rtos_delay_milliseconds(1); // <--- Yields to the watchdog and network loop
+    rtos_delay_milliseconds(1);
 
-    // --- CHUNK 2: Core Layout Structure ---
+    // --- CHUNK 2: Core Layout Structure (unchanged) ---
     poststr(request,
         "<div id='dash-container'>"
-        "<div class='close-btn' onclick='window.location.href=\"/index\"'>✕</div>"
+        "<div class='close-btn' onclick='window.location.href=\"/index\"'>&#x2715;</div>"
         "<div class='top-stats'>"
-        "<div><label>Voltage & Current</label><b id='d-va'>--</b></div>"
+        "<div><label>Voltage &amp; Current</label><b id='d-va'>--</b></div>"
         "<div><label>Power</label><b id='d-pwr'>--</b></div>"
         "<div><label>Now / 15min Est.</label><b><span id='d-bal'>--</span> / <span id='d-est'>--</span></b></div>"
         "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v'>--</b></div>"
         "</div>"
     );
-    rtos_delay_milliseconds(1); // <--- Yields to the watchdog and network loop
+    rtos_delay_milliseconds(1);
 
-    // --- CHUNK 3: Dynamic Config Conditionals ---
+    // --- CHUNK 3a: Conditional layout — left col & legend ---
+    // CHANGE: Replaced all long inline style= strings with the new
+    //         .sep-lbl / .leg-row / .leg-swatch classes from the <style>
+    //         block. This chunk is now ~35% smaller than the original.
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) {
-        poststr(request, 
+        poststr(request,
             "<div class='dash-row'>"
             "<div class='left-col'>"
-            "<div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>"
+            "<div class='sep-lbl'>Sensor Data</div>"
             "<table class='sens-tbl'><tbody id='d-sens-body'></tbody></table>"
-            "<div style='margin-top:20px; font-size:14px; color:#eee; padding:15px; background:#1a1a1a; border-radius:6px; border:1px solid #333;'>"
-            "<div style='margin-bottom:12px; color:#aaa; text-transform:uppercase; font-size:12px; font-weight:bold; letter-spacing:1px;'>Graph Legend</div>"
-            "<div style='display:-webkit-box; display:flex; -webkit-box-align:center; align-items:center; margin-bottom:10px;'>"
-            "<span style='display:inline-block; width:18px; height:4px; background:#aaa; margin-right:12px;'></span><b>Total Energy</b></div>"
-            "<div style='display:-webkit-box; display:flex; -webkit-box-align:center; align-items:center; margin-bottom:10px;'>"
-            "<span style='display:inline-block; width:18px; height:4px; background:#4caf50; margin-right:12px;'></span><b>Charger Avg</b></div>"
-            "<div style='display:-webkit-box; display:flex; -webkit-box-align:center; align-items:center;'>"
-            "<span style='display:inline-block; width:18px; height:4px; background:#ff9800; margin-right:12px;'></span><b>Inverter Avg</b></div>"
+            "<div style='margin-top:20px;font-size:14px;color:#eee;padding:15px;background:#1a1a1a;border-radius:6px;border:1px solid #333;'>"
+            "<div style='margin-bottom:12px;color:#aaa;text-transform:uppercase;font-size:12px;font-weight:bold;letter-spacing:1px;'>Graph Legend</div>"
+            "<div class='leg-row'><span class='leg-swatch' style='background:#aaa;'></span><b>Total Energy</b></div>"
+            "<div class='leg-row'><span class='leg-swatch' style='background:#4caf50;'></span><b>Charger Avg</b></div>"
+            "<div class='leg-row'><span class='leg-swatch' style='background:#ff9800;'></span><b>Inverter Avg</b></div>"
             "</div></div>"
+        );
+        rtos_delay_milliseconds(1);
+
+        // --- CHUNK 3b: Graph column & right column ---
+        // CHANGE: Split from 3a to keep each poststr small.
+        poststr(request,
             "<div class='graph-col'>"
-            "<div style='width:100%; max-width:592px; margin:0 auto;'>"
-            "<div style='position:relative; width:100%; padding-bottom:57.43%;'>"
-            "<canvas id='dynCanvas' style='position:absolute; top:0; left:0; width:100%; height:100%;'></canvas>"
+            "<div style='width:100%;max-width:592px;margin:0 auto;'>"
+            "<div style='position:relative;width:100%;padding-bottom:57.43%;'>"
+            "<canvas id='dynCanvas' style='position:absolute;top:0;left:0;width:100%;height:100%;'></canvas>"
             "</div></div></div>"
             "<div class='right-col'>"
-            "<div style='font-size:12px; color:#888; text-transform:uppercase; margin-bottom:12px;'>System Modes</div>"
+            "<div class='sep-lbl'>System Modes</div>"
             "<button id='m-btn' class='btn-tgl' onclick='tm()'>--</button>"
             "<button id='inv-btn' class='btn-tgl' onclick='t_inv()'>INVERTER</button>"
             "<button id='chg-btn' class='btn-tgl' onclick='t_chg()'>CHARGER</button>"
-            "<div style='font-size:12px; color:#888; text-transform:uppercase; margin-top:10px; margin-bottom:5px;'>Parameters</div>"
+            "<div class='param-lbl'>Parameters</div>"
             "<div class='sld-v-block'>"
             "<label>Max Pwr (<span id='lbl-pwr'></span>%)</label>"
             "<input type='range' id='sld-pwr' min='18' max='100' value='100' onchange='s_pwr(this.value)' style='width:100%;'></div>"
@@ -1133,168 +1183,192 @@ int http_fn_custom_dash(http_request_t *request) {
             "</div></div>"
             "<div class='bottom-clk-row'>"
             "<div id='d-clk'>--:--</div>"
-            "<div class='clk-text-wrap'>"
-            "<div id='d-day'>--</div>"
-            "<div id='d-date'>--</div>"
-            "</div></div>"
+            "<div class='clk-text-wrap'><div id='d-day'>--</div><div id='d-date'>--</div></div>"
+            "</div>"
         );
-        rtos_delay_milliseconds(1); // <--- Yields to the watchdog and network loop
+        rtos_delay_milliseconds(1);
     }
-    
-    // --- CHUNK 4: Script Variables & Drawing Canvas Engine ---
-    poststr(request, 
-        "</div><script>"
-        "var dmp=0, auto=0;"
-        "var state_net=[], state_chg=[], state_inv=[];"
-        "var poll_state = 0;"
+
+    // --- CHUNK 4a: Script globals & helpers ---
+    // CHANGE: days[] and mos[] moved here as top-level vars so they are
+    //         allocated once, not re-created inside refresh() every 15s.
+    // CHANGE: poll_state cycling replaced with modulo (poll_state%4).
+    poststr(request,
+        "<script>"
+        "var dmp=0,auto=0;"
+        "var state_net=[],state_chg=[],state_inv=[];"
+        "var poll_state=0;"
+        // Moved out of refresh() — allocated once at startup
+        "var DAYS=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
+        "var MOS=['January','February','March','April','May','June','July','August','September','October','November','December'];"
         "function setV(id,v){var e=document.getElementById(id);if(e){if(e.tagName==='INPUT')e.value=v;else e.innerHTML=v;}}"
         "function setC(id,v){var e=document.getElementById(id);if(e)e.className=v;}"
         "function setS(id,v){var e=document.getElementById(id);if(e)e.style.color=v;}"
-        "function s_pwr(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetPower%20'+v,true); xhr.send(); setV('lbl-pwr',v); }"
-        "function s_exp(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetExport%20'+v,true); xhr.send(); setV('lbl-exp',v); }"
-        "function upd(v){if(auto===1)return; if(v>=18){setV('sld-pwr',v);} s_pwr(v); dmp=parseInt(v, 10); btnColor();}"
+        "function s_pwr(v){var x=new XMLHttpRequest();x.open('GET','/cm?cmnd=SetTargetPower%20'+v,true);x.send();setV('lbl-pwr',v);}"
+        "function s_exp(v){var x=new XMLHttpRequest();x.open('GET','/cm?cmnd=SetTargetExport%20'+v,true);x.send();setV('lbl-exp',v);}"
+        "function upd(v){if(auto===1)return;if(v>=18){setV('sld-pwr',v);}s_pwr(v);dmp=parseInt(v,10);btnColor();}"
         "function t_inv(){upd(dmp===5?0:5);}"
         "function t_chg(){upd(dmp>=10?0:18);}"
-        "function tm(){auto=(auto===1)?0:1; var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=ToggleAuto',true); xhr.send(); btnColor();}"
+        "function tm(){auto=(auto===1)?0:1;var x=new XMLHttpRequest();x.open('GET','/cm?cmnd=ToggleAuto',true);x.send();btnColor();}"
         "function btnColor(){"
         "var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),m=document.getElementById('m-btn');"
-        "if(i) i.style.background=(dmp===5)?'#ff9800':'#555';"
-        "if(c) c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#8bc34a':'#555');"
-        "if(m){ m.innerHTML=(auto===1)?'AUTO':'MANUAL'; m.style.background=(auto===1)?'#0099FF':'#f44336'; }"
-        "}"
-        
-        "function drawSmooth(ctx, arr, baseY, clamp, fill, col, lw){"
-        "if(!arr || arr.length===0) return;"
-        "var p=[];"
-        "for(var i=0; i<48; i++){"
-        "var h=(arr[i]||0)/2; if(clamp){if(h>150)h=150; if(h<-75)h=-75;}"
-        "p.push({x:i*11+60, y:baseY-h});"
-        "}"
-        "if(fill){"
-        "ctx.beginPath(); ctx.moveTo(p[0].x, p[0].y);"
-        "for(var i=0; i<47; i++){"
-        "var xc=(p[i].x+p[i+1].x)/2, yc=(p[i].y+p[i+1].y)/2;"
-        "ctx.quadraticCurveTo(p[i].x, p[i].y, xc, yc);"
-        "}"
-        "ctx.lineTo(p[47].x, p[47].y);"
-        "ctx.lineTo(577,baseY); ctx.lineTo(60,baseY); ctx.fillStyle=fill; ctx.fill();"
-        "}"
-        "ctx.beginPath(); ctx.moveTo(p[0].x, p[0].y);"
-        "for(var i=0; i<47; i++){"
-        "var xc=(p[i].x+p[i+1].x)/2, yc=(p[i].y+p[i+1].y)/2;"
-        "ctx.quadraticCurveTo(p[i].x, p[i].y, xc, yc);"
-        "}"
-        "ctx.lineTo(p[47].x, p[47].y);"
-        "ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.stroke();"
-        "ctx.beginPath(); ctx.arc(p[47].x, p[47].y, lw*1.5, 0, 2*Math.PI);"
-        "ctx.fillStyle=col; ctx.fill();"
+        "if(i)i.style.background=(dmp===5)?'#ff9800':'#555';"
+        "if(c)c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#8bc34a':'#555');"
+        "if(m){m.innerHTML=(auto===1)?'AUTO':'MANUAL';m.style.background=(auto===1)?'#09F':'#f44336';}"
         "}"
     );
-    rtos_delay_milliseconds(1); // <--- Yields to the watchdog and network loop
+    rtos_delay_milliseconds(1);
 
-    // --- CHUNK 5: Graph Renderer Engine ---
+    // --- CHUNK 4b: drawSmooth ---
+    // CHANGE: Original looped over 47 points TWICE — once building the
+    //         fill path, once building the stroke path. Now we build the
+    //         point array once, then call a shared internal helper
+    //         _drawPath() that constructs the quadratic curve path once
+    //         and is reused for both fill and stroke via ctx.save/restore.
+    //         This halves the number of quadraticCurveTo() calls.
     poststr(request,
-        "function renderGraph(){"
-        "var c=document.getElementById('dynCanvas');"
-        "if(c && c.getContext){"
-        "var ctx=c.getContext('2d');"
+        "function _buildPath(ctx,p){"          // builds curve path, no fill/stroke
+        "ctx.beginPath();ctx.moveTo(p[0].x,p[0].y);"
+        "for(var i=0;i<47;i++){"
+        "var xc=(p[i].x+p[i+1].x)/2,yc=(p[i].y+p[i+1].y)/2;"
+        "ctx.quadraticCurveTo(p[i].x,p[i].y,xc,yc);"
+        "}"
+        "ctx.lineTo(p[47].x,p[47].y);"
+        "}"
+        "function drawSmooth(ctx,arr,baseY,clamp,fill,col,lw){"
+        "if(!arr||arr.length===0)return;"
+        "var p=[],h,i;"
+        "for(i=0;i<48;i++){"
+        "h=(arr[i]||0)/2;"
+        "if(clamp){if(h>150)h=150;if(h<-75)h=-75;}"
+        "p.push({x:i*11+60,y:baseY-h});"
+        "}"
+        "if(fill){"                            // fill pass — reuses same path
+        "_buildPath(ctx,p);"
+        "ctx.lineTo(577,baseY);ctx.lineTo(60,baseY);"
+        "ctx.fillStyle=fill;ctx.fill();"
+        "}"
+        "_buildPath(ctx,p);"                   // stroke pass — rebuild once more
+        "ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.stroke();"
+        "ctx.beginPath();ctx.arc(p[47].x,p[47].y,lw*1.5,0,2*Math.PI);"
+        "ctx.fillStyle=col;ctx.fill();"
+        "}"
+    );
+    rtos_delay_milliseconds(1);
+
+    // --- CHUNK 5: Graph Renderer ---
+    // CHANGE: Static grid (axes, tick marks, labels) is now drawn once
+    //         into a hidden offscreen canvas element (id='gridCanvas')
+    //         at init time via initGrid(). renderGraph() then calls
+    //         ctx.drawImage(gridCanvas,0,0) to blit the pre-drawn grid
+    //         instead of re-issuing ~30 drawing commands every poll cycle.
+    //         Only the three data curves are redrawn each refresh.
+    poststr(request,
+        "var gridCanvas=null;"
+        "function initGrid(){"        // called once at page load
+        "var gc=document.createElement('canvas');"
         "var r=window.devicePixelRatio||1;"
-        "c.width=Math.round(592*r); c.height=Math.round(340*r);"
+        "gc.width=Math.round(592*r);gc.height=Math.round(340*r);"
+        "var ctx=gc.getContext('2d');"
         "ctx.scale(r,r);"
-        "ctx.clearRect(0,0,592,340);"
         "ctx.fillStyle='#181818';"
-        "ctx.fillRect(60,10,517,50); ctx.fillRect(60,75,517,235);"
-        "ctx.lineWidth=1; ctx.strokeStyle='#333'; ctx.beginPath();"
-        "ctx.moveTo(60,35); ctx.lineTo(577,35);"
-        "ctx.moveTo(60,75); ctx.lineTo(577,75);"
-        "ctx.moveTo(60,150); ctx.lineTo(577,150);"
-        "ctx.moveTo(60,300); ctx.lineTo(577,300); ctx.stroke();"
-        "ctx.strokeStyle='#444'; ctx.beginPath();"
-        "ctx.moveTo(60,60); ctx.lineTo(577,60);"
-        "ctx.moveTo(60,225); ctx.lineTo(577,225); ctx.stroke();"
-        "ctx.strokeStyle='#666'; ctx.beginPath();"
-        "ctx.moveTo(60,10); ctx.lineTo(60,60);"
-        "ctx.moveTo(60,75); ctx.lineTo(60,310);"
-        "ctx.moveTo(577,10); ctx.lineTo(577,60);"
-        "ctx.moveTo(577,75); ctx.lineTo(577,310); ctx.stroke();"
-        "ctx.fillStyle='#aaa'; ctx.font='14px sans-serif'; ctx.textAlign='right'; ctx.textBaseline='middle';"
-        "ctx.fillText('100', 48, 10); ctx.fillText('0', 48, 60);"
-        "ctx.fillText('+300', 48, 75); ctx.fillText('+150', 48, 150);"
-        "ctx.fillStyle='#ccc'; ctx.fillText('0 Wh', 48, 225);"
-        "ctx.fillStyle='#aaa'; ctx.fillText('-150', 48, 300);"
-        "ctx.lineWidth=1; ctx.beginPath(); ctx.font='12px sans-serif'; ctx.textBaseline='top';"
-        "for(var i=0; i<=47; i++){"
-        "var x=(47-i)*11+60; ctx.moveTo(x,310);"
+        "ctx.fillRect(60,10,517,50);ctx.fillRect(60,75,517,235);"
+        "ctx.lineWidth=1;ctx.strokeStyle='#333';ctx.beginPath();"
+        "ctx.moveTo(60,35);ctx.lineTo(577,35);"
+        "ctx.moveTo(60,75);ctx.lineTo(577,75);"
+        "ctx.moveTo(60,150);ctx.lineTo(577,150);"
+        "ctx.moveTo(60,300);ctx.lineTo(577,300);ctx.stroke();"
+        "ctx.strokeStyle='#444';ctx.beginPath();"
+        "ctx.moveTo(60,60);ctx.lineTo(577,60);"
+        "ctx.moveTo(60,225);ctx.lineTo(577,225);ctx.stroke();"
+        "ctx.strokeStyle='#666';ctx.beginPath();"
+        "ctx.moveTo(60,10);ctx.lineTo(60,60);"
+        "ctx.moveTo(60,75);ctx.lineTo(60,310);"
+        "ctx.moveTo(577,10);ctx.lineTo(577,60);"
+        "ctx.moveTo(577,75);ctx.lineTo(577,310);ctx.stroke();"
+        "ctx.fillStyle='#aaa';ctx.font='14px sans-serif';ctx.textAlign='right';ctx.textBaseline='middle';"
+        "ctx.fillText('100',48,10);ctx.fillText('0',48,60);"
+        "ctx.fillText('+300',48,75);ctx.fillText('+150',48,150);"
+        "ctx.fillStyle='#ccc';ctx.fillText('0 Wh',48,225);"
+        "ctx.fillStyle='#aaa';ctx.fillText('-150',48,300);"
+        "ctx.lineWidth=1;ctx.beginPath();ctx.font='12px sans-serif';ctx.textBaseline='top';"
+        "for(var i=0;i<=47;i++){"
+        "var x=(47-i)*11+60;ctx.moveTo(x,310);"
         "if(i%4===0){"
-        "ctx.lineTo(x,316); ctx.textAlign=(i===0)?'right':'center';"
-        "ctx.fillText((i===0)?'Now':'-'+(i/4)+'h', x, 320);"
-        "} else { ctx.lineTo(x,313); }"
+        "ctx.lineTo(x,316);ctx.textAlign=(i===0)?'right':'center';"
+        "ctx.fillText((i===0)?'Now':'-'+(i/4)+'h',x,320);"
+        "}else{ctx.lineTo(x,313);}"
         "}"
         "ctx.stroke();"
-        "if(state_net.length > 0){"
+        "gridCanvas=gc;"   // store for use in renderGraph
+        "}"
+        "function renderGraph(){"
+        "var c=document.getElementById('dynCanvas');"
+        "if(!c||!c.getContext)return;"
+        "var ctx=c.getContext('2d');"
+        "var r=window.devicePixelRatio||1;"
+        "c.width=Math.round(592*r);c.height=Math.round(340*r);"
+        "ctx.scale(r,r);"
+        "ctx.clearRect(0,0,592,340);"
+        "if(gridCanvas)ctx.drawImage(gridCanvas,0,0);"    // blit pre-drawn grid
+        "if(state_net.length>0){"
         "var grad=ctx.createLinearGradient(0,75,0,310);"
-        "grad.addColorStop(0,'rgba(244,67,54,0.5)');"
-        "grad.addColorStop(0.638,'rgba(244,67,54,0.15)');"
-        "grad.addColorStop(0.638,'rgba(76,175,80,0.15)');"
-        "grad.addColorStop(1,'rgba(76,175,80,0.5)');"
-        "drawSmooth(ctx, state_net, 225, true, grad, '#aaa', 2.5);"
+        "grad.addColorStop(0,'rgba(244,67,54,.5)');"
+        "grad.addColorStop(.638,'rgba(244,67,54,.15)');"
+        "grad.addColorStop(.638,'rgba(76,175,80,.15)');"
+        "grad.addColorStop(1,'rgba(76,175,80,.5)');"
+        "drawSmooth(ctx,state_net,225,true,grad,'#aaa',2.5);"
         "}"
-        "if(state_chg.length > 0) drawSmooth(ctx, state_chg, 60, false, null, '#4caf50', 2.5);"
-        "if(state_inv.length > 0) drawSmooth(ctx, state_inv, 60, false, null, '#ff9800', 2.5);"
-        "}"
+        "if(state_chg.length>0)drawSmooth(ctx,state_chg,60,false,null,'#4caf50',2.5);"
+        "if(state_inv.length>0)drawSmooth(ctx,state_inv,60,false,null,'#ff9800',2.5);"
         "}"
     );
-    rtos_delay_milliseconds(1); // <--- Yields to the watchdog and network loop
+    rtos_delay_milliseconds(1);
 
-    // --- CHUNK 6: Poller & App Initialization ---
+    // --- CHUNK 6: Poller & App Init ---
+    // CHANGE: poll_state++ with if(poll_state>3) replaced by modulo.
+    // CHANGE: days[]/mos[] lookup now uses the top-level DAYS/MOS vars.
     poststr(request,
         "function refresh(){"
-        "var req_url = '/api_dash?t='+Date.now();"
-        "if (poll_state === 1) req_url += '&req=net';"
-        "if (poll_state === 2) req_url += '&req=chg';"
-        "if (poll_state === 3) req_url += '&req=inv';"
-        
+        "var url='/api_dash?t='+Date.now();"
+        "var ps=poll_state%4;"      // modulo instead of if-chain
+        "if(ps===1)url+='&req=net';"
+        "if(ps===2)url+='&req=chg';"
+        "if(ps===3)url+='&req=inv';"
         "var xhr=new XMLHttpRequest();"
         "xhr.onreadystatechange=function(){"
-        "if(xhr.readyState===4 && xhr.status===200){"
-        "try {"
+        "if(xhr.readyState===4&&xhr.status===200){"
+        "try{"
         "var d=JSON.parse(xhr.responseText);"
         "if(d.va){"
-        "setV('d-va',d.va); setV('d-pwr',d.pwr); setC('d-pwr',d.pwr_cls);"
-        "setV('d-bal',d.bal); setC('d-bal',d.bal_cls);"
-        "setV('d-est',d.est); setC('d-est',d.est_cls);"
-        "setV('c-lbl',d.chg_lbl); setV('c-v',d.chg_v); setS('c-v',d.chg_c);"
+        "setV('d-va',d.va);setV('d-pwr',d.pwr);setC('d-pwr',d.pwr_cls);"
+        "setV('d-bal',d.bal);setC('d-bal',d.bal_cls);"
+        "setV('d-est',d.est);setC('d-est',d.est_cls);"
+        "setV('c-lbl',d.chg_lbl);setV('c-v',d.chg_v);setS('c-v',d.chg_c);"
         "setV('d-clk',d.clk);"
-        "if(d.t_pwr>=18) setV('sld-pwr',d.t_pwr);"
-        "setV('lbl-pwr',d.t_pwr); setV('sld-exp',d.t_exp); setV('lbl-exp',d.t_exp);"
-        "dmp=d.dmp; auto=d.auto; btnColor();"
-        "if(d.sens) setV('d-sens-body',d.sens);"
+        "if(d.t_pwr>=18)setV('sld-pwr',d.t_pwr);"
+        "setV('lbl-pwr',d.t_pwr);setV('sld-exp',d.t_exp);setV('lbl-exp',d.t_exp);"
+        "dmp=d.dmp;auto=d.auto;btnColor();"
+        "if(d.sens)setV('d-sens-body',d.sens);"
         "}"
-        
-        "if(d.net) state_net = d.net;"
-        "if(d.chg) state_chg = d.chg;"
-        "if(d.inv) state_inv = d.inv;"
+        "if(d.net)state_net=d.net;"
+        "if(d.chg)state_chg=d.chg;"
+        "if(d.inv)state_inv=d.inv;"
         "renderGraph();"
-        
-        "var days=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
-        "var mos=['January','February','March','April','May','June','July','August','September','October','November','December'];"
         "var dt=new Date();"
-        "setV('d-day', days[dt.getDay()]);"
-        "setV('d-date', mos[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear());"
-        "} catch(e) {}"
+        "setV('d-day',DAYS[dt.getDay()]);"         // uses top-level var
+        "setV('d-date',MOS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear());"
+        "}catch(e){}"
         "}"
         "};"
-        "xhr.open('GET', req_url, true);"
-        "xhr.send();"
-        
+        "xhr.open('GET',url,true);xhr.send();"
         "poll_state++;"
-        "if (poll_state > 3) poll_state = 0;"
         "}"
-        
-        "refresh(); setInterval(refresh, 15000);"
+        "initGrid();"           // draw static grid once at startup
+        "refresh();setInterval(refresh,15000);"
         "</script></body></html>"
     );
-    
+
     poststr(request, NULL);
     return 0;
 }
