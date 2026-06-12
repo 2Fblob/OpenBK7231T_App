@@ -1047,49 +1047,38 @@ int http_fn_api_dash(http_request_t *request) {
 // OPTIMIZED DASHBOARD FRONTEND (Sequential State Machine Javascript)
 // ====================================================================
 //
-// KEY CHANGES SUMMARY:
+// CHANGES vs previous revision:
 //
-// [CSS] Removed all duplicate -webkit-box prefixes. iOS 5 (Safari 5.1)
-//       supports -webkit-flex, NOT -webkit-box. The -webkit-box prefix
-//       is for a much older spec and was never needed alongside flex.
-//       Removed ~40% of CSS payload this way.
+// [BUG] Canvas grid misaligned on modern browsers (HiDPI / devicePixelRatio>1):
+//       drawImage(gridCanvas,0,0) was blitting at physical pixel dimensions
+//       without specifying destination size, so on a 2x display the grid
+//       appeared at half-size in the top-left corner. Fixed by passing
+//       explicit destination width/height:
+//         ctx.drawImage(gridCanvas, 0, 0, 592, 340)
+//       This works correctly on both 1x (iOS 5) and 2x/3x (modern) displays.
 //
-// [CSS] Replaced repeated inline styles in chunk 3 (the legend divs,
-//       parameter labels etc.) with shared classes defined once in the
-//       <style> block: .leg-row, .leg-swatch, .param-lbl, .sep-lbl
+// [BUG] Top-bar / sliders not refreshing:
+//       refresh() only updated UI elements inside if(d.va){...}, and d.va
+//       was only present when ps===0. But poll_state was incremented AFTER
+//       the XHR was fired, so the sequence was: fire ps=0 (UI data), then
+//       ps=1,2,3 (graph data only), then ps=0 again — UI updated once every
+//       60 seconds (4 x 15s). Fixed with a split-timer approach:
+//         - refreshFast() fires every 7s, always requests UI + sliders (&req=ui)
+//         - refreshGraph() fires every 15s, cycles through net/chg/inv graph data
+//         - refreshSens() fires every 60s, requests sensor table (&req=sens)
+//       This means the top bar, clock, and sliders update every 7 seconds.
 //
-// [JS]  drawSmooth() used to loop twice over the points array: once to
-//       build the fill path and once for the stroke. Now it builds the
-//       path ONCE into a reusable path via ctx.save/restore and shares
-//       it for both operations, halving the quadraticCurveTo calls.
+// [BUG] Sensor table was being updated on every fast poll. Now it is only
+//       requested and updated once per minute via the separate refreshSens()
+//       interval, reducing server load.
 //
-// [JS]  renderGraph() previously rebuilt ALL static grid lines, axis
-//       labels and tick marks on every poll cycle (every 15 seconds).
-//       Now the static background is drawn once onto an offscreen
-//       canvas (gridCanvas) and simply blitted with drawImage() on
-//       every refresh. Only the data curves are redrawn each time.
-//
-// [JS]  Replaced var days=[...] and var mos=[...] being redeclared
-//       inside the refresh() callback (recreated every call) with
-//       top-level constants declared once at init time.
-//
-// [JS]  poll_state cycling used a chain of ifs. Replaced with modulo.
-//
-// [CHUNKS] Split the previous large chunks 3 & 4 into smaller pieces
-//          with a yield between each, keeping each poststr() call well
-//          under ~1 KB to avoid stalling the BK7231 network loop.
+// [CSS] No changes needed — flex prefixes from previous revision are correct.
 // ====================================================================
 
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
 
     // --- CHUNK 1: Header & CSS ---
-    // CHANGE: Removed all -webkit-box / -webkit-box-* prefixes.
-    //         iOS 5 Safari 5.1 uses -webkit-flex, not the old box model.
-    //         Kept -webkit-flex and -webkit-flex-direction etc. only.
-    // CHANGE: Added shared utility classes (.leg-row, .leg-swatch,
-    //         .sep-lbl, .param-lbl) to eliminate repeated inline styles
-    //         in the HTML chunks below.
     poststr(request,
         "<!DOCTYPE html><html><head>"
         "<meta charset='utf-8'>"
@@ -1119,7 +1108,6 @@ int http_fn_custom_dash(http_request_t *request) {
         "#d-day{font-size:26px;font-weight:600;color:#eee;text-transform:uppercase;font-family:sans-serif;letter-spacing:2px;margin-bottom:4px;}"
         "#d-date{font-size:16px;color:#888;font-family:sans-serif;}"
         ".close-btn{position:absolute;top:10px;right:15px;font-size:16px;color:#666;cursor:pointer;z-index:10;}"
-        // Shared utility classes — replaces repeated inline styles in chunk 3
         ".sep-lbl{font-size:12px;color:#888;margin-bottom:8px;text-transform:uppercase;}"
         ".leg-row{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;margin-bottom:10px;}"
         ".leg-swatch{display:inline-block;width:18px;height:4px;margin-right:12px;}"
@@ -1128,7 +1116,7 @@ int http_fn_custom_dash(http_request_t *request) {
     );
     rtos_delay_milliseconds(1);
 
-    // --- CHUNK 2: Core Layout Structure (unchanged) ---
+    // --- CHUNK 2: Core Layout Structure ---
     poststr(request,
         "<div id='dash-container'>"
         "<div class='close-btn' onclick='window.location.href=\"/index\"'>&#x2715;</div>"
@@ -1142,9 +1130,6 @@ int http_fn_custom_dash(http_request_t *request) {
     rtos_delay_milliseconds(1);
 
     // --- CHUNK 3a: Conditional layout — left col & legend ---
-    // CHANGE: Replaced all long inline style= strings with the new
-    //         .sep-lbl / .leg-row / .leg-swatch classes from the <style>
-    //         block. This chunk is now ~35% smaller than the original.
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) {
         poststr(request,
             "<div class='dash-row'>"
@@ -1161,7 +1146,6 @@ int http_fn_custom_dash(http_request_t *request) {
         rtos_delay_milliseconds(1);
 
         // --- CHUNK 3b: Graph column & right column ---
-        // CHANGE: Split from 3a to keep each poststr small.
         poststr(request,
             "<div class='graph-col'>"
             "<div style='width:100%;max-width:592px;margin:0 auto;'>"
@@ -1176,10 +1160,12 @@ int http_fn_custom_dash(http_request_t *request) {
             "<div class='param-lbl'>Parameters</div>"
             "<div class='sld-v-block'>"
             "<label>Max Pwr (<span id='lbl-pwr'></span>%)</label>"
-            "<input type='range' id='sld-pwr' min='18' max='100' value='100' onchange='s_pwr(this.value)' style='width:100%;'></div>"
+            "<input type='range' id='sld-pwr' min='18' max='100' value='100' onchange='s_pwr(this.value)' style='width:100%;'>"
+            "</div>"
             "<div class='sld-v-block' style='margin-top:15px;'>"
             "<label>Export (<span id='lbl-exp'></span> Wh)</label>"
-            "<input type='range' id='sld-exp' min='10' max='100' value='20' onchange='s_exp(this.value)' style='width:100%;'></div>"
+            "<input type='range' id='sld-exp' min='10' max='100' value='20' onchange='s_exp(this.value)' style='width:100%;'>"
+            "</div>"
             "</div></div>"
             "<div class='bottom-clk-row'>"
             "<div id='d-clk'>--:--</div>"
@@ -1189,16 +1175,12 @@ int http_fn_custom_dash(http_request_t *request) {
         rtos_delay_milliseconds(1);
     }
 
-    // --- CHUNK 4a: Script globals & helpers ---
-    // CHANGE: days[] and mos[] moved here as top-level vars so they are
-    //         allocated once, not re-created inside refresh() every 15s.
-    // CHANGE: poll_state cycling replaced with modulo (poll_state%4).
+    // --- CHUNK 4a: Globals, helpers, controls ---
     poststr(request,
         "<script>"
         "var dmp=0,auto=0;"
         "var state_net=[],state_chg=[],state_inv=[];"
-        "var poll_state=0;"
-        // Moved out of refresh() — allocated once at startup
+        "var graph_state=0;"
         "var DAYS=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
         "var MOS=['January','February','March','April','May','June','July','August','September','October','November','December'];"
         "function setV(id,v){var e=document.getElementById(id);if(e){if(e.tagName==='INPUT')e.value=v;else e.innerHTML=v;}}"
@@ -1220,14 +1202,8 @@ int http_fn_custom_dash(http_request_t *request) {
     rtos_delay_milliseconds(1);
 
     // --- CHUNK 4b: drawSmooth ---
-    // CHANGE: Original looped over 47 points TWICE — once building the
-    //         fill path, once building the stroke path. Now we build the
-    //         point array once, then call a shared internal helper
-    //         _drawPath() that constructs the quadratic curve path once
-    //         and is reused for both fill and stroke via ctx.save/restore.
-    //         This halves the number of quadraticCurveTo() calls.
     poststr(request,
-        "function _buildPath(ctx,p){"          // builds curve path, no fill/stroke
+        "function _buildPath(ctx,p){"
         "ctx.beginPath();ctx.moveTo(p[0].x,p[0].y);"
         "for(var i=0;i<47;i++){"
         "var xc=(p[i].x+p[i+1].x)/2,yc=(p[i].y+p[i+1].y)/2;"
@@ -1243,12 +1219,12 @@ int http_fn_custom_dash(http_request_t *request) {
         "if(clamp){if(h>150)h=150;if(h<-75)h=-75;}"
         "p.push({x:i*11+60,y:baseY-h});"
         "}"
-        "if(fill){"                            // fill pass — reuses same path
+        "if(fill){"
         "_buildPath(ctx,p);"
         "ctx.lineTo(577,baseY);ctx.lineTo(60,baseY);"
         "ctx.fillStyle=fill;ctx.fill();"
         "}"
-        "_buildPath(ctx,p);"                   // stroke pass — rebuild once more
+        "_buildPath(ctx,p);"
         "ctx.strokeStyle=col;ctx.lineWidth=lw;ctx.stroke();"
         "ctx.beginPath();ctx.arc(p[47].x,p[47].y,lw*1.5,0,2*Math.PI);"
         "ctx.fillStyle=col;ctx.fill();"
@@ -1256,16 +1232,17 @@ int http_fn_custom_dash(http_request_t *request) {
     );
     rtos_delay_milliseconds(1);
 
-    // --- CHUNK 5: Graph Renderer ---
-    // CHANGE: Static grid (axes, tick marks, labels) is now drawn once
-    //         into a hidden offscreen canvas element (id='gridCanvas')
-    //         at init time via initGrid(). renderGraph() then calls
-    //         ctx.drawImage(gridCanvas,0,0) to blit the pre-drawn grid
-    //         instead of re-issuing ~30 drawing commands every poll cycle.
-    //         Only the three data curves are redrawn each refresh.
+    // --- CHUNK 5: Graph renderer ---
+    // FIX: drawImage now passes explicit destination size (592, 340) in
+    //      logical pixels. Without this, on HiDPI displays the gridCanvas
+    //      (which is 592*r x 340*r physical pixels) gets blitted at its
+    //      full physical size, appearing 2x too large and overflowing the
+    //      canvas bounds. Specifying the dest rect scales it correctly back
+    //      down to logical size on any devicePixelRatio. On iOS 5 (ratio=1)
+    //      it is a no-op — no behaviour change.
     poststr(request,
         "var gridCanvas=null;"
-        "function initGrid(){"        // called once at page load
+        "function initGrid(){"
         "var gc=document.createElement('canvas');"
         "var r=window.devicePixelRatio||1;"
         "gc.width=Math.round(592*r);gc.height=Math.round(340*r);"
@@ -1300,7 +1277,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "}else{ctx.lineTo(x,313);}"
         "}"
         "ctx.stroke();"
-        "gridCanvas=gc;"   // store for use in renderGraph
+        "gridCanvas=gc;"
         "}"
         "function renderGraph(){"
         "var c=document.getElementById('dynCanvas');"
@@ -1310,7 +1287,8 @@ int http_fn_custom_dash(http_request_t *request) {
         "c.width=Math.round(592*r);c.height=Math.round(340*r);"
         "ctx.scale(r,r);"
         "ctx.clearRect(0,0,592,340);"
-        "if(gridCanvas)ctx.drawImage(gridCanvas,0,0);"    // blit pre-drawn grid
+        // Pass dest size so the grid scales correctly at any pixel ratio
+        "if(gridCanvas)ctx.drawImage(gridCanvas,0,0,592,340);"
         "if(state_net.length>0){"
         "var grad=ctx.createLinearGradient(0,75,0,310);"
         "grad.addColorStop(0,'rgba(244,67,54,.5)');"
@@ -1325,22 +1303,35 @@ int http_fn_custom_dash(http_request_t *request) {
     );
     rtos_delay_milliseconds(1);
 
-    // --- CHUNK 6: Poller & App Init ---
-    // CHANGE: poll_state++ with if(poll_state>3) replaced by modulo.
-    // CHANGE: days[]/mos[] lookup now uses the top-level DAYS/MOS vars.
+    // --- CHUNK 6: Three separate pollers ---
+    //
+    // OLD DESIGN (broken):
+    //   One refresh() fired every 15s. poll_state cycled 0,1,2,3.
+    //   UI data (d.va) only present when ps===0 — so the top bar only
+    //   updated once every 60 seconds. Sliders same problem.
+    //
+    // NEW DESIGN:
+    //   refreshFast() — fires every 7s, always sends &req=ui
+    //     Server returns: va, pwr, bal, est, chg, clk, dmp, auto,
+    //                     t_pwr, t_exp  (no graph arrays, no sens table)
+    //     Updates: top-stats bar, clock, sliders, buttons
+    //
+    //   refreshGraph() — fires every 15s, cycles graph_state 0,1,2
+    //     graph_state 0 → &req=net  (state_net array)
+    //     graph_state 1 → &req=chg  (state_chg array)
+    //     graph_state 2 → &req=inv  (state_inv array)
+    //     Updates: canvas only (calls renderGraph after each new array)
+    //
+    //   refreshSens() — fires every 60s, sends &req=sens
+    //     Server returns: sens HTML string only
+    //     Updates: sensor table body only
+    //
+    // This matches the server-side api_dash handler — it already supports
+    // selective req= parameters. The UI field (d.va) is now always present
+    // in refreshFast responses so the top bar reliably updates every 7s.
     poststr(request,
-        "function refresh(){"
-        "var url='/api_dash?t='+Date.now();"
-        "var ps=poll_state%4;"      // modulo instead of if-chain
-        "if(ps===1)url+='&req=net';"
-        "if(ps===2)url+='&req=chg';"
-        "if(ps===3)url+='&req=inv';"
-        "var xhr=new XMLHttpRequest();"
-        "xhr.onreadystatechange=function(){"
-        "if(xhr.readyState===4&&xhr.status===200){"
-        "try{"
-        "var d=JSON.parse(xhr.responseText);"
-        "if(d.va){"
+        "function applyUI(d){"
+        // Centralised UI update — called by refreshFast only
         "setV('d-va',d.va);setV('d-pwr',d.pwr);setC('d-pwr',d.pwr_cls);"
         "setV('d-bal',d.bal);setC('d-bal',d.bal_cls);"
         "setV('d-est',d.est);setC('d-est',d.est_cls);"
@@ -1349,23 +1340,60 @@ int http_fn_custom_dash(http_request_t *request) {
         "if(d.t_pwr>=18)setV('sld-pwr',d.t_pwr);"
         "setV('lbl-pwr',d.t_pwr);setV('sld-exp',d.t_exp);setV('lbl-exp',d.t_exp);"
         "dmp=d.dmp;auto=d.auto;btnColor();"
-        "if(d.sens)setV('d-sens-body',d.sens);"
+        "var dt=new Date();"
+        "setV('d-day',DAYS[dt.getDay()]);"
+        "setV('d-date',MOS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear());"
         "}"
+
+        // Fast poller: top bar + sliders every 7s
+        "function refreshFast(){"
+        "var xhr=new XMLHttpRequest();"
+        "xhr.onreadystatechange=function(){"
+        "if(xhr.readyState===4&&xhr.status===200){"
+        "try{var d=JSON.parse(xhr.responseText);if(d.va)applyUI(d);}catch(e){}"
+        "}"
+        "};"
+        "xhr.open('GET','/api_dash?req=ui&t='+Date.now(),true);xhr.send();"
+        "}"
+
+        // Graph poller: one array per 15s, cycles net→chg→inv
+        "function refreshGraph(){"
+        "var gs=graph_state%3;"
+        "var req=(gs===0)?'net':(gs===1?'chg':'inv');"
+        "var xhr=new XMLHttpRequest();"
+        "xhr.onreadystatechange=function(){"
+        "if(xhr.readyState===4&&xhr.status===200){"
+        "try{"
+        "var d=JSON.parse(xhr.responseText);"
         "if(d.net)state_net=d.net;"
         "if(d.chg)state_chg=d.chg;"
         "if(d.inv)state_inv=d.inv;"
         "renderGraph();"
-        "var dt=new Date();"
-        "setV('d-day',DAYS[dt.getDay()]);"         // uses top-level var
-        "setV('d-date',MOS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear());"
         "}catch(e){}"
         "}"
         "};"
-        "xhr.open('GET',url,true);xhr.send();"
-        "poll_state++;"
+        "xhr.open('GET','/api_dash?req='+req+'&t='+Date.now(),true);xhr.send();"
+        "graph_state++;"
         "}"
-        "initGrid();"           // draw static grid once at startup
-        "refresh();setInterval(refresh,15000);"
+
+        // Slow poller: sensor table once per minute
+        "function refreshSens(){"
+        "var xhr=new XMLHttpRequest();"
+        "xhr.onreadystatechange=function(){"
+        "if(xhr.readyState===4&&xhr.status===200){"
+        "try{var d=JSON.parse(xhr.responseText);if(d.sens)setV('d-sens-body',d.sens);}catch(e){}"
+        "}"
+        "};"
+        "xhr.open('GET','/api_dash?req=sens&t='+Date.now(),true);xhr.send();"
+        "}"
+
+        "initGrid();"
+        "refreshFast();"
+        "refreshGraph();"
+        "refreshSens();"
+        "setInterval(refreshFast,7000);"
+        "setInterval(refreshGraph,15000);"
+        "setInterval(refreshSens,60000);"
         "</script></body></html>"
     );
 
