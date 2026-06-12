@@ -983,41 +983,59 @@ int http_fn_api_dash(http_request_t *request) {
         }
         poststr(request, "\",");
 
-        char buffer[512];
-        int pos;
+        char small_buf[128];
+        int pos = 0;
 
-        pos = 0;
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "\"net\":[");
+        // --- Stream the "net" array ---
+        poststr(request, "\"net\":[");
         for (int i = 47; i >= 0; i--) {
             int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
             int net = net_matrix[interval_of_day % MATRIX_SIZE];
             if (i == 0) { net += (int)(real_consumption - real_export); }
-            pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%d%s", net, (i==0)?"":",");
+            
+            pos += snprintf(small_buf + pos, sizeof(small_buf) - pos, "%d%s", net, (i==0)?"":",");
+            
+            if (pos > 100) {
+                poststr(request, small_buf);
+                pos = 0;
+            }
         }
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "],");
-        poststr(request, buffer);
+        if (pos > 0) { poststr(request, small_buf); pos = 0; }
+        poststr(request, "],");
 
-        pos = 0;
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "\"chg\":[");
+        // --- Stream the "chg" array ---
+        poststr(request, "\"chg\":[");
         for (int i = 47; i >= 0; i--) {
             int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
             int val = charger_c_matrix[interval_of_day % MATRIX_SIZE];
             if (i == 0 && sample_count_30s > 0) { val = current_charger_c_accum / sample_count_30s; }
-            pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%d%s", val, (i==0)?"":",");
+            
+            pos += snprintf(small_buf + pos, sizeof(small_buf) - pos, "%d%s", val, (i==0)?"":",");
+            
+            if (pos > 100) {
+                poststr(request, small_buf);
+                pos = 0;
+            }
         }
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "],");
-        poststr(request, buffer);
+        if (pos > 0) { poststr(request, small_buf); pos = 0; }
+        poststr(request, "],");
 
-        pos = 0;
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "\"inv\":[");
+        // --- Stream the "inv" array ---
+        poststr(request, "\"inv\":[");
         for (int i = 47; i >= 0; i--) {
             int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
             int val = inverter_matrix[interval_of_day % MATRIX_SIZE];
             if (i == 0 && sample_count_30s > 0) { val = current_inverter_accum / sample_count_30s; }
-            pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%d%s", val, (i==0)?"":",");
+            
+            pos += snprintf(small_buf + pos, sizeof(small_buf) - pos, "%d%s", val, (i==0)?"":",");
+            
+            if (pos > 100) {
+                poststr(request, small_buf);
+                pos = 0;
+            }
         }
-        pos += snprintf(buffer + pos, sizeof(buffer) - pos, "]");
-        poststr(request, buffer);
+        if (pos > 0) { poststr(request, small_buf); pos = 0; }
+        poststr(request, "]");
     }
     
     poststr(request, "}");
@@ -1031,6 +1049,7 @@ int http_fn_api_dash(http_request_t *request) {
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
 
+    // Chunk 1
     poststr(request, 
         "<!DOCTYPE html><html><head>"
         "<meta charset='utf-8'>"
@@ -1038,23 +1057,44 @@ int http_fn_custom_dash(http_request_t *request) {
         "<title>Solar Dashboard</title>"
         "<style>"
         "body { margin: 0; background-color: #000; display: -webkit-box; display: flex; -webkit-box-pack: center; justify-content: center; }"
+    );
+
+    // Chunk 2
+    poststr(request, 
         "#dash-container { max-width: 1200px; width: 100%; min-height: 100vh; background-color: #121212; padding: 10px 20px 20px 20px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; position: relative; }"
         ".top-stats { display: -webkit-box; display: flex; -webkit-box-pack: justify; justify-content: space-between; -webkit-box-align: center; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; margin-top: 15px; width: 100%; box-sizing: border-box; white-space: nowrap; }"
+    );
+
+    // Chunk 3
+    poststr(request, 
         ".top-stats div { display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; -webkit-box-pack: center; justify-content: center; margin: 0 10px; }"
         ".top-stats label { color: #888; font-size: 20px; text-transform: uppercase; margin-bottom: 6px; display: block; }"
         ".top-stats b { font-size: 38px; font-weight: 600; }"
-        ".c-exp { color: #4caf50; }"
-        ".c-imp { color: #f44336; }"
+        ".c-exp { color: #4caf50; } .c-imp { color: #f44336; }"
+    );
+
+    // Chunk 4
+    poststr(request, 
         ".dash-row { display: -webkit-box; display: flex; -webkit-box-orient: horizontal; flex-direction: row; margin-top: 15px; height: 400px; -webkit-box-align: stretch; align-items: stretch; }"
         ".left-col { -webkit-box-flex: 0; flex: 0 0 230px; width: 230px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; box-sizing: border-box; }"
-        ".sens-tbl { width: 100%; font-size: 14px; border-collapse: collapse; }"
-        ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
+        ".sens-tbl { width: 100%; font-size: 14px; border-collapse: collapse; } .sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
+    );
+
+    // Chunk 5
+    poststr(request, 
         ".graph-col { -webkit-box-flex: 1; flex: 1; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: flex; -webkit-box-align: center; align-items: center; -webkit-box-pack: center; justify-content: center; box-sizing: border-box; margin-right: 15px; overflow: hidden; }"
         "canvas { width: 100%; max-width: 592px; height: auto; display: block; margin: 0 auto; }"
+    );
+
+    // Chunk 6
+    poststr(request, 
         ".right-col { -webkit-box-flex: 0; flex: 0 0 240px; width: 240px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; box-sizing: border-box; }"
         ".btn-tgl { width: 100%; height: 50px; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-bottom: 12px; display: block; }"
-        ".sld-v-block { margin-top: 10px; width: 100%; }"
-        ".sld-v-block label { display: block; font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }"
+        ".sld-v-block { margin-top: 10px; width: 100%; } .sld-v-block label { display: block; font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }"
+    );
+
+    // Chunk 7
+    poststr(request, 
         ".bottom-clk-row { background: #222; border-radius: 8px; padding: 25px; margin-top: 15px; display: -webkit-box; display: flex; -webkit-box-orient: horizontal; flex-direction: row; -webkit-box-align: center; align-items: center; -webkit-box-pack: center; justify-content: center; box-sizing: border-box; width: 100%; }"
         ".clk-text-wrap { display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; -webkit-box-align: start; align-items: flex-start; margin-left: 20px; text-align: left; }"
         "#d-clk { font-size: 120px; font-weight: bold; color: #0099FF; font-family: monospace; line-height: 1; letter-spacing: -3px; }"
@@ -1062,6 +1102,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "#d-date { font-size: 16px; color: #888; font-family: sans-serif; }"
         ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; z-index: 10; }"
         "</style></head><body>"
+    );
+
+    // Chunk 8
+    poststr(request, 
         "<div id='dash-container'>"
         "<div class='close-btn' onclick='window.location.href=\"/index\"'>✕</div>"
         "<div class='top-stats'>"
@@ -1073,6 +1117,7 @@ int http_fn_custom_dash(http_request_t *request) {
     );
 
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) {
+        // Chunk 9
         poststr(request, 
             "<div class='dash-row'>"
             "<div class='left-col'>"
@@ -1082,6 +1127,10 @@ int http_fn_custom_dash(http_request_t *request) {
             "<div style='margin-bottom:12px; color:#aaa; text-transform:uppercase; font-size:12px; font-weight:bold; letter-spacing:1px;'>Graph Legend</div>"
             "<div style='display:-webkit-box; display:flex; -webkit-box-align:center; align-items:center; margin-bottom:10px;'>"
             "<span style='display:inline-block; width:18px; height:4px; background:#aaa; margin-right:12px;'></span><b>Total Energy</b></div>"
+        );
+        
+        // Chunk 10
+        poststr(request, 
             "<div style='display:-webkit-box; display:flex; -webkit-box-align:center; align-items:center; margin-bottom:10px;'>"
             "<span style='display:inline-block; width:18px; height:4px; background:#4caf50; margin-right:12px;'></span><b>Charger Avg</b></div>"
             "<div style='display:-webkit-box; display:flex; -webkit-box-align:center; align-items:center;'>"
@@ -1092,6 +1141,10 @@ int http_fn_custom_dash(http_request_t *request) {
             "<div style='position:relative; width:100%; padding-bottom:57.43%;'>"
             "<canvas id='dynCanvas' style='position:absolute; top:0; left:0; width:100%; height:100%;'></canvas>"
             "</div></div></div>"
+        );
+        
+        // Chunk 11
+        poststr(request, 
             "<div class='right-col'>"
             "<div style='font-size:12px; color:#888; text-transform:uppercase; margin-bottom:12px;'>System Modes</div>"
             "<button id='m-btn' class='btn-tgl' onclick='tm()'>--</button>"
@@ -1100,6 +1153,10 @@ int http_fn_custom_dash(http_request_t *request) {
             "<div style='font-size:12px; color:#888; text-transform:uppercase; margin-top:10px; margin-bottom:5px;'>Parameters</div>"
             "<div class='sld-v-block'>"
             "<label>Max Pwr (<span id='lbl-pwr'></span>%)</label>"
+        );
+        
+        // Chunk 12
+        poststr(request, 
             "<input type='range' id='sld-pwr' min='18' max='100' value='100' onchange='s_pwr(this.value)' style='width:100%;'></div>"
             "<div class='sld-v-block' style='margin-top:15px;'>"
             "<label>Export (<span id='lbl-exp'></span> Wh)</label>"
@@ -1114,6 +1171,7 @@ int http_fn_custom_dash(http_request_t *request) {
         );
     }
     
+    // Chunk 13
     poststr(request, 
         "</div><script>"
         "var dmp=0, auto=0;"
@@ -1123,6 +1181,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "function s_pwr(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetPower%20'+v,true); xhr.send(); setV('lbl-pwr',v); }"
         "function s_exp(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetExport%20'+v,true); xhr.send(); setV('lbl-exp',v); }"
         "function upd(v){if(auto===1)return; if(v>=18){setV('sld-pwr',v);} s_pwr(v); dmp=parseInt(v, 10); btnColor();}"
+    );
+
+    // Chunk 14
+    poststr(request, 
         "function t_inv(){upd(dmp===5?0:5);}"
         "function t_chg(){upd(dmp>=10?0:18);}"
         "function tm(){auto=(auto===1)?0:1; var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=ToggleAuto',true); xhr.send(); btnColor();}"
@@ -1132,6 +1194,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "if(c) c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#8bc34a':'#555');"
         "if(m){ m.innerHTML=(auto===1)?'AUTO':'MANUAL'; m.style.background=(auto===1)?'#0099FF':'#f44336'; }"
         "}"
+    );
+
+    // Chunk 15
+    poststr(request, 
         "function drawSmooth(ctx, arr, baseY, clamp, fill, col, lw){"
         "var p=[];"
         "for(var i=0; i<48; i++){"
@@ -1148,6 +1214,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "ctx.lineTo(577,baseY); ctx.lineTo(60,baseY); ctx.fillStyle=fill; ctx.fill();"
         "}"
         "ctx.beginPath(); ctx.moveTo(p[0].x, p[0].y);"
+    );
+
+    // Chunk 16
+    poststr(request, 
         "for(var i=0; i<47; i++){"
         "var xc=(p[i].x+p[i+1].x)/2, yc=(p[i].y+p[i+1].y)/2;"
         "ctx.quadraticCurveTo(p[i].x, p[i].y, xc, yc);"
@@ -1164,6 +1234,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "try {"
         "var d=JSON.parse(xhr.responseText);"
         "setV('d-va',d.va); setV('d-pwr',d.pwr); setC('d-pwr',d.pwr_cls);"
+    );
+
+    // Chunk 17
+    poststr(request, 
         "setV('d-bal',d.bal); setC('d-bal',d.bal_cls);"
         "setV('d-est',d.est); setC('d-est',d.est_cls);"
         "setV('c-lbl',d.chg_lbl); setV('c-v',d.chg_v); setS('c-v',d.chg_c);"
@@ -1177,6 +1251,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "var ctx=c.getContext('2d');"
         "var r=window.devicePixelRatio||1;"
         "c.width=Math.round(592*r); c.height=Math.round(340*r);"
+    );
+
+    // Chunk 18
+    poststr(request, 
         "ctx.scale(r,r);"
         "ctx.clearRect(0,0,592,340);"
         "ctx.fillStyle='#181818';"
@@ -1189,6 +1267,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "ctx.strokeStyle='#444'; ctx.beginPath();"
         "ctx.moveTo(60,60); ctx.lineTo(577,60);"
         "ctx.moveTo(60,225); ctx.lineTo(577,225); ctx.stroke();"
+    );
+
+    // Chunk 19
+    poststr(request, 
         "ctx.strokeStyle='#666'; ctx.beginPath();"
         "ctx.moveTo(60,10); ctx.lineTo(60,60);"
         "ctx.moveTo(60,75); ctx.lineTo(60,310);"
@@ -1199,6 +1281,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "ctx.fillText('+300', 48, 75); ctx.fillText('+150', 48, 150);"
         "ctx.fillStyle='#ccc'; ctx.fillText('0 Wh', 48, 225);"
         "ctx.fillStyle='#aaa'; ctx.fillText('-150', 48, 300);"
+    );
+
+    // Chunk 20
+    poststr(request, 
         "ctx.lineWidth=1; ctx.beginPath(); ctx.font='12px sans-serif'; ctx.textBaseline='top';"
         "for(var i=0; i<=47; i++){"
         "var x=(47-i)*11+60; ctx.moveTo(x,310);"
@@ -1214,6 +1300,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "ctx.fillText('API MISMATCH: UPDATE http_fn_api_dash TO SEND DATA ARRAYS', 318, 190);"
         "return;"
         "}"
+    );
+
+    // Chunk 21
+    poststr(request, 
         "if(d.net && d.net.length > 0){"
         "var grad=ctx.createLinearGradient(0,75,0,310);"
         "grad.addColorStop(0,'rgba(244,67,54,0.5)');"
@@ -1227,6 +1317,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "}"
         "var days=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
         "var mos=['January','February','March','April','May','June','July','August','September','October','November','December'];"
+    );
+
+    // Chunk 22
+    poststr(request, 
         "var dt=new Date();"
         "setV('d-day', days[dt.getDay()]);"
         "setV('d-date', mos[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear());"
@@ -1239,6 +1333,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "refresh(); setInterval(refresh, 10000);"
         "</script></body></html>"
     );
+    
     poststr(request, NULL);
     return 0;
 }
