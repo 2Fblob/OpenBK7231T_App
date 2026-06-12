@@ -1047,7 +1047,61 @@ int http_fn_api_dash(http_request_t *request) {
 // OPTIMIZED DASHBOARD FRONTEND (Sequential State Machine Javascript)
 // ====================================================================
 //
-// CHANGES vs previous revision:
+// CHANGES vs previous revision (this pass):
+//
+// [LAYOUT] Sensor Data column now spans the full page height. The
+//          row that used to be:
+//            [ left-col 230px ][ graph-col ][ right-col 240px ]
+//            [        full-width clock row                    ]
+//          is now:
+//            [ left-col 230px (full height) ][ right-side (flex col) ]
+//          where right-side =
+//            [ top-row: graph-col + right-col, 400px tall ]
+//            [ bottom-clk-row, now only as wide as top-row ]
+//          .dash-row no longer has a fixed height (align-items:stretch
+//          makes left-col match the combined height of top-row +
+//          bottom-clk-row). The clock row is now narrower (it only
+//          spans the graph+right-col width), and that freed horizontal
+//          width is reclaimed as extra vertical room for left-col.
+//
+// [CLOCK] .bottom-clk-row vertical padding reduced (25px -> 10px) and
+//         #d-day margin-bottom reduced (4px -> 2px). Font sizes for
+//         #d-clk / #d-day / #d-date are unchanged.
+//
+// [SENSOR DATA] Added a "Power Factor" row (id=d-pf) directly under the
+//          existing sensor table (separate <tbody>, so it survives the
+//          d.sens innerHTML replacement of #d-sens-body).
+//          Added two new grouped tables below it:
+//            "Energy Totals"      -> Consumption (d-econs), Generation (d-egen)
+//            "Consumption Details"-> Last Hour (d-clh), Today (d-ctoday),
+//                                     Yesterday (d-cyest), 2 Days Ago (d-c2d),
+//                                     3 Days Ago (d-c3d)
+//          These are static placeholders ("--") with stable ids, ready
+//          for you to populate from /api_dash once those values are
+//          exposed server-side (either as new JSON fields handled in
+//          applyUI(), or folded into d.sens with matching ids).
+//          New class .sens-grp-lbl gives these group headings the same
+//          font as "Sensor Data" (.sep-lbl: 12px, #888, uppercase).
+//
+// [STYLE] .sens-tbl rows: first column (name) normal weight, second
+//          column (value) bold + right-aligned, via
+//          ".sens-tbl td:last-child{font-weight:bold;text-align:right;}"
+//          "Graph Legend" heading switched from its old bold/#aaa inline
+//          style to .sep-lbl, matching "Sensor Data" / "ESS System
+//          Modes" / "Parameters".
+//
+// [RENAME] "System Modes" -> "ESS System Modes".
+//          "Charger" -> "ESS Status:" (now a static label, no longer
+//          overwritten by d.chg_lbl).
+//          New small line under the ESS Status value (#c-chg) shows
+//          "Charging: xx%" whenever d.dmp is between 18 and 100.
+//
+// [UNCHANGED] Voltage & Current (#d-va) label and formatting left as-is
+//          per request.
+//
+// ====================================================================
+//
+// PREVIOUS REVISION NOTES (kept for history):
 //
 // [BUG] Canvas grid misaligned on modern browsers (HiDPI / devicePixelRatio>1):
 //       drawImage(gridCanvas,0,0) was blitting at physical pixel dimensions
@@ -1063,16 +1117,14 @@ int http_fn_api_dash(http_request_t *request) {
 //       the XHR was fired, so the sequence was: fire ps=0 (UI data), then
 //       ps=1,2,3 (graph data only), then ps=0 again — UI updated once every
 //       60 seconds (4 x 15s). Fixed with a split-timer approach:
-//         - refreshFast() fires every 7s, always requests UI + sliders (&req=ui)
+//         - refreshFast() fires every 7s, always requests UI + sliders
 //         - refreshGraph() fires every 15s, cycles through net/chg/inv graph data
-//         - refreshSens() fires every 60s, requests sensor table (&req=sens)
 //       This means the top bar, clock, and sliders update every 7 seconds.
 //
 // [BUG] Sensor table was being updated on every fast poll. Now it is only
 //       requested and updated once per minute via the separate refreshSens()
 //       interval, reducing server load.
 //
-// [CSS] No changes needed — flex prefixes from previous revision are correct.
 // ====================================================================
 
 int http_fn_custom_dash(http_request_t *request) {
@@ -1092,31 +1144,38 @@ int http_fn_custom_dash(http_request_t *request) {
         ".top-stats label{color:#888;font-size:20px;text-transform:uppercase;margin-bottom:6px;display:block;}"
         ".top-stats b{font-size:38px;font-weight:600;}"
         ".c-exp{color:#4caf50;}.c-imp{color:#f44336;}"
-        ".dash-row{display:-webkit-flex;display:flex;margin-top:15px;height:400px;-webkit-align-items:stretch;align-items:stretch;}"
+        ".dash-row{display:-webkit-flex;display:flex;margin-top:15px;-webkit-align-items:stretch;align-items:stretch;}"
         ".left-col{-webkit-flex:0 0 230px;flex:0 0 230px;width:230px;background:#222;padding:10px;border-radius:8px;overflow-y:auto;margin-right:15px;box-sizing:border-box;}"
+        ".right-side{-webkit-flex:1;flex:1;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;min-width:0;}"
+        ".top-row{display:-webkit-flex;display:flex;height:400px;-webkit-align-items:stretch;align-items:stretch;}"
         ".sens-tbl{width:100%;font-size:14px;border-collapse:collapse;}"
-        ".sens-tbl td{padding:5px 0;border-bottom:1px solid #333;}"
+        ".sens-tbl td{padding:5px 0;border-bottom:1px solid #333;font-weight:normal;}"
+        ".sens-tbl td:last-child{font-weight:bold;text-align:right;}"
+        ".sens-grp-lbl{font-size:12px;color:#888;text-transform:uppercase;margin:14px 0 8px;}"
         ".graph-col{-webkit-flex:1;flex:1;background:#222;padding:15px;border-radius:8px;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;box-sizing:border-box;margin-right:15px;overflow:hidden;}"
         "canvas{width:100%;max-width:592px;height:auto;display:block;margin:0 auto;}"
         ".right-col{-webkit-flex:0 0 240px;flex:0 0 240px;width:240px;background:#222;padding:20px;border-radius:8px;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;box-sizing:border-box;}"
         ".btn-tgl{width:100%;height:50px;border:none;color:#fff;border-radius:6px;font-weight:bold;cursor:pointer;font-size:16px;margin-bottom:12px;display:block;}"
         ".sld-v-block{margin-top:10px;width:100%;}"
         ".sld-v-block label{display:block;font-size:11px;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;}"
-        ".bottom-clk-row{background:#222;border-radius:8px;padding:25px;margin-top:15px;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;box-sizing:border-box;width:100%;}"
+        ".bottom-clk-row{background:#222;border-radius:8px;padding:10px 25px;margin-top:15px;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;box-sizing:border-box;width:100%;}"
         ".clk-text-wrap{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:flex-start;align-items:flex-start;margin-left:20px;text-align:left;}"
         "#d-clk{font-size:120px;font-weight:bold;color:#09F;font-family:monospace;line-height:1;letter-spacing:-3px;}"
-        "#d-day{font-size:26px;font-weight:600;color:#eee;text-transform:uppercase;font-family:sans-serif;letter-spacing:2px;margin-bottom:4px;}"
+        "#d-day{font-size:26px;font-weight:600;color:#eee;text-transform:uppercase;font-family:sans-serif;letter-spacing:2px;margin-bottom:2px;}"
         "#d-date{font-size:16px;color:#888;font-family:sans-serif;}"
         ".close-btn{position:absolute;top:10px;right:15px;font-size:16px;color:#666;cursor:pointer;z-index:10;}"
         ".sep-lbl{font-size:12px;color:#888;margin-bottom:8px;text-transform:uppercase;}"
         ".leg-row{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;margin-bottom:10px;}"
         ".leg-swatch{display:inline-block;width:18px;height:4px;margin-right:12px;}"
         ".param-lbl{font-size:12px;color:#888;text-transform:uppercase;margin-top:10px;margin-bottom:5px;}"
+        "#c-chg{display:block;font-size:14px;font-weight:normal;color:#4caf50;margin-top:4px;}"
         "</style></head><body>"
     );
     rtos_delay_milliseconds(1);
 
     // --- CHUNK 2: Core Layout Structure ---
+    // "Charger" -> "ESS Status:" (now static, no longer driven by d.chg_lbl).
+    // New #c-chg span shows "Charging: xx%" when d.dmp is 18-100 (see applyUI).
     poststr(request,
         "<div id='dash-container'>"
         "<div class='close-btn' onclick='window.location.href=\"/index\"'>&#x2715;</div>"
@@ -1124,28 +1183,50 @@ int http_fn_custom_dash(http_request_t *request) {
         "<div><label>Voltage &amp; Current</label><b id='d-va'>--</b></div>"
         "<div><label>Power</label><b id='d-pwr'>--</b></div>"
         "<div><label>Now / 15min Est.</label><b><span id='d-bal'>--</span> / <span id='d-est'>--</span></b></div>"
-        "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v'>--</b></div>"
+        "<div id='d-chg-box'><label id='c-lbl'>ESS Status:</label><b id='c-v'>--</b><span id='c-chg'></span></div>"
         "</div>"
     );
     rtos_delay_milliseconds(1);
 
-    // --- CHUNK 3a: Conditional layout — left col & legend ---
+    // --- CHUNK 3a: Left column (Sensor Data + Energy Totals + Consumption
+    //               Details + Graph Legend), now full page height. The
+    //               .left-col / .right-side split replaces the old
+    //               .left-col / .graph-col / .right-col single row.
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) {
         poststr(request,
             "<div class='dash-row'>"
             "<div class='left-col'>"
             "<div class='sep-lbl'>Sensor Data</div>"
-            "<table class='sens-tbl'><tbody id='d-sens-body'></tbody></table>"
+            "<table class='sens-tbl'><tbody id='d-sens-body'></tbody>"
+            "<tbody><tr><td>Power Factor</td><td id='d-pf'>--</td></tr></tbody>"
+            "</table>"
+            "<div class='sens-grp-lbl'>Energy Totals</div>"
+            "<table class='sens-tbl'><tbody>"
+            "<tr><td>Consumption</td><td id='d-econs'>--</td></tr>"
+            "<tr><td>Generation</td><td id='d-egen'>--</td></tr>"
+            "</tbody></table>"
+            "<div class='sens-grp-lbl'>Consumption Details</div>"
+            "<table class='sens-tbl'><tbody>"
+            "<tr><td>Last Hour</td><td id='d-clh'>--</td></tr>"
+            "<tr><td>Today</td><td id='d-ctoday'>--</td></tr>"
+            "<tr><td>Yesterday</td><td id='d-cyest'>--</td></tr>"
+            "<tr><td>2 Days Ago</td><td id='d-c2d'>--</td></tr>"
+            "<tr><td>3 Days Ago</td><td id='d-c3d'>--</td></tr>"
+            "</tbody></table>"
             "<div style='margin-top:20px;font-size:14px;color:#eee;padding:15px;background:#1a1a1a;border-radius:6px;border:1px solid #333;'>"
-            "<div style='margin-bottom:12px;color:#aaa;text-transform:uppercase;font-size:12px;font-weight:bold;letter-spacing:1px;'>Graph Legend</div>"
+            "<div class='sep-lbl' style='margin-bottom:12px;'>Graph Legend</div>"
             "<div class='leg-row'><span class='leg-swatch' style='background:#aaa;'></span><b>Total Energy</b></div>"
             "<div class='leg-row'><span class='leg-swatch' style='background:#4caf50;'></span><b>Charger Avg</b></div>"
             "<div class='leg-row'><span class='leg-swatch' style='background:#ff9800;'></span><b>Inverter Avg</b></div>"
-            "</div></div>"
+            "</div>"
+            "</div>"
+            "<div class='right-side'>"
+            "<div class='top-row'>"
         );
         rtos_delay_milliseconds(1);
 
-        // --- CHUNK 3b: Graph column & right column ---
+        // --- CHUNK 3b: Graph column, right column ("ESS System Modes"),
+        //               then the (now narrower) clock row underneath.
         poststr(request,
             "<div class='graph-col'>"
             "<div style='width:100%;max-width:592px;margin:0 auto;'>"
@@ -1153,7 +1234,7 @@ int http_fn_custom_dash(http_request_t *request) {
             "<canvas id='dynCanvas' style='position:absolute;top:0;left:0;width:100%;height:100%;'></canvas>"
             "</div></div></div>"
             "<div class='right-col'>"
-            "<div class='sep-lbl'>System Modes</div>"
+            "<div class='sep-lbl'>ESS System Modes</div>"
             "<button id='m-btn' class='btn-tgl' onclick='tm()'>--</button>"
             "<button id='inv-btn' class='btn-tgl' onclick='t_inv()'>INVERTER</button>"
             "<button id='chg-btn' class='btn-tgl' onclick='t_chg()'>CHARGER</button>"
@@ -1166,10 +1247,13 @@ int http_fn_custom_dash(http_request_t *request) {
             "<label>Export (<span id='lbl-exp'></span> Wh)</label>"
             "<input type='range' id='sld-exp' min='10' max='100' value='20' onchange='s_exp(this.value)' style='width:100%;'>"
             "</div>"
-            "</div></div>"
+            "</div>"
+            "</div>"
             "<div class='bottom-clk-row'>"
             "<div id='d-clk'>--:--</div>"
             "<div class='clk-text-wrap'><div id='d-day'>--</div><div id='d-date'>--</div></div>"
+            "</div>"
+            "</div>"
             "</div>"
         );
         rtos_delay_milliseconds(1);
@@ -1305,35 +1389,23 @@ int http_fn_custom_dash(http_request_t *request) {
 
     // --- CHUNK 6: Two separate pollers ---
     //
-    // PREVIOUS REVISION BUG:
-    //   refreshFast() was requesting &req=ui — a parameter the server does
-    //   not recognise. The server only knows &req=net, &req=chg, &req=inv.
-    //   So it was returning an empty/unexpected response, d.va was never
-    //   truthy, and applyUI() was never called. Graph still worked because
-    //   refreshGraph() used the correct &req= values.
-    //   refreshSens() had the same problem with &req=sens.
+    // applyUI() changes this revision:
+    //   - c-lbl is no longer set from d.chg_lbl (it's the static "ESS
+    //     Status:" label set in CHUNK 2).
+    //   - c-v still shows d.chg_v / d.chg_c as before.
+    //   - New: c-chg shows "Charging: xx%" (xx = d.dmp) whenever
+    //     d.dmp is between 18 and 100 inclusive, otherwise it's cleared.
     //
-    // FIX:
-    //   refreshFast() now calls /api_dash with NO req param — exactly the
-    //   same as the original base poll (ps===0). The server already returns
-    //   all UI fields (va, pwr, bal, est, chg_v, clk, dmp, auto, t_pwr,
-    //   t_exp) AND d.sens on this endpoint. No server changes needed.
-    //
-    //   refreshSens() is removed entirely. d.sens arrives with every base
-    //   poll. Since the server only recomputes sensor data server-side once
-    //   per minute, the displayed value naturally won't change faster than
-    //   that regardless of how often the client asks.
-    //
-    // RESULT:
-    //   Top bar, sliders, clock, sensors → update every 7s (base poll)
-    //   Graph curves → update every 15s (net/chg/inv cycle, unchanged)
+    // Everything else (polling cadence, d.sens handling, etc.) is
+    // unchanged from the previous revision.
     poststr(request,
         // applyUI: updates all non-graph elements from base poll response
         "function applyUI(d){"
         "setV('d-va',d.va);setV('d-pwr',d.pwr);setC('d-pwr',d.pwr_cls);"
         "setV('d-bal',d.bal);setC('d-bal',d.bal_cls);"
         "setV('d-est',d.est);setC('d-est',d.est_cls);"
-        "setV('c-lbl',d.chg_lbl);setV('c-v',d.chg_v);setS('c-v',d.chg_c);"
+        "setV('c-v',d.chg_v);setS('c-v',d.chg_c);"
+        "setV('c-chg',(d.dmp>=18&&d.dmp<=100)?('Charging: '+d.dmp+'%'):'');"
         "setV('d-clk',d.clk);"
         "if(d.t_pwr>=18)setV('sld-pwr',d.t_pwr);"
         "setV('lbl-pwr',d.t_pwr);setV('sld-exp',d.t_exp);setV('lbl-exp',d.t_exp);"
