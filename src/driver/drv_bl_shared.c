@@ -935,6 +935,7 @@ energySensorNames_t* DRV_GetEnergySensorNames(energySensor_t type)
 
 // ====================================================================
 // NEW JSON API ENDPOINT (Smooth Area Chart Generation)
+// EXACTLY as provided in the attached stable file
 // ====================================================================
 int http_fn_api_dash(http_request_t *request) {
     int dmp;
@@ -1063,128 +1064,65 @@ int http_fn_api_dash(http_request_t *request) {
 }
 
 // ====================================================================
-// NEW STANDALONE DASHBOARD (Legacy Browser Compatible & Vertical Controls)
+// NEW STANDALONE DASHBOARD (Legacy Browser Compatible & Chunked)
 // ====================================================================
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
 
-    poststr(request, 
-        "<!DOCTYPE html><html><head>"
-        "<meta charset='utf-8'>"
-        "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
-        "<title>Solar Dashboard</title>"
-        "<style>"
-        "body { margin: 0; background-color: #000; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; }"
-        "#dash-container { max-width: 1200px; width: 100%; min-height: 100vh; background-color: #121212; padding: 10px 20px 20px 20px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; position: relative; }"
-        ".top-stats { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between; -webkit-box-align: center; -webkit-align-items: center; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; margin-top: 15px; width: 100%; box-sizing: border-box; -webkit-flex-wrap: nowrap; flex-wrap: nowrap; white-space: nowrap; }"
-        ".top-stats div { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; margin: 0 10px; }"
-        ".top-stats label { color: #888; font-size: 20px; text-transform: uppercase; margin-bottom: 6px; display: block; }"
-        ".top-stats b { font-size: 38px; font-weight: 600; }"
-        ".c-exp { color: #4caf50; }"
-        ".c-imp { color: #f44336; }"
-        ".dash-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; margin-top: 15px; height: 400px; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; }"
-        ".left-col { -webkit-box-flex: 0; -webkit-flex: 0 0 230px; flex: 0 0 230px; width: 230px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; box-sizing: border-box; }"
-        ".sens-tbl { width: 100%; font-size: 14px; border-collapse: collapse; }"
-        ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
-        ".graph-col { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; position: relative; box-sizing: border-box; margin-right: 15px; }"
-        ".right-col { -webkit-box-flex: 0; -webkit-flex: 0 0 280px; flex: 0 0 280px; width: 280px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; box-sizing: border-box; }"
-        ".btn-tgl { width: 100%; height: 50px; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-bottom: 12px; display: block; }"
-        ".sld-v-block { margin-top: 10px; width: 100%; }"
-        ".sld-v-block label { display: block; font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }"
-        ".bottom-clk-row { background: #222; border-radius: 8px; padding: 25px; margin-top: 15px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; box-sizing: border-box; width: 100%; }"
-        ".clk-text-wrap { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: start; -webkit-align-items: flex-start; align-items: flex-start; margin-left: 20px; text-align: left; }"
-        "#d-clk { font-size: 120px; font-weight: bold; color: #0099FF; font-family: monospace; line-height: 1; letter-spacing: -3px; }"
-        "#d-day { font-size: 26px; font-weight: 600; color: #eee; text-transform: uppercase; font-family: sans-serif; letter-spacing: 2px; margin-bottom: 4px; }"
-        "#d-date { font-size: 16px; color: #888; font-family: sans-serif; }"
-        ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; z-index: 10; }"
-        "</style></head><body>"
-    );
+    poststr(request, "<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1.0'>");
+    poststr(request, "<title>Solar Dashboard</title><style>");
+    poststr(request, "body { margin: 0; background-color: #000; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; }");
+    poststr(request, "#dash-container { max-width: 1200px; width: 100%; min-height: 100vh; background-color: #121212; padding: 10px 20px 20px 20px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; position: relative; }");
+    poststr(request, ".top-stats { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between; -webkit-box-align: center; -webkit-align-items: center; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; margin-top: 15px; width: 100%; box-sizing: border-box; -webkit-flex-wrap: nowrap; flex-wrap: nowrap; white-space: nowrap; }");
+    poststr(request, ".top-stats div { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; margin: 0 10px; }");
+    poststr(request, ".top-stats label { color: #888; font-size: 20px; text-transform: uppercase; margin-bottom: 6px; display: block; } .top-stats b { font-size: 38px; font-weight: 600; } .c-exp { color: #4caf50; } .c-imp { color: #f44336; }");
+    poststr(request, ".dash-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; margin-top: 15px; height: 400px; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; }");
+    poststr(request, ".left-col { -webkit-box-flex: 0; -webkit-flex: 0 0 230px; flex: 0 0 230px; width: 230px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; box-sizing: border-box; }");
+    poststr(request, ".sens-tbl { width: 100%; font-size: 14px; border-collapse: collapse; } .sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }");
+    poststr(request, ".graph-col { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; position: relative; box-sizing: border-box; margin-right: 15px; }");
+    poststr(request, ".right-col { -webkit-box-flex: 0; -webkit-flex: 0 0 280px; flex: 0 0 280px; width: 280px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; box-sizing: border-box; }");
+    poststr(request, ".btn-tgl { width: 100%; height: 50px; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-bottom: 12px; display: block; }");
+    poststr(request, ".sld-v-block { margin-top: 10px; width: 100%; } .sld-v-block label { display: block; font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }");
+    poststr(request, ".bottom-clk-row { background: #222; border-radius: 8px; padding: 25px; margin-top: 15px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; box-sizing: border-box; width: 100%; }");
+    poststr(request, ".clk-text-wrap { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: start; -webkit-align-items: flex-start; align-items: flex-start; margin-left: 20px; text-align: left; }");
+    poststr(request, "#d-clk { font-size: 120px; font-weight: bold; color: #0099FF; font-family: monospace; line-height: 1; letter-spacing: -3px; }");
+    poststr(request, "#d-day { font-size: 26px; font-weight: 600; color: #eee; text-transform: uppercase; font-family: sans-serif; letter-spacing: 2px; margin-bottom: 4px; } #d-date { font-size: 16px; color: #888; font-family: sans-serif; }");
+    poststr(request, ".close-btn { position: absolute; top: 10px; right: 15px; font-size: 16px; color: #666; cursor: pointer; z-index: 10; }");
+    poststr(request, "</style></head><body>");
 
-    poststr(request, 
-        "<div id='dash-container'>"
-        "<div class='close-btn' onclick='window.location.href=\"/index\"'>✕</div>"
-        
-        "<div class='top-stats'>"
-        "<div><label>Voltage & Current</label><b id='d-va'>--</b></div>"
-        "<div><label>Power</label><b id='d-pwr'>--</b></div>"
-        "<div><label>Now / 15min Est.</label><b><span id='d-bal'>--</span> / <span id='d-est'>--</span></b></div>"
-        "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v'>--</b></div>"
-        "</div>"
-    );
-
+    poststr(request, "<div id='dash-container'><div class='close-btn' onclick='window.location.href=\"/index\"'>✕</div>");
+    poststr(request, "<div class='top-stats'><div><label>Voltage & Current</label><b id='d-va'>--</b></div>");
+    poststr(request, "<div><label>Power</label><b id='d-pwr'>--</b></div><div><label>Now / 15min Est.</label><b><span id='d-bal'>--</span> / <span id='d-est'>--</span></b></div>");
+    poststr(request, "<div id='d-chg-box'><label id='c-lbl'>Charger</label><b id='c-v'>--</b></div></div>");
+    
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) {
-        poststr(request, 
-            "<div class='dash-row'>"
-            "<div class='left-col'>"
-            "<div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>"
-            "<table class='sens-tbl'><tbody id='d-sens-body'></tbody></table>"
-            
-            // LEGEND RELOCATED HERE
-            "<div style='margin-top:20px; font-size:11px; color:#aaa; padding:12px; background:#1a1a1a; border-radius:6px; border:1px solid #333;'>"
-            "<div style='margin-bottom:8px; color:#888; text-transform:uppercase; font-size:10px; letter-spacing:1px;'>Graph Legend</div>"
-            "<div><span style='display:inline-block; width:14px; height:2px; background:#888; margin-right:8px; vertical-align:middle;'></span>Total Energy</div>"
-            "<div style='margin-top:8px;'><span style='display:inline-block; width:14px; height:2px; background:#4caf50; margin-right:8px; vertical-align:middle;'></span>Charger Average</div>"
-            "<div style='margin-top:8px;'><span style='display:inline-block; width:14px; height:2px; background:#ff9800; margin-right:8px; vertical-align:middle;'></span>Inverter Average</div>"
-            "</div>"
-            "</div>"
-            
-            "<div class='graph-col'>"
-            "<svg viewBox='0 0 592 340' preserveAspectRatio='xMinYMid meet' style='width:100%; height:100%; background:transparent;'>"
-            "<defs>"
-            "<linearGradient id='splitFade' x1='0' y1='0' x2='0' y2='340' gradientUnits='userSpaceOnUse'>"
-            "<stop offset='75' stop-color='#f44336' stop-opacity='0.6'/>"
-            "<stop offset='225' stop-color='#f44336' stop-opacity='0'/>"
-            "<stop offset='225' stop-color='#4caf50' stop-opacity='0'/>"
-            "<stop offset='300' stop-color='#4caf50' stop-opacity='0.6'/>"
-            "</linearGradient>"
-            "</defs>"
-            
-            // SEPARATED GRAPH BACKGROUNDS (Making them distinct boxes)
-            "<rect x='60' y='10' width='517' height='50' fill='#181818'/>"
-            "<rect x='60' y='75' width='517' height='235' fill='#181818'/>"
-            
-            // SEPARATED Y-AXES
-            "<line x1='60' y1='10' x2='60' y2='60' stroke='#777' stroke-width='1'/>"
-            "<line x1='60' y1='75' x2='60' y2='310' stroke='#777' stroke-width='1'/>"
+        poststr(request, "<div class='dash-row'><div class='left-col'><div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>");
+        poststr(request, "<table class='sens-tbl'><tbody id='d-sens-body'></tbody></table>");
+        poststr(request, "<div style='margin-top:20px; font-size:11px; color:#aaa; padding:12px; background:#1a1a1a; border-radius:6px; border:1px solid #333;'>");
+        poststr(request, "<div style='margin-bottom:8px; color:#888; text-transform:uppercase; font-size:10px; letter-spacing:1px;'>Graph Legend</div>");
+        poststr(request, "<div><span style='display:inline-block; width:14px; height:2px; background:#888; margin-right:8px; vertical-align:middle;'></span>Total Energy</div>");
+        poststr(request, "<div style='margin-top:8px;'><span style='display:inline-block; width:14px; height:2px; background:#4caf50; margin-right:8px; vertical-align:middle;'></span>Charger Average</div>");
+        poststr(request, "<div style='margin-top:8px;'><span style='display:inline-block; width:14px; height:2px; background:#ff9800; margin-right:8px; vertical-align:middle;'></span>Inverter Average</div></div></div>");
 
-            // SEPARATED X-AXES BASELINES
-            "<line x1='60' y1='60' x2='577' y2='60' stroke='#777' stroke-width='1'/>"
-            
-            "<g stroke='#333' stroke-width='1' stroke-dasharray='5,5'>"
-            // Top graph grid
-            "<line x1='60' y1='35' x2='577' y2='35'/>"
-            
-            // Bottom graph grid
-            "<line x1='60' y1='75' x2='577' y2='75'/>" 
-            "<line x1='60' y1='150' x2='577' y2='150'/>" 
-            "<line x1='60' y1='300' x2='577' y2='300'/>" 
-            "</g>"
-            
-            // Main graph 0-line
-            "<line x1='60' y1='225' x2='577' y2='225' stroke='#777' stroke-width='1.5'/>" 
-            
-            "<g fill='#888' font-size='12' font-family='monospace' text-anchor='end'>"
-            // Top graph text
-            "<text x='48' y='14'>100</text>"
-            "<text x='48' y='64'>0</text>"
-            
-            // Bottom graph text
-            "<text x='48' y='79'>+300</text>"
-            "<text x='48' y='154'>+150</text>"
-            "<text x='48' y='229' fill='#aaa'>0 Wh</text>"
-            "<text x='48' y='304'>-150</text>"
-            "</g>"
-            
-            "<g id='d-graph-data'></g>"
-        );
+        poststr(request, "<div class='graph-col'><svg viewBox='0 0 592 340' preserveAspectRatio='xMinYMid meet' style='width:100%; height:100%; background:transparent;'>");
+        poststr(request, "<defs><linearGradient id='splitFade' x1='0' y1='0' x2='0' y2='340' gradientUnits='userSpaceOnUse'>");
+        poststr(request, "<stop offset='75' stop-color='#f44336' stop-opacity='0.6'/><stop offset='225' stop-color='#f44336' stop-opacity='0'/>");
+        poststr(request, "<stop offset='225' stop-color='#4caf50' stop-opacity='0'/><stop offset='300' stop-color='#4caf50' stop-opacity='0.6'/>");
+        poststr(request, "</linearGradient></defs><rect x='60' y='10' width='517' height='50' fill='#181818'/>");
+        poststr(request, "<rect x='60' y='75' width='517' height='235' fill='#181818'/><line x1='60' y1='10' x2='60' y2='60' stroke='#777' stroke-width='1'/>");
+        poststr(request, "<line x1='60' y1='75' x2='60' y2='310' stroke='#777' stroke-width='1'/><line x1='60' y1='60' x2='577' y2='60' stroke='#777' stroke-width='1'/>");
+        poststr(request, "<g stroke='#333' stroke-width='1' stroke-dasharray='5,5'><line x1='60' y1='35' x2='577' y2='35'/><line x1='60' y1='75' x2='577' y2='75'/>");
+        poststr(request, "<line x1='60' y1='150' x2='577' y2='150'/><line x1='60' y1='300' x2='577' y2='300'/></g>");
+        poststr(request, "<line x1='60' y1='225' x2='577' y2='225' stroke='#777' stroke-width='1.5'/>");
+        poststr(request, "<g fill='#888' font-size='12' font-family='monospace' text-anchor='end'><text x='48' y='14'>100</text><text x='48' y='64'>0</text>");
+        poststr(request, "<text x='48' y='79'>+300</text><text x='48' y='154'>+150</text><text x='48' y='229' fill='#aaa'>0 Wh</text><text x='48' y='304'>-150</text></g>");
+        poststr(request, "<g id='d-graph-data'></g>");
 
-        // Generate the Time Scale Legend dynamically
         poststr(request, "<g stroke='#777' stroke-width='1'><line x1='60' y1='310' x2='577' y2='310'/></g>");
         poststr(request, "<g fill='#888' font-size='10' font-family='sans-serif'>");
         for (int i = 0; i <= 47; i++) {
             int x = (47 - i) * 11 + 60;
             if (i % 4 == 0) {
-                // Major tick mark (Hour intervals)
                 hprintf255(request, "<line x1='%d' y1='310' x2='%d' y2='316' stroke='#777'/>", x, x);
                 if (i == 0) {
                     hprintf255(request, "<text x='%d' y='328' text-anchor='end'>Now</text>", x);
@@ -1192,99 +1130,50 @@ int http_fn_custom_dash(http_request_t *request) {
                     hprintf255(request, "<text x='%d' y='328' text-anchor='middle'>-%dh</text>", x, i/4);
                 }
             } else {
-                // Minor tick mark (15 min intervals)
                 hprintf255(request, "<line x1='%d' y1='310' x2='%d' y2='313' stroke='#777'/>", x, x);
             }
         }
         poststr(request, "</g>");
 
-        poststr(request, 
-            "</svg></div>"
-            
-            "<div class='right-col'>"
-            "<div style='font-size:12px; color:#888; text-transform:uppercase; margin-bottom:12px;'>System Modes</div>"
-            "<button id='m-btn' class='btn-tgl' onclick='tm()'>--</button>"
-            "<button id='inv-btn' class='btn-tgl' onclick='t_inv()'>INVERTER</button>"
-            "<button id='chg-btn' class='btn-tgl' onclick='t_chg()'>CHARGER</button>"
-            
-            "<div style='font-size:12px; color:#888; text-transform:uppercase; margin-top:10px; margin-bottom:5px;'>Parameters</div>"
-            "<div class='sld-v-block'>"
-            "<label>Max Power / Manual (<span id='lbl-pwr'></span>%)</label>"
-            "<input type='range' id='sld-pwr' min='18' max='100' value='100' onchange='s_pwr(this.value)' style='width:100%;'>"
-            "</div>"
-            "<div class='sld-v-block' style='margin-top:15px;'>"
-            "<label>Target Export (<span id='lbl-exp'></span> Wh)</label>"
-            "<input type='range' id='sld-exp' min='10' max='100' value='20' onchange='s_exp(this.value)' style='width:100%;'>"
-            "</div>"
-            "</div>"
-            "</div>"
-
-            // CLOCK LAYOUT MODIFIED HERE (Horizontal stacking)
-            "<div class='bottom-clk-row'>"
-            "<div id='d-clk'>--:--</div>"
-            "<div class='clk-text-wrap'>"
-            "<div id='d-day'>--</div>"
-            "<div id='d-date'>--</div>"
-            "</div>"
-            "</div>"
-        );
+        poststr(request, "</svg></div><div class='right-col'>");
+        poststr(request, "<div style='font-size:12px; color:#888; text-transform:uppercase; margin-bottom:12px;'>System Modes</div>");
+        poststr(request, "<button id='m-btn' class='btn-tgl' onclick='tm()'>--</button><button id='inv-btn' class='btn-tgl' onclick='t_inv()'>INVERTER</button>");
+        poststr(request, "<button id='chg-btn' class='btn-tgl' onclick='t_chg()'>CHARGER</button>");
+        poststr(request, "<div style='font-size:12px; color:#888; text-transform:uppercase; margin-top:10px; margin-bottom:5px;'>Parameters</div>");
+        poststr(request, "<div class='sld-v-block'><label>Max Power / Manual (<span id='lbl-pwr'></span>%)</label>");
+        poststr(request, "<input type='range' id='sld-pwr' min='18' max='100' value='100' onchange='s_pwr(this.value)' style='width:100%;'></div>");
+        poststr(request, "<div class='sld-v-block' style='margin-top:15px;'><label>Target Export (<span id='lbl-exp'></span> Wh)</label>");
+        poststr(request, "<input type='range' id='sld-exp' min='10' max='100' value='20' onchange='s_exp(this.value)' style='width:100%;'></div></div></div>");
+        
+        poststr(request, "<div class='bottom-clk-row'><div id='d-clk'>--:--</div><div class='clk-text-wrap'>");
+        poststr(request, "<div id='d-day'>--</div><div id='d-date'>--</div></div></div>");
     }
-    poststr(request, "</div>"); 
-
-    poststr(request, "<script>");
-    poststr(request, 
-        "var dmp=0, auto=0;"
-        "function s_pwr(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetPower%20'+v,true); xhr.send(); document.getElementById('lbl-pwr').innerText=v; }"
-        "function s_exp(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetExport%20'+v,true); xhr.send(); document.getElementById('lbl-exp').innerText=v; }"
-        "function upd(v){if(auto===1)return; if(v>=18){document.getElementById('sld-pwr').value=v;} s_pwr(v); dmp=parseInt(v, 10); btnColor();}"
-        "function t_inv(){upd(dmp===5?0:5);}"
-        "function t_chg(){upd(dmp>=10?0:18);}"
-        "function tm(){auto=(auto===1)?0:1; var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=ToggleAuto',true); xhr.send(); btnColor();}"
-        
-        "function btnColor(){"
-        "var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),m=document.getElementById('m-btn');"
-        "if(i) i.style.background=(dmp===5)?'#ff9800':'#555';"
-        "if(c) c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#8bc34a':'#555');"
-        "if(m){ m.innerText=(auto===1)?'AUTO':'MANUAL'; m.style.background=(auto===1)?'#0099FF':'#f44336'; }"
-        "}"
-        
-        "function refresh(){"
-        "var xhr=new XMLHttpRequest();"
-        "xhr.onreadystatechange=function(){"
-        "if(xhr.readyState===4 && xhr.status===200){"
-        "try {"
-        "var d=JSON.parse(xhr.responseText);"
-        "document.getElementById('d-va').innerText=d.va;"
-        "document.getElementById('d-pwr').innerText=d.pwr;"
-        "document.getElementById('d-pwr').className=d.pwr_cls;"
-        "document.getElementById('d-bal').innerText=d.bal;"
-        "document.getElementById('d-bal').className=d.bal_cls;"
-        "document.getElementById('d-est').innerText=d.est;"
-        "document.getElementById('d-est').className=d.est_cls;"
-        "document.getElementById('c-lbl').innerText=d.chg_lbl;"
-        "document.getElementById('c-v').innerText=d.chg_v;"
-        "document.getElementById('c-v').style.color=d.chg_c;"
-        "document.getElementById('d-clk').innerText=d.clk;"
-        "if(d.t_pwr>=18){document.getElementById('sld-pwr').value=d.t_pwr;} document.getElementById('lbl-pwr').innerText=d.t_pwr;"
-        "document.getElementById('sld-exp').value=d.t_exp; document.getElementById('lbl-exp').innerText=d.t_exp;"
-        "dmp=d.dmp; auto=d.auto; btnColor();"
-        "if(d.sens){"
-        "document.getElementById('d-sens-body').innerHTML=d.sens;"
-        "document.getElementById('d-graph-data').innerHTML=d.graph;"
-        "}"
-        "var days=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
-        "var dt=new Date();"
-        "document.getElementById('d-day').innerText=days[dt.getDay()];"
-        "document.getElementById('d-date').innerText=dt.toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'});"
-        "} catch(e) {}"
-        "}"
-        "};"
-        "xhr.open('GET','/api_dash?t='+Date.now(),true);"
-        "xhr.send();"
-        "}"
-        "refresh(); setInterval(refresh, 10000);"
-    );
-    poststr(request, "</script></body></html>");
+    
+    poststr(request, "</div><script>");
+    poststr(request, "var dmp=0, auto=0;");
+    poststr(request, "function s_pwr(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetPower%20'+v,true); xhr.send(); document.getElementById('lbl-pwr').innerText=v; }");
+    poststr(request, "function s_exp(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetExport%20'+v,true); xhr.send(); document.getElementById('lbl-exp').innerText=v; }");
+    poststr(request, "function upd(v){if(auto===1)return; if(v>=18){document.getElementById('sld-pwr').value=v;} s_pwr(v); dmp=parseInt(v, 10); btnColor();}");
+    poststr(request, "function t_inv(){upd(dmp===5?0:5);} function t_chg(){upd(dmp>=10?0:18);}");
+    poststr(request, "function tm(){auto=(auto===1)?0:1; var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=ToggleAuto',true); xhr.send(); btnColor();}");
+    poststr(request, "function btnColor(){ var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),m=document.getElementById('m-btn');");
+    poststr(request, "if(i) i.style.background=(dmp===5)?'#ff9800':'#555'; if(c) c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#8bc34a':'#555');");
+    poststr(request, "if(m){ m.innerText=(auto===1)?'AUTO':'MANUAL'; m.style.background=(auto===1)?'#0099FF':'#f44336'; } }");
+    poststr(request, "function refresh(){ var xhr=new XMLHttpRequest(); xhr.onreadystatechange=function(){");
+    poststr(request, "if(xhr.readyState===4 && xhr.status===200){ try { var d=JSON.parse(xhr.responseText);");
+    poststr(request, "document.getElementById('d-va').innerText=d.va; document.getElementById('d-pwr').innerText=d.pwr; document.getElementById('d-pwr').className=d.pwr_cls;");
+    poststr(request, "document.getElementById('d-bal').innerText=d.bal; document.getElementById('d-bal').className=d.bal_cls; document.getElementById('d-est').innerText=d.est;");
+    poststr(request, "document.getElementById('d-est').className=d.est_cls; document.getElementById('c-lbl').innerText=d.chg_lbl; document.getElementById('c-v').innerText=d.chg_v;");
+    poststr(request, "document.getElementById('c-v').style.color=d.chg_c; document.getElementById('d-clk').innerText=d.clk;");
+    poststr(request, "if(d.t_pwr>=18){document.getElementById('sld-pwr').value=d.t_pwr;} document.getElementById('lbl-pwr').innerText=d.t_pwr;");
+    poststr(request, "document.getElementById('sld-exp').value=d.t_exp; document.getElementById('lbl-exp').innerText=d.t_exp;");
+    poststr(request, "dmp=d.dmp; auto=d.auto; btnColor(); if(d.sens){ document.getElementById('d-sens-body').innerHTML=d.sens; document.getElementById('d-graph-data').innerHTML=d.graph; }");
+    poststr(request, "var days=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY']; var dt=new Date();");
+    poststr(request, "document.getElementById('d-day').innerText=days[dt.getDay()];");
+    poststr(request, "document.getElementById('d-date').innerText=dt.toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'});");
+    poststr(request, "} catch(e) {} } }; xhr.open('GET','/api_dash?t='+Date.now(),true); xhr.send(); }");
+    poststr(request, "refresh(); setInterval(refresh, 10000); </script></body></html>");
+    
     poststr(request, NULL);
     return 0;
 }
