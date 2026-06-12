@@ -1063,7 +1063,7 @@ int http_fn_api_dash(http_request_t *request) {
 }
 
 // ====================================================================
-// NEW STANDALONE DASHBOARD (Legacy Browser Compatible & Vertical Controls)
+// NEW STANDALONE DASHBOARD (Pure Canvas Grid + Lines for iOS 5/9)
 // ====================================================================
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
@@ -1074,25 +1074,26 @@ int http_fn_custom_dash(http_request_t *request) {
         "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
         "<title>Solar Dashboard</title>"
         "<style>"
-        "body { margin: 0; background-color: #000; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; }"
+        "body { margin: 0; background-color: #000; display: -webkit-box; display: flex; -webkit-box-pack: center; justify-content: center; }"
         "#dash-container { max-width: 1200px; width: 100%; min-height: 100vh; background-color: #121212; padding: 10px 20px 20px 20px; box-sizing: border-box; font-family: -apple-system, sans-serif; color: #eee; position: relative; }"
-        ".top-stats { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-pack: justify; -webkit-justify-content: space-between; justify-content: space-between; -webkit-box-align: center; -webkit-align-items: center; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; margin-top: 15px; width: 100%; box-sizing: border-box; -webkit-flex-wrap: nowrap; flex-wrap: nowrap; white-space: nowrap; }"
-        ".top-stats div { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; margin: 0 10px; }"
+        ".top-stats { display: -webkit-box; display: flex; -webkit-box-pack: justify; justify-content: space-between; -webkit-box-align: center; align-items: center; background: #222; padding: 18px; border-radius: 8px; text-align: center; margin-top: 15px; width: 100%; box-sizing: border-box; white-space: nowrap; }"
+        ".top-stats div { display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; -webkit-box-pack: center; justify-content: center; margin: 0 10px; }"
         ".top-stats label { color: #888; font-size: 20px; text-transform: uppercase; margin-bottom: 6px; display: block; }"
         ".top-stats b { font-size: 38px; font-weight: 600; }"
         ".c-exp { color: #4caf50; }"
         ".c-imp { color: #f44336; }"
-        ".dash-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; margin-top: 15px; height: 400px; -webkit-box-align: stretch; -webkit-align-items: stretch; align-items: stretch; }"
-        ".left-col { -webkit-box-flex: 0; -webkit-flex: 0 0 230px; flex: 0 0 230px; width: 230px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; box-sizing: border-box; }"
+        ".dash-row { display: -webkit-box; display: flex; -webkit-box-orient: horizontal; flex-direction: row; margin-top: 15px; height: 400px; -webkit-box-align: stretch; align-items: stretch; }"
+        ".left-col { -webkit-box-flex: 0; flex: 0 0 230px; width: 230px; background: #222; padding: 10px; border-radius: 8px; overflow-y: auto; margin-right: 15px; box-sizing: border-box; }"
         ".sens-tbl { width: 100%; font-size: 14px; border-collapse: collapse; }"
         ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
-        ".graph-col { -webkit-box-flex: 1; -webkit-flex: 1 1 0%; flex: 1 1 0%; min-width: 0; min-height: 0; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; overflow: hidden; position: relative; box-sizing: border-box; margin-right: 15px; }"
-        ".right-col { -webkit-box-flex: 0; -webkit-flex: 0 0 280px; flex: 0 0 280px; width: 280px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; box-sizing: border-box; }"
+        ".graph-col { -webkit-box-flex: 1; flex: 1; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: flex; -webkit-box-align: center; align-items: center; -webkit-box-pack: center; justify-content: center; box-sizing: border-box; margin-right: 15px; overflow: hidden; }"
+        "canvas { width: 100%; max-width: 592px; height: auto; display: block; }"
+        ".right-col { -webkit-box-flex: 0; flex: 0 0 280px; width: 280px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; box-sizing: border-box; }"
         ".btn-tgl { width: 100%; height: 50px; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-bottom: 12px; display: block; }"
         ".sld-v-block { margin-top: 10px; width: 100%; }"
         ".sld-v-block label { display: block; font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }"
-        ".bottom-clk-row { background: #222; border-radius: 8px; padding: 25px; margin-top: 15px; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: horizontal; -webkit-box-direction: normal; -webkit-flex-direction: row; flex-direction: row; -webkit-box-align: center; -webkit-align-items: center; align-items: center; -webkit-box-pack: center; -webkit-justify-content: center; justify-content: center; box-sizing: border-box; width: 100%; }"
-        ".clk-text-wrap { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-box-orient: vertical; -webkit-box-direction: normal; -webkit-flex-direction: column; flex-direction: column; -webkit-box-align: start; -webkit-align-items: flex-start; align-items: flex-start; margin-left: 20px; text-align: left; }"
+        ".bottom-clk-row { background: #222; border-radius: 8px; padding: 25px; margin-top: 15px; display: -webkit-box; display: flex; -webkit-box-orient: horizontal; flex-direction: row; -webkit-box-align: center; align-items: center; -webkit-box-pack: center; justify-content: center; box-sizing: border-box; width: 100%; }"
+        ".clk-text-wrap { display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; -webkit-box-align: start; align-items: flex-start; margin-left: 20px; text-align: left; }"
         "#d-clk { font-size: 120px; font-weight: bold; color: #0099FF; font-family: monospace; line-height: 1; letter-spacing: -3px; }"
         "#d-day { font-size: 26px; font-weight: 600; color: #eee; text-transform: uppercase; font-family: sans-serif; letter-spacing: 2px; margin-bottom: 4px; }"
         "#d-date { font-size: 16px; color: #888; font-family: sans-serif; }"
@@ -1121,73 +1122,17 @@ int http_fn_custom_dash(http_request_t *request) {
             
             "<div style='margin-top:20px; font-size:11px; color:#aaa; padding:12px; background:#1a1a1a; border-radius:6px; border:1px solid #333;'>"
             "<div style='margin-bottom:8px; color:#888; text-transform:uppercase; font-size:10px; letter-spacing:1px;'>Graph Legend</div>"
-            "<div><span style='display:inline-block; width:14px; height:2px; background:#888; margin-right:8px; vertical-align:middle;'></span>Total Energy</div>"
+            "<div><span style='display:inline-block; width:14px; height:2px; background:#aaa; margin-right:8px; vertical-align:middle;'></span>Total Energy</div>"
             "<div style='margin-top:8px;'><span style='display:inline-block; width:14px; height:2px; background:#4caf50; margin-right:8px; vertical-align:middle;'></span>Charger Average</div>"
             "<div style='margin-top:8px;'><span style='display:inline-block; width:14px; height:2px; background:#ff9800; margin-right:8px; vertical-align:middle;'></span>Inverter Average</div>"
             "</div>"
             "</div>"
             
             "<div class='graph-col'>"
-            "<svg viewBox='0 0 592 340' preserveAspectRatio='xMinYMid meet' style='width:100%; height:100%; background:transparent;'>"
-            "<defs>"
-            "<linearGradient id='splitFade' x1='0' y1='0' x2='0' y2='340' gradientUnits='userSpaceOnUse'>"
-            "<stop offset='75' stop-color='#f44336' stop-opacity='0.6'/>"
-            "<stop offset='225' stop-color='#f44336' stop-opacity='0'/>"
-            "<stop offset='225' stop-color='#4caf50' stop-opacity='0'/>"
-            "<stop offset='300' stop-color='#4caf50' stop-opacity='0.6'/>"
-            "</linearGradient>"
-            "</defs>"
-            
-            "<rect x='60' y='10' width='517' height='50' fill='#181818'/>"
-            "<rect x='60' y='75' width='517' height='235' fill='#181818'/>"
-            
-            "<line x1='60' y1='10' x2='60' y2='60' stroke='#777' stroke-width='1'/>"
-            "<line x1='60' y1='75' x2='60' y2='310' stroke='#777' stroke-width='1'/>"
-
-            "<line x1='60' y1='60' x2='577' y2='60' stroke='#777' stroke-width='1'/>"
-            
-            "<g stroke='#333' stroke-width='1' stroke-dasharray='5,5'>"
-            "<line x1='60' y1='35' x2='577' y2='35'/>"
-            
-            "<line x1='60' y1='75' x2='577' y2='75'/>" 
-            "<line x1='60' y1='150' x2='577' y2='150'/>" 
-            "<line x1='60' y1='300' x2='577' y2='300'/>" 
-            "</g>"
-            
-            "<line x1='60' y1='225' x2='577' y2='225' stroke='#777' stroke-width='1.5'/>" 
-            
-            "<g fill='#888' font-size='12' font-family='monospace' text-anchor='end'>"
-            "<text x='48' y='14'>100</text>"
-            "<text x='48' y='64'>0</text>"
-            
-            "<text x='48' y='79'>+300</text>"
-            "<text x='48' y='154'>+150</text>"
-            "<text x='48' y='229' fill='#aaa'>0 Wh</text>"
-            "<text x='48' y='304'>-150</text>"
-            "</g>"
-            
-            "<g id='d-graph-data'></g>"
-        );
-
-        poststr(request, "<g stroke='#777' stroke-width='1'><line x1='60' y1='310' x2='577' y2='310'/></g>");
-        poststr(request, "<g fill='#888' font-size='10' font-family='sans-serif'>");
-        for (int i = 0; i <= 47; i++) {
-            int x = (47 - i) * 11 + 60;
-            if (i % 4 == 0) {
-                hprintf255(request, "<line x1='%d' y1='310' x2='%d' y2='316' stroke='#777'/>", x, x);
-                if (i == 0) {
-                    hprintf255(request, "<text x='%d' y='328' text-anchor='end'>Now</text>", x);
-                } else {
-                    hprintf255(request, "<text x='%d' y='328' text-anchor='middle'>-%dh</text>", x, i/4);
-                }
-            } else {
-                hprintf255(request, "<line x1='%d' y1='310' x2='%d' y2='313' stroke='#777'/>", x, x);
-            }
-        }
-        poststr(request, "</g>");
-
-        poststr(request, 
-            "</svg></div>"
+            // THE SVG HAS BEEN COMPLETELY REMOVED. 
+            // The Canvas will now draw its own grid, guaranteeing 100% perfect alignment.
+            "<canvas id='dynCanvas' width='592' height='340'></canvas>"
+            "</div>"
             
             "<div class='right-col'>"
             "<div style='font-size:12px; color:#888; text-transform:uppercase; margin-bottom:12px;'>System Modes</div>"
@@ -1255,17 +1200,102 @@ int http_fn_custom_dash(http_request_t *request) {
         "if(d.t_pwr>=18){document.getElementById('sld-pwr').value=d.t_pwr;} document.getElementById('lbl-pwr').innerHTML=d.t_pwr;"
         "document.getElementById('sld-exp').value=d.t_exp; document.getElementById('lbl-exp').innerHTML=d.t_exp;"
         "dmp=d.dmp; auto=d.auto; btnColor();"
-        "if(d.sens){"
-        "document.getElementById('d-sens-body').innerHTML=d.sens;"
+        "if(d.sens){ document.getElementById('d-sens-body').innerHTML=d.sens; }"
         
-        // --- iOS 9 SVG NAMESPACE PARSING FIX ---
-        "var g = document.getElementById('d-graph-data');"
-        "var dummy = document.createElement('div');"
-        "dummy.innerHTML = '<svg xmlns=\"http://www.w3.org/2000/svg\">' + d.graph + '</svg>';"
-        "while(g.firstChild) { g.removeChild(g.firstChild); }"
-        "var svgNode = dummy.firstChild;"
-        "while(svgNode && svgNode.firstChild) { g.appendChild(svgNode.firstChild); }"
-        // ---------------------------------------
+        // --- NATIVE CANVAS GRAPH + GRID RENDERER ---
+        "var c=document.getElementById('dynCanvas');"
+        "if(c && c.getContext){"
+        "var ctx=c.getContext('2d');"
+        "ctx.clearRect(0,0,592,340);"
+        
+        // Draw the dark background boxes
+        "ctx.fillStyle='#181818';"
+        "ctx.fillRect(60,10,517,50);"
+        "ctx.fillRect(60,75,517,235);"
+
+        // Draw faint horizontal grid lines
+        "ctx.lineWidth=1; ctx.strokeStyle='#333'; ctx.beginPath();"
+        "ctx.moveTo(60,35); ctx.lineTo(577,35);"
+        "ctx.moveTo(60,75); ctx.lineTo(577,75);"
+        "ctx.moveTo(60,150); ctx.lineTo(577,150);"
+        "ctx.moveTo(60,300); ctx.lineTo(577,300);"
+        "ctx.stroke();"
+
+        // Draw main axes boundaries
+        "ctx.strokeStyle='#777'; ctx.beginPath();"
+        "ctx.moveTo(60,10); ctx.lineTo(60,60);"
+        "ctx.moveTo(60,75); ctx.lineTo(60,310);"
+        "ctx.moveTo(60,60); ctx.lineTo(577,60);"
+        "ctx.moveTo(60,310); ctx.lineTo(577,310);"
+        "ctx.stroke();"
+
+        // Draw the primary 0 Wh line thicker
+        "ctx.lineWidth=1.5; ctx.beginPath();"
+        "ctx.moveTo(60,225); ctx.lineTo(577,225);"
+        "ctx.stroke();"
+
+        // Draw Y-Axis Labels
+        "ctx.fillStyle='#888'; ctx.font='12px monospace'; ctx.textAlign='right'; ctx.textBaseline='middle';"
+        "ctx.fillText('100', 48, 10);"
+        "ctx.fillText('0', 48, 60);"
+        "ctx.fillText('+300', 48, 75);"
+        "ctx.fillText('+150', 48, 150);"
+        "ctx.fillStyle='#aaa'; ctx.fillText('0 Wh', 48, 225);"
+        "ctx.fillStyle='#888'; ctx.fillText('-150', 48, 300);"
+
+        // Draw X-Axis Ticks & Labels
+        "ctx.lineWidth=1; ctx.beginPath();"
+        "ctx.font='10px sans-serif'; ctx.textBaseline='top';"
+        "for(var i=0; i<=47; i++){"
+        "var x=(47-i)*11+60; ctx.moveTo(x,310);"
+        "if(i%4===0){"
+        "ctx.lineTo(x,316); ctx.textAlign=(i===0)?'right':'center';"
+        "ctx.fillText((i===0)?'Now':'-'+(i/4)+'h', x, 320);"
+        "} else { ctx.lineTo(x,313); }"
+        "}"
+        "ctx.stroke();"
+
+        // --- DRAW THE DATA LINES ---
+        "if(d.net){"
+        "var grad=ctx.createLinearGradient(0,75,0,310);"
+        // Fixed: Raised the minimum opacity from 0.0 to 0.15 so values near 0 are visibly colored
+        "grad.addColorStop(0,'rgba(244,67,54,0.5)');"
+        "grad.addColorStop(0.638,'rgba(244,67,54,0.15)');"
+        "grad.addColorStop(0.638,'rgba(76,175,80,0.15)');"
+        "grad.addColorStop(1,'rgba(76,175,80,0.5)');"
+        
+        // Fill Net area
+        "ctx.beginPath(); ctx.moveTo(60,225);"
+        "for(var i=0; i<48; i++){"
+        "var h=d.net[i]/2; if(h>150)h=150; if(h<-75)h=-75;"
+        "ctx.lineTo(i*11+60, 225-h);"
+        "}"
+        "ctx.lineTo(577,225); ctx.fillStyle=grad; ctx.fill();"
+        
+        // Line Net boundary
+        "ctx.beginPath();"
+        "for(var i=0; i<48; i++){"
+        "var h=d.net[i]/2; if(h>150)h=150; if(h<-75)h=-75;"
+        "if(i===0)ctx.moveTo(60,225-h); else ctx.lineTo(i*11+60,225-h);"
+        "}"
+        "ctx.strokeStyle='#aaa'; ctx.lineWidth=2; ctx.stroke();" 
+        "}"
+
+        "if(d.chg){"
+        "ctx.beginPath();"
+        "for(var i=0; i<48; i++){"
+        "if(i===0)ctx.moveTo(60,60-(d.chg[i]/2)); else ctx.lineTo(i*11+60,60-(d.chg[i]/2));"
+        "}"
+        "ctx.strokeStyle='#4caf50'; ctx.lineWidth=1.5; ctx.stroke();"
+        "}"
+
+        "if(d.inv){"
+        "ctx.beginPath();"
+        "for(var i=0; i<48; i++){"
+        "if(i===0)ctx.moveTo(60,60-(d.inv[i]/2)); else ctx.lineTo(i*11+60,60-(d.inv[i]/2));"
+        "}"
+        "ctx.strokeStyle='#ff9800'; ctx.lineWidth=1.5; ctx.stroke();"
+        "}"
         
         "}"
         "var days=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
@@ -1285,3 +1315,4 @@ int http_fn_custom_dash(http_request_t *request) {
     poststr(request, NULL);
     return 0;
 }
+
