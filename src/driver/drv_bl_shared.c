@@ -1303,35 +1303,33 @@ int http_fn_custom_dash(http_request_t *request) {
     );
     rtos_delay_milliseconds(1);
 
-    // --- CHUNK 6: Three separate pollers ---
+    // --- CHUNK 6: Two separate pollers ---
     //
-    // OLD DESIGN (broken):
-    //   One refresh() fired every 15s. poll_state cycled 0,1,2,3.
-    //   UI data (d.va) only present when ps===0 — so the top bar only
-    //   updated once every 60 seconds. Sliders same problem.
+    // PREVIOUS REVISION BUG:
+    //   refreshFast() was requesting &req=ui — a parameter the server does
+    //   not recognise. The server only knows &req=net, &req=chg, &req=inv.
+    //   So it was returning an empty/unexpected response, d.va was never
+    //   truthy, and applyUI() was never called. Graph still worked because
+    //   refreshGraph() used the correct &req= values.
+    //   refreshSens() had the same problem with &req=sens.
     //
-    // NEW DESIGN:
-    //   refreshFast() — fires every 7s, always sends &req=ui
-    //     Server returns: va, pwr, bal, est, chg, clk, dmp, auto,
-    //                     t_pwr, t_exp  (no graph arrays, no sens table)
-    //     Updates: top-stats bar, clock, sliders, buttons
+    // FIX:
+    //   refreshFast() now calls /api_dash with NO req param — exactly the
+    //   same as the original base poll (ps===0). The server already returns
+    //   all UI fields (va, pwr, bal, est, chg_v, clk, dmp, auto, t_pwr,
+    //   t_exp) AND d.sens on this endpoint. No server changes needed.
     //
-    //   refreshGraph() — fires every 15s, cycles graph_state 0,1,2
-    //     graph_state 0 → &req=net  (state_net array)
-    //     graph_state 1 → &req=chg  (state_chg array)
-    //     graph_state 2 → &req=inv  (state_inv array)
-    //     Updates: canvas only (calls renderGraph after each new array)
+    //   refreshSens() is removed entirely. d.sens arrives with every base
+    //   poll. Since the server only recomputes sensor data server-side once
+    //   per minute, the displayed value naturally won't change faster than
+    //   that regardless of how often the client asks.
     //
-    //   refreshSens() — fires every 60s, sends &req=sens
-    //     Server returns: sens HTML string only
-    //     Updates: sensor table body only
-    //
-    // This matches the server-side api_dash handler — it already supports
-    // selective req= parameters. The UI field (d.va) is now always present
-    // in refreshFast responses so the top bar reliably updates every 7s.
+    // RESULT:
+    //   Top bar, sliders, clock, sensors → update every 7s (base poll)
+    //   Graph curves → update every 15s (net/chg/inv cycle, unchanged)
     poststr(request,
+        // applyUI: updates all non-graph elements from base poll response
         "function applyUI(d){"
-        // Centralised UI update — called by refreshFast only
         "setV('d-va',d.va);setV('d-pwr',d.pwr);setC('d-pwr',d.pwr_cls);"
         "setV('d-bal',d.bal);setC('d-bal',d.bal_cls);"
         "setV('d-est',d.est);setC('d-est',d.est_cls);"
@@ -1340,12 +1338,13 @@ int http_fn_custom_dash(http_request_t *request) {
         "if(d.t_pwr>=18)setV('sld-pwr',d.t_pwr);"
         "setV('lbl-pwr',d.t_pwr);setV('sld-exp',d.t_exp);setV('lbl-exp',d.t_exp);"
         "dmp=d.dmp;auto=d.auto;btnColor();"
+        "if(d.sens)setV('d-sens-body',d.sens);"
         "var dt=new Date();"
         "setV('d-day',DAYS[dt.getDay()]);"
         "setV('d-date',MOS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear());"
         "}"
 
-        // Fast poller: top bar + sliders every 7s
+        // Fast poller: no req= param → base endpoint, server returns all UI fields
         "function refreshFast(){"
         "var xhr=new XMLHttpRequest();"
         "xhr.onreadystatechange=function(){"
@@ -1353,10 +1352,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "try{var d=JSON.parse(xhr.responseText);if(d.va)applyUI(d);}catch(e){}"
         "}"
         "};"
-        "xhr.open('GET','/api_dash?req=ui&t='+Date.now(),true);xhr.send();"
+        "xhr.open('GET','/api_dash?t='+Date.now(),true);xhr.send();"
         "}"
 
-        // Graph poller: one array per 15s, cycles net→chg→inv
+        // Graph poller: cycles net→chg→inv, only touches the canvas
         "function refreshGraph(){"
         "var gs=graph_state%3;"
         "var req=(gs===0)?'net':(gs===1?'chg':'inv');"
@@ -1376,24 +1375,11 @@ int http_fn_custom_dash(http_request_t *request) {
         "graph_state++;"
         "}"
 
-        // Slow poller: sensor table once per minute
-        "function refreshSens(){"
-        "var xhr=new XMLHttpRequest();"
-        "xhr.onreadystatechange=function(){"
-        "if(xhr.readyState===4&&xhr.status===200){"
-        "try{var d=JSON.parse(xhr.responseText);if(d.sens)setV('d-sens-body',d.sens);}catch(e){}"
-        "}"
-        "};"
-        "xhr.open('GET','/api_dash?req=sens&t='+Date.now(),true);xhr.send();"
-        "}"
-
         "initGrid();"
         "refreshFast();"
         "refreshGraph();"
-        "refreshSens();"
         "setInterval(refreshFast,7000);"
         "setInterval(refreshGraph,15000);"
-        "setInterval(refreshSens,60000);"
         "</script></body></html>"
     );
 
