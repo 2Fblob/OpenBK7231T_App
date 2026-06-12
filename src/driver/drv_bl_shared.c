@@ -1257,7 +1257,16 @@ int http_fn_custom_dash(http_request_t *request) {
         "dmp=d.dmp; auto=d.auto; btnColor();"
         "if(d.sens){"
         "document.getElementById('d-sens-body').innerHTML=d.sens;"
-        "document.getElementById('d-graph-data').innerHTML=d.graph;"
+        
+        // --- iOS 9 SVG NAMESPACE PARSING FIX ---
+        "var g = document.getElementById('d-graph-data');"
+        "var dummy = document.createElement('div');"
+        "dummy.innerHTML = '<svg xmlns=\"http://www.w3.org/2000/svg\">' + d.graph + '</svg>';"
+        "while(g.firstChild) { g.removeChild(g.firstChild); }"
+        "var svgNode = dummy.firstChild;"
+        "while(svgNode && svgNode.firstChild) { g.appendChild(svgNode.firstChild); }"
+        // ---------------------------------------
+        
         "}"
         "var days=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
         "var mos=['January','February','March','April','May','June','July','August','September','October','November','December'];"
