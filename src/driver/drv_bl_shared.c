@@ -1063,7 +1063,7 @@ int http_fn_api_dash(http_request_t *request) {
 }
 
 // ====================================================================
-// NEW STANDALONE DASHBOARD (High-DPI Retina + Smooth Curves + Adjusted Layout)
+// NEW STANDALONE DASHBOARD (Crash-Proof Scope, Larger Legend, Retina Canvas)
 // ====================================================================
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
@@ -1087,8 +1087,8 @@ int http_fn_custom_dash(http_request_t *request) {
         ".sens-tbl { width: 100%; font-size: 14px; border-collapse: collapse; }"
         ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
         ".graph-col { -webkit-box-flex: 1; flex: 1; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: flex; -webkit-box-align: center; align-items: center; -webkit-box-pack: center; justify-content: center; box-sizing: border-box; margin-right: 15px; overflow: hidden; }"
-        "canvas { width: 100%; max-width: 632px; height: auto; display: block; }" // Max width increased slightly to adapt
-        ".right-col { -webkit-box-flex: 0; flex: 0 0 240px; width: 240px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; box-sizing: border-box; }" // Width reduced to 240px
+        "canvas { width: 100%; max-width: 632px; height: auto; display: block; }"
+        ".right-col { -webkit-box-flex: 0; flex: 0 0 240px; width: 240px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; box-sizing: border-box; }"
         ".btn-tgl { width: 100%; height: 50px; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-bottom: 12px; display: block; }"
         ".sld-v-block { margin-top: 10px; width: 100%; }"
         ".sld-v-block label { display: block; font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }"
@@ -1104,7 +1104,6 @@ int http_fn_custom_dash(http_request_t *request) {
     poststr(request, 
         "<div id='dash-container'>"
         "<div class='close-btn' onclick='window.location.href=\"/index\"'>✕</div>"
-        
         "<div class='top-stats'>"
         "<div><label>Voltage & Current</label><b id='d-va'>--</b></div>"
         "<div><label>Power</label><b id='d-pwr'>--</b></div>"
@@ -1120,11 +1119,12 @@ int http_fn_custom_dash(http_request_t *request) {
             "<div style='font-size:12px; color:#888; margin-bottom:8px; text-transform:uppercase;'>Sensor Data</div>"
             "<table class='sens-tbl'><tbody id='d-sens-body'></tbody></table>"
             
-            "<div style='margin-top:20px; font-size:11px; color:#aaa; padding:12px; background:#1a1a1a; border-radius:6px; border:1px solid #333;'>"
-            "<div style='margin-bottom:8px; color:#888; text-transform:uppercase; font-size:10px; letter-spacing:1px;'>Graph Legend</div>"
-            "<div><span style='display:inline-block; width:14px; height:2px; background:#aaa; margin-right:8px; vertical-align:middle;'></span>Total Energy</div>"
-            "<div style='margin-top:8px;'><span style='display:inline-block; width:14px; height:2px; background:#4caf50; margin-right:8px; vertical-align:middle;'></span>Charger Average</div>"
-            "<div style='margin-top:8px;'><span style='display:inline-block; width:14px; height:2px; background:#ff9800; margin-right:8px; vertical-align:middle;'></span>Inverter Average</div>"
+            // --- INCREASED LEGEND FONT SIZES & THICKNESS ---
+            "<div style='margin-top:20px; font-size:15px; color:#aaa; padding:12px; background:#1a1a1a; border-radius:6px; border:1px solid #333;'>"
+            "<div style='margin-bottom:10px; color:#888; text-transform:uppercase; font-size:12px; letter-spacing:1px;'>Graph Legend</div>"
+            "<div><span style='display:inline-block; width:16px; height:3px; background:#aaa; margin-right:10px; vertical-align:middle;'></span>Total Energy</div>"
+            "<div style='margin-top:12px;'><span style='display:inline-block; width:16px; height:3px; background:#4caf50; margin-right:10px; vertical-align:middle;'></span>Charger Avg</div>"
+            "<div style='margin-top:12px;'><span style='display:inline-block; width:16px; height:3px; background:#ff9800; margin-right:10px; vertical-align:middle;'></span>Inverter Avg</div>"
             "</div>"
             "</div>"
             
@@ -1164,9 +1164,15 @@ int http_fn_custom_dash(http_request_t *request) {
     poststr(request, "<script>");
     poststr(request, 
         "var dmp=0, auto=0;"
-        "function s_pwr(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetPower%20'+v,true); xhr.send(); document.getElementById('lbl-pwr').innerHTML=v; }"
-        "function s_exp(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetExport%20'+v,true); xhr.send(); document.getElementById('lbl-exp').innerHTML=v; }"
-        "function upd(v){if(auto===1)return; if(v>=18){document.getElementById('sld-pwr').value=v;} s_pwr(v); dmp=parseInt(v, 10); btnColor();}"
+        
+        // SAFE DOM SETTERS
+        "function setV(id,v){var e=document.getElementById(id);if(e){if(e.tagName==='INPUT')e.value=v;else e.innerHTML=v;}}"
+        "function setC(id,v){var e=document.getElementById(id);if(e)e.className=v;}"
+        "function setS(id,v){var e=document.getElementById(id);if(e)e.style.color=v;}"
+        
+        "function s_pwr(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetPower%20'+v,true); xhr.send(); setV('lbl-pwr',v); }"
+        "function s_exp(v){ var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=SetTargetExport%20'+v,true); xhr.send(); setV('lbl-exp',v); }"
+        "function upd(v){if(auto===1)return; if(v>=18){setV('sld-pwr',v);} s_pwr(v); dmp=parseInt(v, 10); btnColor();}"
         "function t_inv(){upd(dmp===5?0:5);}"
         "function t_chg(){upd(dmp>=10?0:18);}"
         "function tm(){auto=(auto===1)?0:1; var xhr=new XMLHttpRequest(); xhr.open('GET','/cm?cmnd=ToggleAuto',true); xhr.send(); btnColor();}"
@@ -1178,81 +1184,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "if(m){ m.innerHTML=(auto===1)?'AUTO':'MANUAL'; m.style.background=(auto===1)?'#0099FF':'#f44336'; }"
         "}"
         
-        "function refresh(){"
-        "var xhr=new XMLHttpRequest();"
-        "xhr.onreadystatechange=function(){"
-        "if(xhr.readyState===4 && xhr.status===200){"
-        "try {"
-        "var d=JSON.parse(xhr.responseText);"
-        "document.getElementById('d-va').innerHTML=d.va;"
-        "document.getElementById('d-pwr').innerHTML=d.pwr;"
-        "document.getElementById('d-pwr').className=d.pwr_cls;"
-        "document.getElementById('d-bal').innerHTML=d.bal;"
-        "document.getElementById('d-bal').className=d.bal_cls;"
-        "document.getElementById('d-est').innerHTML=d.est;"
-        "document.getElementById('d-est').className=d.est_cls;"
-        "document.getElementById('c-lbl').innerHTML=d.chg_lbl;"
-        "document.getElementById('c-v').innerHTML=d.chg_v;"
-        "document.getElementById('c-v').style.color=d.chg_c;"
-        "document.getElementById('d-clk').innerHTML=d.clk;"
-        "if(d.t_pwr>=18){document.getElementById('sld-pwr').value=d.t_pwr;} document.getElementById('lbl-pwr').innerHTML=d.t_pwr;"
-        "document.getElementById('sld-exp').value=d.t_exp; document.getElementById('lbl-exp').innerHTML=d.t_exp;"
-        "dmp=d.dmp; auto=d.auto; btnColor();"
-        "if(d.sens){ document.getElementById('d-sens-body').innerHTML=d.sens; }"
-        
-        // --- HIGH DPI CANVAS SCALING AND RENDERER ---
-        "var c=document.getElementById('dynCanvas');"
-        "if(c && c.getContext){"
-        "var ctx=c.getContext('2d');"
-        
-        "var r=window.devicePixelRatio||1;"
-        "c.width=592*r;"
-        "c.height=340*r;"
-        "ctx.scale(r,r);"
-        
-        "ctx.clearRect(0,0,592,340);"
-        
-        "ctx.fillStyle='#181818';"
-        "ctx.fillRect(60,10,517,50);"
-        "ctx.fillRect(60,75,517,235);"
-
-        "ctx.lineWidth=1; ctx.strokeStyle='#333'; ctx.beginPath();"
-        "ctx.moveTo(60,35); ctx.lineTo(577,35);"
-        "ctx.moveTo(60,75); ctx.lineTo(577,75);"
-        "ctx.moveTo(60,150); ctx.lineTo(577,150);"
-        "ctx.moveTo(60,300); ctx.lineTo(577,300);"
-        "ctx.stroke();"
-
-        "ctx.strokeStyle='#777'; ctx.beginPath();"
-        "ctx.moveTo(60,10); ctx.lineTo(60,60);"
-        "ctx.moveTo(60,75); ctx.lineTo(60,310);"
-        "ctx.moveTo(60,60); ctx.lineTo(577,60);"
-        "ctx.moveTo(60,310); ctx.lineTo(577,310);"
-        "ctx.stroke();"
-
-        "ctx.lineWidth=1.5; ctx.beginPath();"
-        "ctx.moveTo(60,225); ctx.lineTo(577,225);"
-        "ctx.stroke();"
-
-        "ctx.fillStyle='#888'; ctx.font='12px monospace'; ctx.textAlign='right'; ctx.textBaseline='middle';"
-        "ctx.fillText('100', 48, 10);"
-        "ctx.fillText('0', 48, 60);"
-        "ctx.fillText('+300', 48, 75);"
-        "ctx.fillText('+150', 48, 150);"
-        "ctx.fillStyle='#aaa'; ctx.fillText('0 Wh', 48, 225);"
-        "ctx.fillStyle='#888'; ctx.fillText('-150', 48, 300);"
-
-        "ctx.lineWidth=1; ctx.beginPath();"
-        "ctx.font='10px sans-serif'; ctx.textBaseline='top';"
-        "for(var i=0; i<=47; i++){"
-        "var x=(47-i)*11+60; ctx.moveTo(x,310);"
-        "if(i%4===0){"
-        "ctx.lineTo(x,316); ctx.textAlign=(i===0)?'right':'center';"
-        "ctx.fillText((i===0)?'Now':'-'+(i/4)+'h', x, 320);"
-        "} else { ctx.lineTo(x,313); }"
-        "}"
-        "ctx.stroke();"
-
+        // --- MOVED OUTSIDE OF BLOCK SCOPE TO PREVENT PARSER CRASH ---
         "function drawSmooth(ctx, arr, baseY, clamp, fill, col, lw){"
         "var p=[];"
         "for(var i=0; i<48; i++){"
@@ -1276,8 +1208,68 @@ int http_fn_custom_dash(http_request_t *request) {
         "}"
         "ctx.strokeStyle=col; ctx.lineWidth=lw; ctx.stroke();"
         "}"
+        
+        "function refresh(){"
+        "var xhr=new XMLHttpRequest();"
+        "xhr.onreadystatechange=function(){"
+        "if(xhr.readyState===4 && xhr.status===200){"
+        "try {"
+        "var d=JSON.parse(xhr.responseText);"
+        
+        "setV('d-va',d.va); setV('d-pwr',d.pwr); setC('d-pwr',d.pwr_cls);"
+        "setV('d-bal',d.bal); setC('d-bal',d.bal_cls);"
+        "setV('d-est',d.est); setC('d-est',d.est_cls);"
+        "setV('c-lbl',d.chg_lbl); setV('c-v',d.chg_v); setS('c-v',d.chg_c);"
+        "setV('d-clk',d.clk);"
+        "if(d.t_pwr>=18) setV('sld-pwr',d.t_pwr);"
+        "setV('lbl-pwr',d.t_pwr); setV('sld-exp',d.t_exp); setV('lbl-exp',d.t_exp);"
+        "dmp=d.dmp; auto=d.auto; btnColor();"
+        "if(d.sens) setV('d-sens-body',d.sens);"
+        
+        "var c=document.getElementById('dynCanvas');"
+        "if(c && c.getContext){"
+        "var ctx=c.getContext('2d');"
+        
+        "var r=window.devicePixelRatio||1;"
+        "c.width=Math.round(592*r); c.height=Math.round(340*r);"
+        "ctx.scale(r,r);"
+        
+        "ctx.clearRect(0,0,592,340);"
+        
+        "ctx.fillStyle='#181818';"
+        "ctx.fillRect(60,10,517,50); ctx.fillRect(60,75,517,235);"
 
-        "if(d.net){"
+        "ctx.lineWidth=1; ctx.strokeStyle='#333'; ctx.beginPath();"
+        "ctx.moveTo(60,35); ctx.lineTo(577,35);"
+        "ctx.moveTo(60,75); ctx.lineTo(577,75);"
+        "ctx.moveTo(60,150); ctx.lineTo(577,150);"
+        "ctx.moveTo(60,300); ctx.lineTo(577,300); ctx.stroke();"
+
+        "ctx.strokeStyle='#777'; ctx.beginPath();"
+        "ctx.moveTo(60,10); ctx.lineTo(60,60);"
+        "ctx.moveTo(60,75); ctx.lineTo(60,310);"
+        "ctx.moveTo(60,60); ctx.lineTo(577,60);"
+        "ctx.moveTo(60,310); ctx.lineTo(577,310); ctx.stroke();"
+
+        "ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(60,225); ctx.lineTo(577,225); ctx.stroke();"
+
+        "ctx.fillStyle='#888'; ctx.font='14px monospace'; ctx.textAlign='right'; ctx.textBaseline='middle';"
+        "ctx.fillText('100', 48, 10); ctx.fillText('0', 48, 60);"
+        "ctx.fillText('+300', 48, 75); ctx.fillText('+150', 48, 150);"
+        "ctx.fillStyle='#aaa'; ctx.fillText('0 Wh', 48, 225);"
+        "ctx.fillStyle='#888'; ctx.fillText('-150', 48, 300);"
+
+        "ctx.lineWidth=1; ctx.beginPath(); ctx.font='12px sans-serif'; ctx.textBaseline='top';"
+        "for(var i=0; i<=47; i++){"
+        "var x=(47-i)*11+60; ctx.moveTo(x,310);"
+        "if(i%4===0){"
+        "ctx.lineTo(x,316); ctx.textAlign=(i===0)?'right':'center';"
+        "ctx.fillText((i===0)?'Now':'-'+(i/4)+'h', x, 320);"
+        "} else { ctx.lineTo(x,313); }"
+        "}"
+        "ctx.stroke();"
+
+        "if(d.net && d.net.length > 0){"
         "var grad=ctx.createLinearGradient(0,75,0,310);"
         "grad.addColorStop(0,'rgba(244,67,54,0.5)');"
         "grad.addColorStop(0.638,'rgba(244,67,54,0.15)');"
@@ -1285,15 +1277,15 @@ int http_fn_custom_dash(http_request_t *request) {
         "grad.addColorStop(1,'rgba(76,175,80,0.5)');"
         "drawSmooth(ctx, d.net, 225, true, grad, '#aaa', 2);"
         "}"
-        "if(d.chg) drawSmooth(ctx, d.chg, 60, false, null, '#4caf50', 1.5);"
-        "if(d.inv) drawSmooth(ctx, d.inv, 60, false, null, '#ff9800', 1.5);"
+        "if(d.chg && d.chg.length > 0) drawSmooth(ctx, d.chg, 60, false, null, '#4caf50', 1.5);"
+        "if(d.inv && d.inv.length > 0) drawSmooth(ctx, d.inv, 60, false, null, '#ff9800', 1.5);"
         "}"
         
         "var days=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
         "var mos=['January','February','March','April','May','June','July','August','September','October','November','December'];"
         "var dt=new Date();"
-        "document.getElementById('d-day').innerHTML=days[dt.getDay()];"
-        "document.getElementById('d-date').innerHTML=mos[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear();"
+        "setV('d-day', days[dt.getDay()]);"
+        "setV('d-date', mos[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear());"
         "} catch(e) {}"
         "}"
         "};"
