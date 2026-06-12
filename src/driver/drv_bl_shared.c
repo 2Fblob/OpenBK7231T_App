@@ -937,6 +937,22 @@ energySensorNames_t* DRV_GetEnergySensorNames(energySensor_t type)
 // STAGGERED JSON API ENDPOINT (Routed by "?q=" parameter)
 // ====================================================================
 int http_fn_api_dash(http_request_t *request) {
+    // 1. Define our static ticker tracker
+    static portTickType last_api_request_tick = 0;
+    portTickType current_tick = xTaskGetTickCount();
+
+    // 2. Check if the CPU needs a break (2000ms cooldown)
+    if (last_api_request_tick != 0 && (current_tick - last_api_request_tick) < (2000 / portTICK_PERIOD_MS)) {
+        // Instantly reject the request to save CPU and RAM
+        http_setup(request, "application/json");
+        poststr(request, "{\"err\":\"busy\"}");
+        poststr(request, NULL);
+        return 0; 
+    }
+
+    // 3. Update the ticker because we are going to process this request
+    last_api_request_tick = current_tick;
+
     int dmp;
     http_setup(request, "application/json");
     poststr(request, "{");
