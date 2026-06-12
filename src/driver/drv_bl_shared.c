@@ -934,108 +934,101 @@ energySensorNames_t* DRV_GetEnergySensorNames(energySensor_t type)
 }
 
 // ====================================================================
-// JSON API ENDPOINT (Optimized with Local RAM Buffering)
+// STAGGERED JSON API ENDPOINT (Routed by "?q=" parameter)
 // ====================================================================
 int http_fn_api_dash(http_request_t *request) {
     int dmp;
     http_setup(request, "application/json");
     poststr(request, "{");
 
-    hprintf255(request, "\"va\":\"%.0fV / %.2fA\",", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
-    hprintf255(request, "\"pwr\":\"%.0f W\",", sensors[OBK_POWER].lastReading);
-    hprintf255(request, "\"pwr_cls\":\"%s\",", (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp");
-    hprintf255(request, "\"bal\":\"%.0f Wh\",", sensors[OBK_POWER_REACTIVE].lastReading);
-    hprintf255(request, "\"bal_cls\":\"%s\",", (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp");
-    hprintf255(request, "\"est\":\"%i Wh\",", estimated_energy_period);
-    hprintf255(request, "\"est_cls\":\"%s\",", (estimated_energy_period < 0) ? "c-exp" : "c-imp");
+    if (request->url != NULL && strstr(request->url, "q=graph")) {
+        // --- ONLY SERVE THE GRAPH ARRAYS ---
+        if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced()) {
+            unsigned int minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
+            char small_buf[128];
+            int pos = 0;
 
-    dmp = dump_load_relay[5];
-    if (dmp == 0) {
-        poststr(request, "\"chg_lbl\":\"Charger\",\"chg_v\":\"Idle\",\"chg_c\":\"#888\",");
-    } else if (dmp == 5) {
-        poststr(request, "\"chg_lbl\":\"Charger\",\"chg_v\":\"Battery\",\"chg_c\":\"#4caf50\",");
-    } else {
-        hprintf255(request, "\"chg_lbl\":\"Charging\",\"chg_v\":\"%d%%\",\"chg_c\":\"#0099FF\",", dmp);
-    }
+            poststr(request, "\"net\":[");
+            for (int i = 47; i >= 0; i--) {
+                int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
+                int net = net_matrix[interval_of_day % MATRIX_SIZE];
+                if (i == 0) { net += (int)(real_consumption - real_export); }
+                pos += snprintf(small_buf + pos, sizeof(small_buf) - pos, "%d%s", net, (i==0)?"":",");
+                if (pos > 100) { poststr(request, small_buf); pos = 0; }
+            }
+            if (pos > 0) { poststr(request, small_buf); pos = 0; }
+            poststr(request, "],");
 
-    hprintf255(request, "\"dmp\":%d,\"auto\":%d,", dmp, charger_c_auto);
-    hprintf255(request, "\"t_pwr\":%d,\"t_exp\":%d,", target_power, target_export);
-    hprintf255(request, "\"clk\":\"%02d:%02d\"", NTP_GetHour(), NTP_GetMinute()); 
+            poststr(request, "\"chg\":[");
+            for (int i = 47; i >= 0; i--) {
+                int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
+                int val = charger_c_matrix[interval_of_day % MATRIX_SIZE];
+                if (i == 0 && sample_count_30s > 0) { val = current_charger_c_accum / sample_count_30s; }
+                pos += snprintf(small_buf + pos, sizeof(small_buf) - pos, "%d%s", val, (i==0)?"":",");
+                if (pos > 100) { poststr(request, small_buf); pos = 0; }
+            }
+            if (pos > 0) { poststr(request, small_buf); pos = 0; }
+            poststr(request, "],");
 
-    if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced()) {
-        unsigned int minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
-        int p_i;
-
-        poststr(request, ","); 
-        poststr(request, "\"sens\":\"");
-        for (p_i = (OBK__FIRST); p_i <= (OBK_CONSUMPTION__DAILY_LAST); p_i++) {
-            if (p_i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))) { p_i++; }
-            if (p_i <= OBK__NUM_MEASUREMENTS || NTP_IsTimeSynced()) {
-                if (p_i == OBK_VOLTAGE || p_i == OBK_POWER || p_i == OBK_CURRENT || p_i == OBK_POWER_APPARENT || p_i == OBK_POWER_REACTIVE) continue;
-                if ((p_i == OBK_CONSUMPTION_TOTAL) || (p_i == OBK_GENERATION_TOTAL)) {
-                    hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f kWh</td></tr>",
-                               sensors[p_i].names.name_friendly, sensors[p_i].rounding_decimals, (0.001*sensors[p_i].lastReading));
-                } else {
-                    hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f %s</td></tr>",
-                               sensors[p_i].names.name_friendly, sensors[p_i].rounding_decimals, sensors[p_i].lastReading, sensors[p_i].names.units);
+            poststr(request, "\"inv\":[");
+            for (int i = 47; i >= 0; i--) {
+                int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
+                int val = inverter_matrix[interval_of_day % MATRIX_SIZE];
+                if (i == 0 && sample_count_30s > 0) { val = current_inverter_accum / sample_count_30s; }
+                pos += snprintf(small_buf + pos, sizeof(small_buf) - pos, "%d%s", val, (i==0)?"":",");
+                if (pos > 100) { poststr(request, small_buf); pos = 0; }
+            }
+            if (pos > 0) { poststr(request, small_buf); pos = 0; }
+            poststr(request, "]");
+        } else {
+            poststr(request, "\"err\":1");
+        }
+    } 
+    else if (request->url != NULL && strstr(request->url, "q=sens")) {
+        // --- ONLY SERVE THE SENSOR TEXT ROWS ---
+        if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced()) {
+            int p_i;
+            poststr(request, "\"sens\":\"");
+            for (p_i = (OBK__FIRST); p_i <= (OBK_CONSUMPTION__DAILY_LAST); p_i++) {
+                if (p_i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))) { p_i++; }
+                if (p_i <= OBK__NUM_MEASUREMENTS || NTP_IsTimeSynced()) {
+                    if (p_i == OBK_VOLTAGE || p_i == OBK_POWER || p_i == OBK_CURRENT || p_i == OBK_POWER_APPARENT || p_i == OBK_POWER_REACTIVE) continue;
+                    if ((p_i == OBK_CONSUMPTION_TOTAL) || (p_i == OBK_GENERATION_TOTAL)) {
+                        hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f kWh</td></tr>",
+                                   sensors[p_i].names.name_friendly, sensors[p_i].rounding_decimals, (0.001*sensors[p_i].lastReading));
+                    } else {
+                        hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f %s</td></tr>",
+                                   sensors[p_i].names.name_friendly, sensors[p_i].rounding_decimals, sensors[p_i].lastReading, sensors[p_i].names.units);
+                    }
                 }
             }
+            poststr(request, "\"");
+        } else {
+            poststr(request, "\"err\":1");
         }
-        poststr(request, "\",");
+    } 
+    else {
+        // --- ONLY SERVE THE TOP BAR BASE STATS ---
+        hprintf255(request, "\"va\":\"%.0fV / %.2fA\",", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
+        hprintf255(request, "\"pwr\":\"%.0f W\",", sensors[OBK_POWER].lastReading);
+        hprintf255(request, "\"pwr_cls\":\"%s\",", (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp");
+        hprintf255(request, "\"bal\":\"%.0f Wh\",", sensors[OBK_POWER_REACTIVE].lastReading);
+        hprintf255(request, "\"bal_cls\":\"%s\",", (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp");
+        hprintf255(request, "\"est\":\"%i Wh\",", estimated_energy_period);
+        hprintf255(request, "\"est_cls\":\"%s\",", (estimated_energy_period < 0) ? "c-exp" : "c-imp");
 
-        char small_buf[128];
-        int pos = 0;
-
-        // --- Stream the "net" array ---
-        poststr(request, "\"net\":[");
-        for (int i = 47; i >= 0; i--) {
-            int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-            int net = net_matrix[interval_of_day % MATRIX_SIZE];
-            if (i == 0) { net += (int)(real_consumption - real_export); }
-            
-            pos += snprintf(small_buf + pos, sizeof(small_buf) - pos, "%d%s", net, (i==0)?"":",");
-            
-            if (pos > 100) {
-                poststr(request, small_buf);
-                pos = 0;
-            }
+        dmp = dump_load_relay[5];
+        if (dmp == 0) {
+            poststr(request, "\"chg_lbl\":\"Charger\",\"chg_v\":\"Idle\",\"chg_c\":\"#888\",");
+        } else if (dmp == 5) {
+            poststr(request, "\"chg_lbl\":\"Charger\",\"chg_v\":\"Battery\",\"chg_c\":\"#4caf50\",");
+        } else {
+            hprintf255(request, "\"chg_lbl\":\"Charging\",\"chg_v\":\"%d%%\",\"chg_c\":\"#0099FF\",", dmp);
         }
-        if (pos > 0) { poststr(request, small_buf); pos = 0; }
-        poststr(request, "],");
 
-        // --- Stream the "chg" array ---
-        poststr(request, "\"chg\":[");
-        for (int i = 47; i >= 0; i--) {
-            int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-            int val = charger_c_matrix[interval_of_day % MATRIX_SIZE];
-            if (i == 0 && sample_count_30s > 0) { val = current_charger_c_accum / sample_count_30s; }
-            
-            pos += snprintf(small_buf + pos, sizeof(small_buf) - pos, "%d%s", val, (i==0)?"":",");
-            
-            if (pos > 100) {
-                poststr(request, small_buf);
-                pos = 0;
-            }
-        }
-        if (pos > 0) { poststr(request, small_buf); pos = 0; }
-        poststr(request, "],");
-
-        // --- Stream the "inv" array ---
-        poststr(request, "\"inv\":[");
-        for (int i = 47; i >= 0; i--) {
-            int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-            int val = inverter_matrix[interval_of_day % MATRIX_SIZE];
-            if (i == 0 && sample_count_30s > 0) { val = current_inverter_accum / sample_count_30s; }
-            
-            pos += snprintf(small_buf + pos, sizeof(small_buf) - pos, "%d%s", val, (i==0)?"":",");
-            
-            if (pos > 100) {
-                poststr(request, small_buf);
-                pos = 0;
-            }
-        }
-        if (pos > 0) { poststr(request, small_buf); pos = 0; }
-        poststr(request, "]");
+        hprintf255(request, "\"dmp\":%d,\"auto\":%d,", dmp, charger_c_auto);
+        hprintf255(request, "\"t_pwr\":%d,\"t_exp\":%d,", target_power, target_export);
+        hprintf255(request, "\"clk\":\"%02d:%02d\"", NTP_GetHour(), NTP_GetMinute()); 
     }
     
     poststr(request, "}");
@@ -1227,34 +1220,40 @@ int http_fn_custom_dash(http_request_t *request) {
         "ctx.beginPath(); ctx.arc(p[47].x, p[47].y, lw*1.5, 0, 2*Math.PI);"
         "ctx.fillStyle=col; ctx.fill();"
         "}"
-        "function refresh(){"
-        "var xhr=new XMLHttpRequest();"
-        "xhr.onreadystatechange=function(){"
-        "if(xhr.readyState===4 && xhr.status===200){"
-        "try {"
-        "var d=JSON.parse(xhr.responseText);"
-        "setV('d-va',d.va); setV('d-pwr',d.pwr); setC('d-pwr',d.pwr_cls);"
+        "function fb(){"
+        "var x=new XMLHttpRequest();"
+        "x.onreadystatechange=function(){"
+        "if(x.readyState===4&&x.status===200){"
+        "try{var d=JSON.parse(x.responseText);"
+        "if(d.va){setV('d-va',d.va);setV('d-pwr',d.pwr);setC('d-pwr',d.pwr_cls);"
     );
 
     // Chunk 17
     poststr(request, 
-        "setV('d-bal',d.bal); setC('d-bal',d.bal_cls);"
-        "setV('d-est',d.est); setC('d-est',d.est_cls);"
-        "setV('c-lbl',d.chg_lbl); setV('c-v',d.chg_v); setS('c-v',d.chg_c);"
-        "setV('d-clk',d.clk);"
-        "if(d.t_pwr>=18) setV('sld-pwr',d.t_pwr);"
-        "setV('lbl-pwr',d.t_pwr); setV('sld-exp',d.t_exp); setV('lbl-exp',d.t_exp);"
-        "dmp=d.dmp; auto=d.auto; btnColor();"
-        "if(d.sens) setV('d-sens-body',d.sens);"
-        "var c=document.getElementById('dynCanvas');"
-        "if(c && c.getContext){"
-        "var ctx=c.getContext('2d');"
-        "var r=window.devicePixelRatio||1;"
-        "c.width=Math.round(592*r); c.height=Math.round(340*r);"
+        "setV('d-bal',d.bal);setC('d-bal',d.bal_cls);setV('d-est',d.est);setC('d-est',d.est_cls);"
+        "setV('c-lbl',d.chg_lbl);setV('c-v',d.chg_v);setS('c-v',d.chg_c);setV('d-clk',d.clk);"
+        "if(d.t_pwr>=18)setV('sld-pwr',d.t_pwr);setV('lbl-pwr',d.t_pwr);"
+        "setV('sld-exp',d.t_exp);setV('lbl-exp',d.t_exp);"
+        "dmp=d.dmp;auto=d.auto;btnColor();}"
+        "}catch(e){}}};"
+        "x.open('GET','/api_dash?q=base&t='+Date.now(),true);x.send();"
+        "}"
+        "function fs(){var x=new XMLHttpRequest();x.onreadystatechange=function(){"
+        "if(x.readyState===4&&x.status===200){try{var d=JSON.parse(x.responseText);"
+        "if(d.sens)setV('d-sens-body',d.sens);}catch(e){}}};"
+        "x.open('GET','/api_dash?q=sens&t='+Date.now(),true);x.send();"
+        "}"
+        "function fg(){var x=new XMLHttpRequest();x.onreadystatechange=function(){"
+        "if(x.readyState===4&&x.status===200){try{var d=JSON.parse(x.responseText);"
     );
 
     // Chunk 18
     poststr(request, 
+        "var c=document.getElementById('dynCanvas');"
+        "if(c&&c.getContext&&d.net){"
+        "var ctx=c.getContext('2d');"
+        "var r=window.devicePixelRatio||1;"
+        "c.width=Math.round(592*r); c.height=Math.round(340*r);"
         "ctx.scale(r,r);"
         "ctx.clearRect(0,0,592,340);"
         "ctx.fillStyle='#181818';"
@@ -1264,13 +1263,13 @@ int http_fn_custom_dash(http_request_t *request) {
         "ctx.moveTo(60,75); ctx.lineTo(577,75);"
         "ctx.moveTo(60,150); ctx.lineTo(577,150);"
         "ctx.moveTo(60,300); ctx.lineTo(577,300); ctx.stroke();"
-        "ctx.strokeStyle='#444'; ctx.beginPath();"
-        "ctx.moveTo(60,60); ctx.lineTo(577,60);"
-        "ctx.moveTo(60,225); ctx.lineTo(577,225); ctx.stroke();"
     );
 
     // Chunk 19
     poststr(request, 
+        "ctx.strokeStyle='#444'; ctx.beginPath();"
+        "ctx.moveTo(60,60); ctx.lineTo(577,60);"
+        "ctx.moveTo(60,225); ctx.lineTo(577,225); ctx.stroke();"
         "ctx.strokeStyle='#666'; ctx.beginPath();"
         "ctx.moveTo(60,10); ctx.lineTo(60,60);"
         "ctx.moveTo(60,75); ctx.lineTo(60,310);"
@@ -1294,29 +1293,23 @@ int http_fn_custom_dash(http_request_t *request) {
         "} else { ctx.lineTo(x,313); }"
         "}"
         "ctx.stroke();"
-        "if(typeof d.net === 'undefined'){"
-        "ctx.fillStyle='rgba(244,67,54,0.15)'; ctx.fillRect(60,75,517,235);"
-        "ctx.fillStyle='#f44336'; ctx.textAlign='center'; ctx.font='bold 16px sans-serif';"
-        "ctx.fillText('API MISMATCH: UPDATE http_fn_api_dash TO SEND DATA ARRAYS', 318, 190);"
-        "return;"
-        "}"
     );
 
     // Chunk 21
     poststr(request, 
-        "if(d.net && d.net.length > 0){"
         "var grad=ctx.createLinearGradient(0,75,0,310);"
         "grad.addColorStop(0,'rgba(244,67,54,0.5)');"
         "grad.addColorStop(0.638,'rgba(244,67,54,0.15)');"
         "grad.addColorStop(0.638,'rgba(76,175,80,0.15)');"
         "grad.addColorStop(1,'rgba(76,175,80,0.5)');"
         "drawSmooth(ctx, d.net, 225, true, grad, '#aaa', 2.5);"
-        "}"
         "if(d.chg && d.chg.length > 0) drawSmooth(ctx, d.chg, 60, false, null, '#4caf50', 2.5);"
         "if(d.inv && d.inv.length > 0) drawSmooth(ctx, d.inv, 60, false, null, '#ff9800', 2.5);"
+        "} }catch(e){}}};"
+        "x.open('GET','/api_dash?q=graph&t='+Date.now(),true);x.send();"
         "}"
         "var days=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
-        "var mos=['January','February','March','April','May','June','July','August','September','October','November','December'];"
+        "var mos=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];"
     );
 
     // Chunk 22
@@ -1324,13 +1317,10 @@ int http_fn_custom_dash(http_request_t *request) {
         "var dt=new Date();"
         "setV('d-day', days[dt.getDay()]);"
         "setV('d-date', mos[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear());"
-        "} catch(e) {}"
-        "}"
-        "};"
-        "xhr.open('GET','/api_dash?t='+Date.now(),true);"
-        "xhr.send();"
-        "}"
-        "refresh(); setInterval(refresh, 10000);"
+        "fb(); setTimeout(fs, 1000); setTimeout(fg, 2000);"
+        "setInterval(fb, 3000);"
+        "setInterval(fs, 8000);"
+        "setInterval(fg, 15000);"
         "</script></body></html>"
     );
     
