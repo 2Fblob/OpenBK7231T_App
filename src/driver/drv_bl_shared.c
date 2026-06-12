@@ -1063,7 +1063,7 @@ int http_fn_api_dash(http_request_t *request) {
 }
 
 // ====================================================================
-// NEW STANDALONE DASHBOARD (Pure Canvas Grid + Smooth Curves)
+// NEW STANDALONE DASHBOARD (High-DPI Retina + Smooth Curves + Adjusted Layout)
 // ====================================================================
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
@@ -1087,8 +1087,8 @@ int http_fn_custom_dash(http_request_t *request) {
         ".sens-tbl { width: 100%; font-size: 14px; border-collapse: collapse; }"
         ".sens-tbl td { padding: 5px 0; border-bottom: 1px solid #333; }"
         ".graph-col { -webkit-box-flex: 1; flex: 1; background: #222; padding: 15px; border-radius: 8px; display: -webkit-box; display: flex; -webkit-box-align: center; align-items: center; -webkit-box-pack: center; justify-content: center; box-sizing: border-box; margin-right: 15px; overflow: hidden; }"
-        "canvas { width: 100%; max-width: 592px; height: auto; display: block; }"
-        ".right-col { -webkit-box-flex: 0; flex: 0 0 280px; width: 280px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; box-sizing: border-box; }"
+        "canvas { width: 100%; max-width: 632px; height: auto; display: block; }" // Max width increased slightly to adapt
+        ".right-col { -webkit-box-flex: 0; flex: 0 0 240px; width: 240px; background: #222; padding: 20px; border-radius: 8px; display: -webkit-box; display: flex; -webkit-box-orient: vertical; flex-direction: column; box-sizing: border-box; }" // Width reduced to 240px
         ".btn-tgl { width: 100%; height: 50px; border: none; color: white; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 16px; margin-bottom: 12px; display: block; }"
         ".sld-v-block { margin-top: 10px; width: 100%; }"
         ".sld-v-block label { display: block; font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }"
@@ -1140,11 +1140,11 @@ int http_fn_custom_dash(http_request_t *request) {
             
             "<div style='font-size:12px; color:#888; text-transform:uppercase; margin-top:10px; margin-bottom:5px;'>Parameters</div>"
             "<div class='sld-v-block'>"
-            "<label>Max Power / Manual (<span id='lbl-pwr'></span>%)</label>"
+            "<label>Max Pwr (<span id='lbl-pwr'></span>%)</label>"
             "<input type='range' id='sld-pwr' min='18' max='100' value='100' onchange='s_pwr(this.value)' style='width:100%;'>"
             "</div>"
             "<div class='sld-v-block' style='margin-top:15px;'>"
-            "<label>Target Export (<span id='lbl-exp'></span> Wh)</label>"
+            "<label>Export (<span id='lbl-exp'></span> Wh)</label>"
             "<input type='range' id='sld-exp' min='10' max='100' value='20' onchange='s_exp(this.value)' style='width:100%;'>"
             "</div>"
             "</div>"
@@ -1200,10 +1200,16 @@ int http_fn_custom_dash(http_request_t *request) {
         "dmp=d.dmp; auto=d.auto; btnColor();"
         "if(d.sens){ document.getElementById('d-sens-body').innerHTML=d.sens; }"
         
-        // --- NATIVE CANVAS GRAPH + SMOOTH RENDERING ---
+        // --- HIGH DPI CANVAS SCALING AND RENDERER ---
         "var c=document.getElementById('dynCanvas');"
         "if(c && c.getContext){"
         "var ctx=c.getContext('2d');"
+        
+        "var r=window.devicePixelRatio||1;"
+        "c.width=592*r;"
+        "c.height=340*r;"
+        "ctx.scale(r,r);"
+        
         "ctx.clearRect(0,0,592,340);"
         
         "ctx.fillStyle='#181818';"
@@ -1247,7 +1253,6 @@ int http_fn_custom_dash(http_request_t *request) {
         "}"
         "ctx.stroke();"
 
-        // Helper function mapping quadratic curves to midpoints
         "function drawSmooth(ctx, arr, baseY, clamp, fill, col, lw){"
         "var p=[];"
         "for(var i=0; i<48; i++){"
