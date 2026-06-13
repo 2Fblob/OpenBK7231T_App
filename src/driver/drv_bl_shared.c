@@ -99,7 +99,7 @@ static byte old_time = 0;
 #define dump_load_hysteresis 1 
 #define max_export -3300
 
-int lastsync = 0;                
+int lastsync = 0;                 
 byte check_time = 0;                    
 byte check_hour = 0;                    
               
@@ -149,6 +149,12 @@ time_t ConsumptionResetTime = 0;
 
 int changeSendAlwaysFrames = 300;
 int changeDoNotSendMinFrames = 20;
+
+// ====================================================================
+// ENERGY VERSION COUNTER (global)
+// ====================================================================
+int energy_version = 0;
+void mark_energy_dirty(void) { energy_version++; }
 
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 {
@@ -217,6 +223,7 @@ commandResult_t BL09XX_ResetEnergyCounter(const void *context, const char *cmd, 
         BL09XX_SaveEmeteringStatistics();
         lastConsumptionSaveStamp = xTaskGetTickCount();
     }
+    mark_energy_dirty();
     return CMD_RES_OK;
 }
 
@@ -442,7 +449,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     float diff;
 
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced())
-    {                                         
+    {                                          
         check_time = NTP_GetMinute();
         check_hour = NTP_GetHour();
 
@@ -660,6 +667,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             sensors[OBK_GENERATION_TOTAL].lastReading += (-period_net);
             energy_counter_data = period_net;
         }
+        mark_energy_dirty();
     }
 
     energyCounterStamp = xTaskGetTickCount();
@@ -682,6 +690,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             }
             sensors[OBK_CONSUMPTION_TODAY].lastReading = 0.0;
             actual_mday = ltm->tm_mday;
+            mark_energy_dirty();
 
 #if WINDOWS
 #elif PLATFORM_BL602
@@ -709,6 +718,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                     sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading  += energyCounterMinutes[j];
                 }
             }
+            mark_energy_dirty();
             if ((energyCounterStatsJSONEnable == true) && (MQTT_IsReady() == true))
             {
                 root = cJSON_CreateObject();
@@ -934,99 +944,125 @@ energySensorNames_t* DRV_GetEnergySensorNames(energySensor_t type)
 }
 
 // ====================================================================
-// JSON API ENDPOINT (State Machine Router for Sequential Polling)
+// JSON API ENDPOINT
 // ====================================================================
 int http_fn_api_dash(http_request_t *request) {
-    int dmp;
-    
-    // Parse the URL to see what the JavaScript is asking for
     const char *req_param = NULL;
-    if (request->url) {
-        req_param = strstr(request->url, "req=");
-    }
+    if (request->url) req_param = strstr(request->url, "req=");
 
     http_setup(request, "application/json");
-    poststr(request, "{");
 
-    // If no specific request, send the core stats
+    char buf[512];
+    int  pos     = 0;
+    int  has_ntp = CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced();
+
+#define B(...) pos += snprintf(buf + pos, sizeof(buf) - pos, __VA_ARGS__)
+
+    B("{");
+
+    // ---- CORE (default or req=core) ----
     if (!req_param || strncmp(req_param, "req=core", 8) == 0) {
-        hprintf255(request, "\"va\":\"%.0fV / %.2fA\",", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
-        hprintf255(request, "\"pwr\":\"%.0f W\",", sensors[OBK_POWER].lastReading);
-        hprintf255(request, "\"pwr_cls\":\"%s\",", (sensors[OBK_POWER].lastReading < 0) ? "c-exp" : "c-imp");
-        hprintf255(request, "\"bal\":\"%.0f Wh\",", sensors[OBK_POWER_REACTIVE].lastReading);
-        hprintf255(request, "\"bal_cls\":\"%s\",", (sensors[OBK_POWER_REACTIVE].lastReading < 0) ? "c-exp" : "c-imp");
-        hprintf255(request, "\"est\":\"%i Wh\",", estimated_energy_period);
-        hprintf255(request, "\"est_cls\":\"%s\",", (estimated_energy_period < 0) ? "c-exp" : "c-imp");
+        int dmp = dump_load_relay[5];
 
-        dmp = dump_load_relay[5];
-        if (dmp == 0) {
-            poststr(request, "\"chg_lbl\":\"Charger\",\"chg_v\":\"Idle\",\"chg_c\":\"#888\",");
-        } else if (dmp == 5) {
-            poststr(request, "\"chg_lbl\":\"Charger\",\"chg_v\":\"Battery\",\"chg_c\":\"#4caf50\",");
-        } else {
-            hprintf255(request, "\"chg_lbl\":\"Charging\",\"chg_v\":\"%d%%\",\"chg_c\":\"#0099FF\",", dmp);
-        }
+        B("\"va\":\"%.0fV / %.2fA\","
+          "\"pwr\":\"%.0f W\","
+          "\"pwr_cls\":\"%s\","
+          "\"bal\":\"%.0f Wh\","
+          "\"bal_cls\":\"%s\","
+          "\"est\":\"%i Wh\","
+          "\"est_cls\":\"%s\",",
+          sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading,
+          sensors[OBK_POWER].lastReading,
+          sensors[OBK_POWER].lastReading          < 0 ? "c-exp" : "c-imp",
+          sensors[OBK_POWER_REACTIVE].lastReading,
+          sensors[OBK_POWER_REACTIVE].lastReading  < 0 ? "c-exp" : "c-imp",
+          estimated_energy_period,
+          estimated_energy_period                  < 0 ? "c-exp" : "c-imp");
 
-        hprintf255(request, "\"dmp\":%d,\"auto\":%d,", dmp, charger_c_auto);
-        hprintf255(request, "\"t_pwr\":%d,\"t_exp\":%d,", target_power, target_export);
-        hprintf255(request, "\"clk\":\"%02d:%02d\"", NTP_GetHour(), NTP_GetMinute()); 
+        if      (dmp == 0) B("\"chg_v\":\"Idle\",\"chg_c\":\"#888\",");
+        else if (dmp == 5) B("\"chg_v\":\"Battery\",\"chg_c\":\"#4caf50\",");
+        else               B("\"chg_v\":\"%d%%\",\"chg_c\":\"#0099FF\",", dmp);
 
-        if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced()) {
-            poststr(request, ",");
-            hprintf255(request, "\"pf\":\"%.*f\",", sensors[OBK_POWER_FACTOR].rounding_decimals, sensors[OBK_POWER_FACTOR].lastReading);
-            hprintf255(request, "\"econs\":\"%.*f kWh\",", sensors[OBK_CONSUMPTION_TOTAL].rounding_decimals, (0.001*sensors[OBK_CONSUMPTION_TOTAL].lastReading));
-            hprintf255(request, "\"egen\":\"%.*f kWh\",", sensors[OBK_GENERATION_TOTAL].rounding_decimals, (0.001*sensors[OBK_GENERATION_TOTAL].lastReading));
-            hprintf255(request, "\"clh\":\"%.*f Wh\",", sensors[OBK_CONSUMPTION_LAST_HOUR].rounding_decimals, sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading);
-            hprintf255(request, "\"ctoday\":\"%.*f Wh\",", sensors[OBK_CONSUMPTION_TODAY].rounding_decimals, sensors[OBK_CONSUMPTION_TODAY].lastReading);
-            hprintf255(request, "\"cyest\":\"%.*f Wh\",", sensors[OBK_CONSUMPTION_YESTERDAY].rounding_decimals, sensors[OBK_CONSUMPTION_YESTERDAY].lastReading);
-            hprintf255(request, "\"c2d\":\"%.*f Wh\",", sensors[OBK_CONSUMPTION_2_DAYS_AGO].rounding_decimals, sensors[OBK_CONSUMPTION_2_DAYS_AGO].lastReading);
-            hprintf255(request, "\"c3d\":\"%.*f Wh\"", sensors[OBK_CONSUMPTION_3_DAYS_AGO].rounding_decimals, sensors[OBK_CONSUMPTION_3_DAYS_AGO].lastReading);
-        }
+        B("\"dmp\":%d,\"auto\":%d,"
+          "\"t_pwr\":%d,\"t_exp\":%d,"
+          "\"clk\":\"%02d:%02d\"",
+          dmp, charger_c_auto,
+          target_power, target_export,
+          NTP_GetHour(), NTP_GetMinute());
+
+        if (has_ntp) B(",\"ev\":%d", energy_version);
     }
-    
-    // Graph Arrays
-    if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced() && req_param) {
-        unsigned int minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
-        char buffer[512];
-        int pos = 0;
+
+    // ---- ENERGY TOTALS (req=energy) ----
+    else if (strncmp(req_param, "req=energy", 10) == 0 && has_ntp) {
+        B("\"pf\":\"%.*f\","
+          "\"econs\":\"%.*f kWh\","
+          "\"egen\":\"%.*f kWh\","
+          "\"clh\":\"%.*f Wh\","
+          "\"ctoday\":\"%.*f Wh\","
+          "\"cyest\":\"%.*f Wh\","
+          "\"c2d\":\"%.*f Wh\","
+          "\"c3d\":\"%.*f Wh\","
+          "\"ev\":%d",
+          sensors[OBK_POWER_FACTOR].rounding_decimals,
+              sensors[OBK_POWER_FACTOR].lastReading,
+          sensors[OBK_CONSUMPTION_TOTAL].rounding_decimals,
+              0.001 * sensors[OBK_CONSUMPTION_TOTAL].lastReading,
+          sensors[OBK_GENERATION_TOTAL].rounding_decimals,
+              0.001 * sensors[OBK_GENERATION_TOTAL].lastReading,
+          sensors[OBK_CONSUMPTION_LAST_HOUR].rounding_decimals,
+              sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading,
+          sensors[OBK_CONSUMPTION_TODAY].rounding_decimals,
+              sensors[OBK_CONSUMPTION_TODAY].lastReading,
+          sensors[OBK_CONSUMPTION_YESTERDAY].rounding_decimals,
+              sensors[OBK_CONSUMPTION_YESTERDAY].lastReading,
+          sensors[OBK_CONSUMPTION_2_DAYS_AGO].rounding_decimals,
+              sensors[OBK_CONSUMPTION_2_DAYS_AGO].lastReading,
+          sensors[OBK_CONSUMPTION_3_DAYS_AGO].rounding_decimals,
+              sensors[OBK_CONSUMPTION_3_DAYS_AGO].lastReading,
+          energy_version);
+    }
+
+    // ---- GRAPH ARRAYS (req=net | req=chg | req=inv) ----
+    else if (has_ntp && req_param) {
+        unsigned int msm      = NTP_GetHour() * 60 + NTP_GetMinute();
+        const char  *key      = NULL;
+        int         *matrix   = NULL;
+        int          is_additive = 0, has_live = 0, live_val = 0;
 
         if (strncmp(req_param, "req=net", 7) == 0) {
-            pos += snprintf(buffer + pos, sizeof(buffer) - pos, "\"net\":[");
-            for (int i = 47; i >= 0; i--) {
-                int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-                int net = net_matrix[interval_of_day % MATRIX_SIZE];
-                if (i == 0) { net += (int)(real_consumption - real_export); }
-                pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%d%s", net, (i==0)?"":",");
-            }
-            pos += snprintf(buffer + pos, sizeof(buffer) - pos, "]");
-            poststr(request, buffer);
+            key    = "net"; matrix = net_matrix;
+            live_val    = (int)(real_consumption - real_export);
+            has_live    = 1; is_additive = 1;
+        } else if (strncmp(req_param, "req=chg", 7) == 0) {
+            key    = "chg"; matrix = charger_c_matrix;
+            has_live    = (sample_count_30s > 0);
+            if (has_live) live_val = current_charger_c_accum / sample_count_30s;
+        } else if (strncmp(req_param, "req=inv", 7) == 0) {
+            key    = "inv"; matrix = inverter_matrix;
+            has_live    = (sample_count_30s > 0);
+            if (has_live) live_val = current_inverter_accum / sample_count_30s;
         }
-        else if (strncmp(req_param, "req=chg", 7) == 0) {
-            pos += snprintf(buffer + pos, sizeof(buffer) - pos, "\"chg\":[");
+
+        if (key && matrix) {
+            B("\"%s\":[", key);
             for (int i = 47; i >= 0; i--) {
-                int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-                int val = charger_c_matrix[interval_of_day % MATRIX_SIZE];
-                if (i == 0 && sample_count_30s > 0) { val = current_charger_c_accum / sample_count_30s; }
-                pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%d%s", val, (i==0)?"":",");
+                int idx = (msm / net_metering_period - i + 96) % 96;
+                int val = matrix[idx % MATRIX_SIZE];
+                if (i == 0 && has_live)
+                    val = is_additive ? val + live_val : live_val;
+                B("%d%s", val, i == 0 ? "" : ",");
             }
-            pos += snprintf(buffer + pos, sizeof(buffer) - pos, "]");
-            poststr(request, buffer);
-        }
-        else if (strncmp(req_param, "req=inv", 7) == 0) {
-            pos += snprintf(buffer + pos, sizeof(buffer) - pos, "\"inv\":[");
-            for (int i = 47; i >= 0; i--) {
-                int interval_of_day = (minutes_since_midnight / net_metering_period - i + 96) % 96;
-                int val = inverter_matrix[interval_of_day % MATRIX_SIZE];
-                if (i == 0 && sample_count_30s > 0) { val = current_inverter_accum / sample_count_30s; }
-                pos += snprintf(buffer + pos, sizeof(buffer) - pos, "%d%s", val, (i==0)?"":",");
-            }
-            pos += snprintf(buffer + pos, sizeof(buffer) - pos, "]");
-            poststr(request, buffer);
+            B("]");
         }
     }
-    
-    poststr(request, "}");
+
+    B("}");
+    buf[pos] = '\0';
+    poststr(request, buf);
     poststr(request, NULL);
+
+#undef B
     return 0;
 }
 
@@ -1035,87 +1071,6 @@ int http_fn_api_dash(http_request_t *request) {
 // ====================================================================
 // OPTIMIZED DASHBOARD FRONTEND (Sequential State Machine Javascript)
 // ====================================================================
-//
-// CHANGES vs previous revision (this pass):
-//
-// [LAYOUT] Sensor Data column now spans the full page height. The
-//          row that used to be:
-//            [ left-col 230px ][ graph-col ][ right-col 240px ]
-//            [        full-width clock row                    ]
-//          is now:
-//            [ left-col 230px (full height) ][ right-side (flex col) ]
-//          where right-side =
-//            [ top-row: graph-col + right-col, 400px tall ]
-//            [ bottom-clk-row, now only as wide as top-row ]
-//          .dash-row no longer has a fixed height (align-items:stretch
-//          makes left-col match the combined height of top-row +
-//          bottom-clk-row). The clock row is now narrower (it only
-//          spans the graph+right-col width), and that freed horizontal
-//          width is reclaimed as extra vertical room for left-col.
-//
-// [CLOCK] .bottom-clk-row vertical padding reduced (25px -> 10px) and
-//         #d-day margin-bottom reduced (4px -> 2px). Font sizes for
-//         #d-clk / #d-day / #d-date are unchanged.
-//
-// [SENSOR DATA] Added a "Power Factor" row (id=d-pf) directly under the
-//          existing sensor table (separate <tbody>, so it survives the
-//          d.sens innerHTML replacement of #d-sens-body).
-//          Added two new grouped tables below it:
-//            "Energy Totals"      -> Consumption (d-econs), Generation (d-egen)
-//            "Consumption Details"-> Last Hour (d-clh), Today (d-ctoday),
-//                                     Yesterday (d-cyest), 2 Days Ago (d-c2d),
-//                                     3 Days Ago (d-c3d)
-//          These are static placeholders ("--") with stable ids, ready
-//          for you to populate from /api_dash once those values are
-//          exposed server-side (either as new JSON fields handled in
-//          applyUI(), or folded into d.sens with matching ids).
-//          New class .sens-grp-lbl gives these group headings the same
-//          font as "Sensor Data" (.sep-lbl: 12px, #888, uppercase).
-//
-// [STYLE] .sens-tbl rows: first column (name) normal weight, second
-//          column (value) bold + right-aligned, via
-//          ".sens-tbl td:last-child{font-weight:bold;text-align:right;}"
-//          "Graph Legend" heading switched from its old bold/#aaa inline
-//          style to .sep-lbl, matching "Sensor Data" / "ESS System
-//          Modes" / "Parameters".
-//
-// [RENAME] "System Modes" -> "ESS System Modes".
-//          "Charger" -> "ESS Status:" (now a static label, no longer
-//          overwritten by d.chg_lbl).
-//          New small line under the ESS Status value (#c-chg) shows
-//          "Charging: xx%" whenever d.dmp is between 18 and 100.
-//
-// [UNCHANGED] Voltage & Current (#d-va) label and formatting left as-is
-//          per request.
-//
-// ====================================================================
-//
-// PREVIOUS REVISION NOTES (kept for history):
-//
-// [BUG] Canvas grid misaligned on modern browsers (HiDPI / devicePixelRatio>1):
-//       drawImage(gridCanvas,0,0) was blitting at physical pixel dimensions
-//       without specifying destination size, so on a 2x display the grid
-//       appeared at half-size in the top-left corner. Fixed by passing
-//       explicit destination width/height:
-//         ctx.drawImage(gridCanvas, 0, 0, 592, 340)
-//       This works correctly on both 1x (iOS 5) and 2x/3x (modern) displays.
-//
-// [BUG] Top-bar / sliders not refreshing:
-//       refresh() only updated UI elements inside if(d.va){...}, and d.va
-//       was only present when ps===0. But poll_state was incremented AFTER
-//       the XHR was fired, so the sequence was: fire ps=0 (UI data), then
-//       ps=1,2,3 (graph data only), then ps=0 again — UI updated once every
-//       60 seconds (4 x 15s). Fixed with a split-timer approach:
-//         - refreshFast() fires every 7s, always requests UI + sliders
-//         - refreshGraph() fires every 15s, cycles through net/chg/inv graph data
-//       This means the top bar, clock, and sliders update every 7 seconds.
-//
-// [BUG] Sensor table was being updated on every fast poll. Now it is only
-//       requested and updated once per minute via the separate refreshSens()
-//       interval, reducing server load.
-//
-// ====================================================================
-
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
 
@@ -1163,8 +1118,6 @@ int http_fn_custom_dash(http_request_t *request) {
     rtos_delay_milliseconds(1);
 
     // --- CHUNK 2: Core Layout Structure ---
-    // "Charger" -> "ESS Status:" (now static, no longer driven by d.chg_lbl).
-    // New #c-chg span shows "Charging: xx%" when d.dmp is 18-100 (see applyUI).
     poststr(request,
         "<div id='dash-container'>"
         "<div class='close-btn' onclick='window.location.href=\"/index\"'>&#x2715;</div>"
@@ -1177,11 +1130,7 @@ int http_fn_custom_dash(http_request_t *request) {
     );
     rtos_delay_milliseconds(1);
 
-    // --- CHUNK 3a: Left column (Sensor Data + Energy Totals + Consumption
-    //               Details + Graph Legend), now full page height. The
-    //               .left-col / .right-side split replaces the old
-    //               .left-col / .graph-col / .right-col single row.
-   // --- CHUNK 3a: Left column (Sensor Data + Energy Totals + Consumption Details + Graph Legend)
+    // --- CHUNK 3a: Left column (Sensor Data + Energy Totals + Consumption Details + Graph Legend)
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) {
         poststr(request,
             "<div class='dash-row'>"
@@ -1215,8 +1164,7 @@ int http_fn_custom_dash(http_request_t *request) {
         );
         rtos_delay_milliseconds(1);
 
-        // --- CHUNK 3b: Graph column, right column ("ESS System Modes"),
-        //               then the (now narrower) clock row underneath.
+        // --- CHUNK 3b: Graph column, right column ("ESS System Modes")
         poststr(request,
             "<div class='graph-col'>"
             "<div style='width:100%;max-width:592px;margin:0 auto;'>"
@@ -1249,34 +1197,133 @@ int http_fn_custom_dash(http_request_t *request) {
         rtos_delay_milliseconds(1);
     }
 
-    // --- CHUNK 4a: Globals, helpers, controls ---
+    // --- CHUNK 6: Sequential State Machine Javascript ---
     poststr(request,
         "<script>"
+        "var busy        = false;"
+        "var lastEv      = -1;"
+        "var lastEnergyT = 0;"
+        "var lastGraphT  = 0;"
+        "var graphIdx    = 0;"
+        "var lastClk     = '';"
+        "var state_net   = [];"
+        "var state_chg   = [];"
+        "var state_inv   = [];"
+        "var GTYPES      = ['net','chg','inv'];"
         "var dmp=0,auto=0;"
-        "var state_net=[],state_chg=[],state_inv=[];"
-        "var graph_state=0;"
         "var DAYS=['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];"
         "var MOS=['January','February','March','April','May','June','July','August','September','October','November','December'];"
+
         "function setV(id,v){var e=document.getElementById(id);if(e){if(e.tagName==='INPUT')e.value=v;else e.innerHTML=v;}}"
         "function setC(id,v){var e=document.getElementById(id);if(e)e.className=v;}"
         "function setS(id,v){var e=document.getElementById(id);if(e)e.style.color=v;}"
-        "function s_pwr(v){var x=new XMLHttpRequest();x.open('GET','/cm?cmnd=SetTargetPower%20'+v,true);x.send();setV('lbl-pwr',v);}"
-        "function s_exp(v){var x=new XMLHttpRequest();x.open('GET','/cm?cmnd=SetTargetExport%20'+v,true);x.send();setV('lbl-exp',v);}"
+
+        "function xhr(url, cb) {"
+        "  var r = new XMLHttpRequest();"
+        "  r.onreadystatechange = function() {"
+        "    if (r.readyState !== 4) return;"
+        "    try { cb(r.status === 200 ? JSON.parse(r.responseText) : null); }"
+        "    catch(e) { cb(null); }"
+        "  };"
+        "  r.open('GET', url + '&t=' + Date.now(), true);"
+        "  r.send();"
+        "}"
+
+        "function s_pwr(v){xhr('/cm?cmnd=SetTargetPower%20'+v,function(){});setV('lbl-pwr',v);}"
+        "function s_exp(v){xhr('/cm?cmnd=SetTargetExport%20'+v,function(){});setV('lbl-exp',v);}"
         "function upd(v){if(auto===1)return;if(v>=18){setV('sld-pwr',v);}s_pwr(v);dmp=parseInt(v,10);btnColor();}"
         "function t_inv(){upd(dmp===5?0:5);}"
         "function t_chg(){upd(dmp>=10?0:18);}"
-        "function tm(){auto=(auto===1)?0:1;var x=new XMLHttpRequest();x.open('GET','/cm?cmnd=ToggleAuto',true);x.send();btnColor();}"
+        "function tm(){auto=(auto===1)?0:1;xhr('/cm?cmnd=ToggleAuto',function(){});btnColor();}"
         "function btnColor(){"
-        "var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),m=document.getElementById('m-btn');"
-        "if(i)i.style.background=(dmp===5)?'#ff9800':'#555';"
-        "if(c)c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#8bc34a':'#555');"
-        "if(m){m.innerHTML=(auto===1)?'AUTO':'MANUAL';m.style.background=(auto===1)?'#09F':'#f44336';}"
+        "  var i=document.getElementById('inv-btn'),c=document.getElementById('chg-btn'),m=document.getElementById('m-btn');"
+        "  if(i)i.style.background=(dmp===5)?'#ff9800':'#555';"
+        "  if(c)c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#8bc34a':'#555');"
+        "  if(m){m.innerHTML=(auto===1)?'AUTO':'MANUAL';m.style.background=(auto===1)?'#09F':'#f44336';}"
         "}"
-    );
-    rtos_delay_milliseconds(1);
 
-    // --- CHUNK 4b: drawSmooth ---
-    poststr(request,
+        "function applyCore(d) {"
+        "  setV('d-va',  d.va);"
+        "  setV('d-pwr', d.pwr);   setC('d-pwr', d.pwr_cls);"
+        "  setV('d-bal', d.bal);   setC('d-bal', d.bal_cls);"
+        "  setV('d-est', d.est);   setC('d-est', d.est_cls);"
+        "  setV('c-v',   d.chg_v); setS('c-v',   d.chg_c);"
+        "  setV('c-chg', (d.dmp >= 18 && d.dmp <= 100) ? 'Charging: ' + d.dmp + '%' : '');"
+        "  if (d.clk !== lastClk) { setV('d-clk', d.clk); lastClk = d.clk; }"
+        "  if (d.t_pwr >= 18) setV('sld-pwr', d.t_pwr);"
+        "  setV('lbl-pwr', d.t_pwr); setV('sld-exp', d.t_exp); setV('lbl-exp', d.t_exp);"
+        "  dmp = d.dmp; auto = d.auto; btnColor();"
+        "  var dt = new Date();"
+        "  setV('d-day',  DAYS[dt.getDay()]);"
+        "  setV('d-date', MOS[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear());"
+        "}"
+
+        "function applyEnergy(d) {"
+        "  setV('d-pf',     d.pf);     setV('d-econs',  d.econs);"
+        "  setV('d-egen',   d.egen);   setV('d-clh',    d.clh);"
+        "  setV('d-ctoday', d.ctoday); setV('d-cyest',  d.cyest);"
+        "  setV('d-c2d',    d.c2d);    setV('d-c3d',    d.c3d);"
+        "  lastEv      = d.ev;"
+        "  lastEnergyT = Date.now();"
+        "}"
+
+        "function applyGraph(d) {"
+        "  if (d.net) state_net = d.net;"
+        "  if (d.chg) state_chg = d.chg;"
+        "  if (d.inv) state_inv = d.inv;"
+        "  renderGraph();"
+        "}"
+
+        "function runCycle() {"
+        "  if (busy) return;"
+        "  busy = true;"
+        "  var now = Date.now();"
+        "  xhr('/api_dash?req=core', function(d) {"
+        "    var needEnergy = false;"
+        "    if (d) {"
+        "      applyCore(d);"
+        "      needEnergy = (d.ev !== undefined) && (d.ev !== lastEv || now - lastEnergyT >= 60000);"
+        "    }"
+        "    function doGraph() {"
+        "      if (now - lastGraphT < 20000) { busy = false; return; }"
+        "      xhr('/api_dash?req=' + GTYPES[graphIdx % 3], function(gd) {"
+        "        if (gd) { applyGraph(gd); lastGraphT = Date.now(); graphIdx++; }"
+        "        busy = false;"
+        "      });"
+        "    }"
+        "    if (needEnergy) {"
+        "      xhr('/api_dash?req=energy', function(ed) {"
+        "        if (ed) applyEnergy(ed);"
+        "        doGraph();"
+        "      });"
+        "    } else {"
+        "      doGraph();"
+        "    }"
+        "  });"
+        "}"
+
+        "function loadAll() {"
+        "  busy = true;"
+        "  xhr('/api_dash?req=core', function(d) {"
+        "    if (d) applyCore(d);"
+        "    xhr('/api_dash?req=energy', function(ed) {"
+        "      if (ed) applyEnergy(ed);"
+        "      xhr('/api_dash?req=net', function(g) {"
+        "        if (g) applyGraph(g);"
+        "        xhr('/api_dash?req=chg', function(g) {"
+        "          if (g) applyGraph(g);"
+        "          xhr('/api_dash?req=inv', function(g) {"
+        "            if (g) applyGraph(g);"
+        "            lastGraphT = Date.now();"
+        "            graphIdx   = 0;"
+        "            busy       = false;"
+        "          });"
+        "        });"
+        "      });"
+        "    });"
+        "  });"
+        "}"
+
         "function _buildPath(ctx,p){"
         "ctx.beginPath();ctx.moveTo(p[0].x,p[0].y);"
         "for(var i=0;i<47;i++){"
@@ -1285,6 +1332,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "}"
         "ctx.lineTo(p[47].x,p[47].y);"
         "}"
+        
         "function drawSmooth(ctx,arr,baseY,clamp,fill,col,lw){"
         "if(!arr||arr.length===0)return;"
         "var p=[],h,i;"
@@ -1303,18 +1351,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "ctx.beginPath();ctx.arc(p[47].x,p[47].y,lw*1.5,0,2*Math.PI);"
         "ctx.fillStyle=col;ctx.fill();"
         "}"
-    );
-    rtos_delay_milliseconds(1);
 
-    // --- CHUNK 5: Graph renderer ---
-    // FIX: drawImage now passes explicit destination size (592, 340) in
-    //      logical pixels. Without this, on HiDPI displays the gridCanvas
-    //      (which is 592*r x 340*r physical pixels) gets blitted at its
-    //      full physical size, appearing 2x too large and overflowing the
-    //      canvas bounds. Specifying the dest rect scales it correctly back
-    //      down to logical size on any devicePixelRatio. On iOS 5 (ratio=1)
-    //      it is a no-op — no behaviour change.
-    poststr(request,
         "var gridCanvas=null;"
         "function initGrid(){"
         "var gc=document.createElement('canvas');"
@@ -1353,6 +1390,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "ctx.stroke();"
         "gridCanvas=gc;"
         "}"
+
         "function renderGraph(){"
         "var c=document.getElementById('dynCanvas');"
         "if(!c||!c.getContext)return;"
@@ -1361,7 +1399,6 @@ int http_fn_custom_dash(http_request_t *request) {
         "c.width=Math.round(592*r);c.height=Math.round(340*r);"
         "ctx.scale(r,r);"
         "ctx.clearRect(0,0,592,340);"
-        // Pass dest size so the grid scales correctly at any pixel ratio
         "if(gridCanvas)ctx.drawImage(gridCanvas,0,0,592,340);"
         "if(state_net.length>0){"
         "var grad=ctx.createLinearGradient(0,75,0,310);"
@@ -1374,82 +1411,8 @@ int http_fn_custom_dash(http_request_t *request) {
         "if(state_chg.length>0)drawSmooth(ctx,state_chg,60,false,null,'#4caf50',2.5);"
         "if(state_inv.length>0)drawSmooth(ctx,state_inv,60,false,null,'#ff9800',2.5);"
         "}"
-    );
-    rtos_delay_milliseconds(1);
 
-    // --- CHUNK 6: Two separate pollers ---
-    //
-    // applyUI() changes this revision:
-    //   - c-lbl is no longer set from d.chg_lbl (it's the static "ESS
-    //     Status:" label set in CHUNK 2).
-    //   - c-v still shows d.chg_v / d.chg_c as before.
-    //   - New: c-chg shows "Charging: xx%" (xx = d.dmp) whenever
-    //     d.dmp is between 18 and 100 inclusive, otherwise it's cleared.
-    //
-    // Everything else (polling cadence, d.sens handling, etc.) is
-    // unchanged from the previous revision.
-
-  // --- CHUNK 6: Frontend Mapper & 1-Minute Poller ---
-    poststr(request,
-        "function applyUI(d){"
-        "setV('d-va',d.va);setV('d-pwr',d.pwr);setC('d-pwr',d.pwr_cls);"
-        "setV('d-bal',d.bal);setC('d-bal',d.bal_cls);"
-        "setV('d-est',d.est);setC('d-est',d.est_cls);"
-        "setV('c-v',d.chg_v);setS('c-v',d.chg_c);"
-        "setV('c-chg',(d.dmp>=18&&d.dmp<=100)?('Charging: '+d.dmp+'%'):'');"
-        "setV('d-clk',d.clk);"
-        "if(d.t_pwr>=18)setV('sld-pwr',d.t_pwr);"
-        "setV('lbl-pwr',d.t_pwr);setV('sld-exp',d.t_exp);setV('lbl-exp',d.t_exp);"
-        "dmp=d.dmp;auto=d.auto;btnColor();"
-        "if(d.pf!==undefined){"
-        "setV('d-pf', d.pf);"
-        "setV('d-econs', d.econs);"
-        "setV('d-egen', d.egen);"
-        "setV('d-clh', d.clh);"
-        "setV('d-ctoday', d.ctoday);"
-        "setV('d-cyest', d.cyest);"
-        "setV('d-c2d', d.c2d);"
-        "setV('d-c3d', d.c3d);"
-        "}"
-        "var dt=new Date();"
-        "setV('d-day',DAYS[dt.getDay()]);"
-        "setV('d-date',MOS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear());"
-        "}"
-
-        "function refreshFast(){"
-        "var xhr=new XMLHttpRequest();"
-        "xhr.onreadystatechange=function(){"
-        "if(xhr.readyState===4&&xhr.status===200){"
-        "try{var d=JSON.parse(xhr.responseText);if(d.va)applyUI(d);}catch(e){}"
-        "}"
-        "};"
-        "xhr.open('GET','/api_dash?t='+Date.now(),true);xhr.send();"
-        "}"
-
-        "function refreshGraph(){"
-        "var gs=graph_state%3;"
-        "var req=(gs===0)?'net':(gs===1?'chg':'inv');"
-        "var xhr=new XMLHttpRequest();"
-        "xhr.onreadystatechange=function(){"
-        "if(xhr.readyState===4&&xhr.status===200){"
-        "try{"
-        "var d=JSON.parse(xhr.responseText);"
-        "if(d.net)state_net=d.net;"
-        "if(d.chg)state_chg=d.chg;"
-        "if(d.inv)state_inv=d.inv;"
-        "renderGraph();"
-        "}catch(e){}"
-        "}"
-        "};"
-        "xhr.open('GET','/api_dash?req='+req+'&t='+Date.now(),true);xhr.send();"
-        "graph_state++;"
-        "}"
-
-        "initGrid();"
-        "refreshFast();"
-        "refreshGraph();"
-        "setInterval(refreshFast,60000);"
-        "setInterval(refreshGraph,15000);"
+        "initGrid(); loadAll(); setInterval(runCycle, 10000);"
         "</script></body></html>"
     );
 
