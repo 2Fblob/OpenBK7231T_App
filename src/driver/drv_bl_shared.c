@@ -1192,14 +1192,15 @@ int http_fn_custom_dash(http_request_t *request) {
     //               Details + Graph Legend), now full page height. The
     //               .left-col / .right-side split replaces the old
     //               .left-col / .graph-col / .right-col single row.
+   // --- CHUNK 3a: Left column (Sensor Data + Energy Totals + Consumption Details + Graph Legend)
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) {
         poststr(request,
             "<div class='dash-row'>"
             "<div class='left-col'>"
             "<div class='sep-lbl'>Sensor Data</div>"
-            "<table class='sens-tbl'><tbody id='d-sens-body'></tbody>"
-            "<tbody><tr><td>Power Factor</td><td id='d-pf'>--</td></tr></tbody>"
-            "</table>"
+            "<table class='sens-tbl'><tbody>"
+            "<tr><td>Power Factor</td><td id='d-pf'>--</td></tr>"
+            "</tbody></table>"
             "<div class='sens-grp-lbl'>Energy Totals</div>"
             "<table class='sens-tbl'><tbody>"
             "<tr><td>Consumption</td><td id='d-econs'>--</td></tr>"
