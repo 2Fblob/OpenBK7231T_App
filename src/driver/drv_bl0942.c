@@ -74,24 +74,32 @@ static void ScaleAndUpdate(bl0942_data_t *data) {
     float voltage, current, power;
     PwrCal_Scale(data->v_rms, data->i_rms, data->watt, &voltage, &current,
                  &power);
-
     float frequency = 2 * 500000.0f / data->freq;
-
     float energyWh = 0;
     energyWh = fabsf(PwrCal_ScalePowerOnly(data->cf_cnt)) * 1638.4f * 256.0f / 3600.0f;
 
-    // Changed how power is calculated to accomodate bi-directional capability
-    // based on status of OBK_FLAG_POWER_INVERT_AC
-    
-	if (CFG_HasFlag(OBK_FLAG_POWER_INVERT_AC))
-		{
-		BL_ProcessUpdate(voltage, current, (-1*power), frequency, energyWh);
-		}
-	else
-		{
-	   	 BL_ProcessUpdate(voltage, current, power, frequency, energyWh);
-		}
-    // End of change
+    // Rolling window average for power (10 samples)
+    #define POWER_WINDOW_SIZE 10
+    static float powerWindow[POWER_WINDOW_SIZE] = {0};
+    static int   powerWindowIndex = 0;
+    static int   powerWindowCount = 0;
+
+    // Apply sign before storing in the window
+    float signedPower = CFG_HasFlag(OBK_FLAG_POWER_INVERT_AC) ? (-1.0f * power) : power;
+
+    // Insert the new signed sample into the circular buffer
+    powerWindow[powerWindowIndex] = signedPower;
+    powerWindowIndex = (powerWindowIndex + 1) % POWER_WINDOW_SIZE;
+    if (powerWindowCount < POWER_WINDOW_SIZE)
+        powerWindowCount++;
+
+    // Compute the average over however many samples we have so far
+    float powerSum = 0.0f;
+    for (int i = 0; i < powerWindowCount; i++)
+        powerSum += powerWindow[i];
+    float averagedPower = powerSum / powerWindowCount;
+
+    BL_ProcessUpdate(voltage, current, averagedPower, frequency, energyWh);
 }
 
 static int UART_TryToGetNextPacket(void) {
