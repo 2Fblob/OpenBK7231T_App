@@ -948,7 +948,7 @@ int http_fn_api_dash(http_request_t *request) {
     http_setup(request, "application/json");
     poststr(request, "{");
 
-    // If no specific request, send the core stats (The default 20-second payload)
+    // If no specific request, send the core stats
     if (!req_param || strncmp(req_param, "req=core", 8) == 0) {
         hprintf255(request, "\"va\":\"%.0fV / %.2fA\",", sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading);
         hprintf255(request, "\"pwr\":\"%.0f W\",", sensors[OBK_POWER].lastReading);
@@ -972,28 +972,19 @@ int http_fn_api_dash(http_request_t *request) {
         hprintf255(request, "\"clk\":\"%02d:%02d\"", NTP_GetHour(), NTP_GetMinute()); 
 
         if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced()) {
-            int p_i;
-            poststr(request, ","); 
-            poststr(request, "\"sens\":\"");
-            for (p_i = (OBK__FIRST); p_i <= (OBK_CONSUMPTION__DAILY_LAST); p_i++) {
-                if (p_i == OBK_GENERATION_TOTAL && (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))) { p_i++; }
-                if (p_i <= OBK__NUM_MEASUREMENTS || NTP_IsTimeSynced()) {
-                    if (p_i == OBK_VOLTAGE || p_i == OBK_POWER || p_i == OBK_CURRENT || p_i == OBK_POWER_APPARENT || p_i == OBK_POWER_REACTIVE) continue;
-                    if ((p_i == OBK_CONSUMPTION_TOTAL) || (p_i == OBK_GENERATION_TOTAL)) {
-                        hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f kWh</td></tr>",
-                                   sensors[p_i].names.name_friendly, sensors[p_i].rounding_decimals, (0.001*sensors[p_i].lastReading));
-                    } else {
-                        hprintf255(request, "<tr><td><b>%s</b></td><td style='text-align:right;'>%.*f %s</td></tr>",
-                                   sensors[p_i].names.name_friendly, sensors[p_i].rounding_decimals, sensors[p_i].lastReading, sensors[p_i].names.units);
-                    }
-                }
-            }
-            poststr(request, "\"");
+            poststr(request, ",");
+            hprintf255(request, "\"pf\":\"%.*f\",", sensors[OBK_POWER_FACTOR].rounding_decimals, sensors[OBK_POWER_FACTOR].lastReading);
+            hprintf255(request, "\"econs\":\"%.*f kWh\",", sensors[OBK_CONSUMPTION_TOTAL].rounding_decimals, (0.001*sensors[OBK_CONSUMPTION_TOTAL].lastReading));
+            hprintf255(request, "\"egen\":\"%.*f kWh\",", sensors[OBK_GENERATION_TOTAL].rounding_decimals, (0.001*sensors[OBK_GENERATION_TOTAL].lastReading));
+            hprintf255(request, "\"clh\":\"%.*f Wh\",", sensors[OBK_CONSUMPTION_LAST_HOUR].rounding_decimals, sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading);
+            hprintf255(request, "\"ctoday\":\"%.*f Wh\",", sensors[OBK_CONSUMPTION_TODAY].rounding_decimals, sensors[OBK_CONSUMPTION_TODAY].lastReading);
+            hprintf255(request, "\"cyest\":\"%.*f Wh\",", sensors[OBK_CONSUMPTION_YESTERDAY].rounding_decimals, sensors[OBK_CONSUMPTION_YESTERDAY].lastReading);
+            hprintf255(request, "\"c2d\":\"%.*f Wh\",", sensors[OBK_CONSUMPTION_2_DAYS_AGO].rounding_decimals, sensors[OBK_CONSUMPTION_2_DAYS_AGO].lastReading);
+            hprintf255(request, "\"c3d\":\"%.*f Wh\"", sensors[OBK_CONSUMPTION_3_DAYS_AGO].rounding_decimals, sensors[OBK_CONSUMPTION_3_DAYS_AGO].lastReading);
         }
     }
     
-    // If the JS asks for a specific array, build it in RAM and send it instantly.
-    // This entirely prevents the CPU from locking up.
+    // Graph Arrays
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced() && req_param) {
         unsigned int minutes_since_midnight = NTP_GetHour() * 60 + NTP_GetMinute();
         char buffer[512];
@@ -1010,7 +1001,6 @@ int http_fn_api_dash(http_request_t *request) {
             pos += snprintf(buffer + pos, sizeof(buffer) - pos, "]");
             poststr(request, buffer);
         }
-        
         else if (strncmp(req_param, "req=chg", 7) == 0) {
             pos += snprintf(buffer + pos, sizeof(buffer) - pos, "\"chg\":[");
             for (int i = 47; i >= 0; i--) {
@@ -1022,7 +1012,6 @@ int http_fn_api_dash(http_request_t *request) {
             pos += snprintf(buffer + pos, sizeof(buffer) - pos, "]");
             poststr(request, buffer);
         }
-
         else if (strncmp(req_param, "req=inv", 7) == 0) {
             pos += snprintf(buffer + pos, sizeof(buffer) - pos, "\"inv\":[");
             for (int i = 47; i >= 0; i--) {
@@ -1399,8 +1388,9 @@ int http_fn_custom_dash(http_request_t *request) {
     //
     // Everything else (polling cadence, d.sens handling, etc.) is
     // unchanged from the previous revision.
+
+  // --- CHUNK 6: Frontend Mapper & 1-Minute Poller ---
     poststr(request,
-        // applyUI: updates all non-graph elements from base poll response
         "function applyUI(d){"
         "setV('d-va',d.va);setV('d-pwr',d.pwr);setC('d-pwr',d.pwr_cls);"
         "setV('d-bal',d.bal);setC('d-bal',d.bal_cls);"
@@ -1411,13 +1401,21 @@ int http_fn_custom_dash(http_request_t *request) {
         "if(d.t_pwr>=18)setV('sld-pwr',d.t_pwr);"
         "setV('lbl-pwr',d.t_pwr);setV('sld-exp',d.t_exp);setV('lbl-exp',d.t_exp);"
         "dmp=d.dmp;auto=d.auto;btnColor();"
-        "if(d.sens)setV('d-sens-body',d.sens);"
+        "if(d.pf!==undefined){"
+        "setV('d-pf', d.pf);"
+        "setV('d-econs', d.econs);"
+        "setV('d-egen', d.egen);"
+        "setV('d-clh', d.clh);"
+        "setV('d-ctoday', d.ctoday);"
+        "setV('d-cyest', d.cyest);"
+        "setV('d-c2d', d.c2d);"
+        "setV('d-c3d', d.c3d);"
+        "}"
         "var dt=new Date();"
         "setV('d-day',DAYS[dt.getDay()]);"
         "setV('d-date',MOS[dt.getMonth()]+' '+dt.getDate()+', '+dt.getFullYear());"
         "}"
 
-        // Fast poller: no req= param → base endpoint, server returns all UI fields
         "function refreshFast(){"
         "var xhr=new XMLHttpRequest();"
         "xhr.onreadystatechange=function(){"
@@ -1428,7 +1426,6 @@ int http_fn_custom_dash(http_request_t *request) {
         "xhr.open('GET','/api_dash?t='+Date.now(),true);xhr.send();"
         "}"
 
-        // Graph poller: cycles net→chg→inv, only touches the canvas
         "function refreshGraph(){"
         "var gs=graph_state%3;"
         "var req=(gs===0)?'net':(gs===1?'chg':'inv');"
@@ -1451,7 +1448,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "initGrid();"
         "refreshFast();"
         "refreshGraph();"
-        "setInterval(refreshFast,7000);"
+        "setInterval(refreshFast,60000);"
         "setInterval(refreshGraph,15000);"
         "</script></body></html>"
     );
