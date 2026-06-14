@@ -14,7 +14,21 @@
 
 static int consumption_matrix[MATRIX_SIZE] = {0}; 
 static int export_matrix[MATRIX_SIZE] = {0};
-static int net_matrix[MATRIX_SIZE] = {0};
+
+// Full-precision net Wh per 15-minute period (consumption - export,
+// including decimals - this is period_net, not a truncated int).
+// Used for OBK_CONSUMPTION_LAST_HOUR and any other internal accounting
+// that needs accuracy. Sanity-clamped to +/-9999.99, not the graph's
+// display range.
+static float net_matrix[MATRIX_SIZE] = {0};
+
+// Graph-only: net_matrix values capped to -150..+300 Wh and pre-packed
+// as the (val+150)/2 byte the dashboard's "net" graph expects. Kept
+// separate from net_matrix so OBK_CONSUMPTION_LAST_HOUR (and anything
+// else reading net_matrix) sees the true, uncapped net Wh for the
+// period - only the display copy is capped/scaled. Radio payloads stay
+// small (1 byte/sample) while internal calculations keep full accuracy.
+static unsigned char net_graph_matrix[MATRIX_SIZE] = {0};
 
 // New Averages matrices
 static int charger_c_matrix[MATRIX_SIZE] = {0};
@@ -24,6 +38,16 @@ static int current_inverter_accum = 0;
 static int sample_count_30s = 0;
 
 int solar_available = 0;
+
+// Charger/inverter PWM state (0 = idle, 5 = inverter on, 18+ = charger on
+// at that %). File-scoped (not local to the 30s control block) so the
+// 15-minute rollover can save/restore them across its reset, preventing
+// the inverter from cycling off at every 15-minute boundary.
+static int persistent_state = 0;
+static int solar_excess = 0;
+static int saved_persistent_state = 0;
+static int saved_solar_excess = 0;
+static int rollover_just_happened = 0;
 
 int estimated_energy_period = 0;
 
@@ -385,25 +409,49 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
 
             if (current_matrix_index != last_matrix_index) {
                 float period_net;
-                int net_val, chg_val, inv_val;
+                int chg_val, inv_val;
 
                 consumption_matrix[last_matrix_index] = (int)real_consumption;
                 export_matrix[last_matrix_index] = (int)real_export;
 
-                // Clamp to signed 10-bit range (-512..511) before storing so
-                // the graph payload can be packed as int16 without overflow.
-                net_val = (int)real_consumption - (int)real_export;
-                if (net_val > 511)  net_val = 511;
-                if (net_val < -512) net_val = -512;
-                net_matrix[last_matrix_index] = net_val;
+                // Full-precision net Wh for this period (includes decimals).
+                period_net = real_consumption - real_export;
 
-                // Rolling last-hour net metering total: sum of the 4 most
-                // recent 15-minute net values (this one plus the previous 3).
+                // Store the true net Wh for the period (sanity-clamped to
+                // a wide +/-9999.99 range, not the graph's display range).
+                // OBK_CONSUMPTION_LAST_HOUR and other consumers need the
+                // real value - only the graph gets a capped/scaled copy.
                 {
-                    int lh_sum = 0;
+                    float net_val = period_net;
+                    if (net_val > 9999.99f)  net_val = 9999.99f;
+                    if (net_val < -9999.99f) net_val = -9999.99f;
+                    net_matrix[last_matrix_index] = net_val;
+                }
+
+                // Graph display copy: cap to -150..+300 Wh (the system
+                // hovers near zero most of the time thanks to battery
+                // buffering; larger swings are rare and simply clipped
+                // here so the graph stays readable), then pack as
+                // (val+150)/2 -> single byte 0..225.
+                {
+                    int graph_val = (int)period_net;
+                    if (graph_val > 300)  graph_val = 300;
+                    if (graph_val < -150) graph_val = -150;
+                    net_graph_matrix[last_matrix_index] = (unsigned char)((graph_val + 150) / 2);
+                }
+
+                // Rolling last-hour IMPORT total: sum of the positive
+                // (consumption) portions of the 4 most recent 15-minute
+                // net values. Export periods contribute 0 here - export
+                // is tracked separately via OBK_GENERATION_TOTAL, not as
+                // part of "last hour" - so this value is never negative.
+                {
+                    float lh_sum = 0;
                     int lh_idx = last_matrix_index;
                     for (int lh_k = 0; lh_k < 4; lh_k++) {
-                        lh_sum += net_matrix[lh_idx];
+                        if (net_matrix[lh_idx] > 0) {
+                            lh_sum += net_matrix[lh_idx];
+                        }
                         lh_idx = (lh_idx - 1 + MATRIX_SIZE) % MATRIX_SIZE;
                     }
                     sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading = lh_sum;
@@ -420,8 +468,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 charger_c_matrix[last_matrix_index] = chg_val;
                 inverter_matrix[last_matrix_index] = inv_val;
 
-                // Process Net Metering for the interval, then save once
-                period_net = real_consumption - real_export;
+                // Apply the period's net energy to the running totals.
                 if (period_net > 0) {
                     sensors[OBK_CONSUMPTION_TOTAL].lastReading += period_net;
                     sensors[OBK_CONSUMPTION_TODAY].lastReading += period_net;
@@ -446,13 +493,26 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                     lastConsumptionSaveStamp = xTaskGetTickCount();
                 }
 
+                // Preserve charger/inverter state across this reset - it will
+                // be restored below so the control logic doesn't see a
+                // transient net_energy near 0 and flip state spuriously.
+                saved_persistent_state = persistent_state;
+                saved_solar_excess = solar_excess;
+                rollover_just_happened = 1;
+
                 real_export = 0;
                 real_consumption = 0;
                 net_energy = 0;
+                // Keep the "15min Est." tile in sync with "Now" - both
+                // should drop to 0 together at the rollover, rather than
+                // est. showing the previous period's value until the next
+                // 30-second control tick recomputes it.
+                estimated_energy_period = 0;
                 
                 consumption_matrix[current_matrix_index] = 0;
                 export_matrix[current_matrix_index] = 0;
                 net_matrix[current_matrix_index] = 0;
+                net_graph_matrix[current_matrix_index] = (unsigned char)((0 + 150) / 2); // encodes 0 Wh
                 charger_c_matrix[current_matrix_index] = 0;
                 inverter_matrix[current_matrix_index] = 0;
 
@@ -488,7 +548,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             min_in_block = check_time % 15; 
             check_time_estimate_mins = 15 - min_in_block; 
             if (check_time_estimate_mins <= 0) check_time_estimate_mins = 1;
-            
+
             // 1. Predict total Wh accumulated by the end of the 15-minute period
             estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
 
@@ -499,14 +559,25 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 solar_available = 0;
             }
 
+            // Consume the rollover flag here so it doesn't linger if
+            // charger_c_auto is 0 (manual mode) on this tick.
+            int handle_rollover = rollover_just_happened;
+            rollover_just_happened = 0;
+
             // ====================================================================
             // ISOLATED LOGIC BLOCK (AUTO / MANUAL)
             // ====================================================================
             if (charger_c_auto == 1) {
-                static int solar_excess = 0; 
-                static int persistent_state = 0; // Tracks 0, 5, or 18+
-
-                if (solar_available == 0) {
+                if (handle_rollover) {
+                    // A 15-minute reset happened since the last control tick.
+                    // net_energy is based on a freshly-zeroed (very short)
+                    // window and isn't representative yet - skip the
+                    // decision this cycle and keep whatever state the
+                    // charger/inverter was already in. The next control
+                    // tick (30s later) will have a real sample to evaluate.
+                    persistent_state = saved_persistent_state;
+                    solar_excess = saved_solar_excess;
+                } else if (solar_available == 0) {
                     if (net_energy < -10.0f) {
                         persistent_state = 0;
                     } else if (net_energy > 5.0f) {
@@ -835,53 +906,69 @@ int http_fn_api_dash(http_request_t *request) {
         B("\"e\":\"%s\",\"ev\":%d", b64, energy_version);
     }
 
-    // ---- GRAPH ARRAYS (req=net | req=chg | req=inv) ----
-    // Sent as base64 of packed binary: "chg"/"inv" are 1 byte per sample
-    // (uint8, clamped 0..127), "net" is 2 bytes per sample (int16,
-    // clamped -512..511, little-endian). Values are clamped here as a
-    // final safety net even though the matrices are pre-clamped on write.
+    // ---- GRAPH ARRAYS (req=net | req=chginv) ----
+    // Sent as base64 of packed binary, 1 byte per sample (48 bytes total):
+    //   "net":    uint8, value = (clamp(net_Wh, -150, 300) + 150) / 2
+    //             i.e. net_Wh = byte*2 - 150. Halves resolution to 2Wh
+    //             steps but covers the full -150..+300 range in one byte.
+    //   "chginv": int8 (signed), +v = charger at v%% (0..100),
+    //             -v = inverter at v%% (0..100), 0 = neither.
+    //             Charger and inverter are mutually exclusive so one
+    //             signed byte replaces the previous two separate arrays.
     else if (has_ntp && req_param) {
         unsigned int msm      = NTP_GetHour() * 60 + NTP_GetMinute();
         const char  *key      = NULL;
-        int         *matrix   = NULL;
-        int          is_additive = 0, has_live = 0, live_val = 0;
         int          is_net   = 0;
+        int          is_chginv = 0;
+        int          net_live = 0, chg_live = 0, inv_live = 0;
+        int          has_live = 0;
 
         if (strncmp(req_param, "req=net", 7) == 0) {
-            key    = "net"; matrix = net_matrix; is_net = 1;
-            live_val    = (int)(real_consumption - real_export);
-            has_live    = 1; is_additive = 1;
-        } else if (strncmp(req_param, "req=chg", 7) == 0) {
-            key    = "chg"; matrix = charger_c_matrix;
-            has_live    = (sample_count_30s > 0);
-            if (has_live) live_val = current_charger_c_accum / sample_count_30s;
-        } else if (strncmp(req_param, "req=inv", 7) == 0) {
-            key    = "inv"; matrix = inverter_matrix;
-            has_live    = (sample_count_30s > 0);
-            if (has_live) live_val = current_inverter_accum / sample_count_30s;
+            key = "net"; is_net = 1;
+            net_live = (int)(real_consumption - real_export);
+            has_live = 1;
+        } else if (strncmp(req_param, "req=chginv", 10) == 0) {
+            key = "chginv"; is_chginv = 1;
+            has_live = (sample_count_30s > 0);
+            if (has_live) {
+                chg_live = current_charger_c_accum / sample_count_30s;
+                inv_live = current_inverter_accum / sample_count_30s;
+            }
         }
 
-        if (key && matrix) {
-            unsigned char raw[MATRIX_SIZE * 2]; // worst case: net @ 2 bytes/sample
-            char          b64[((MATRIX_SIZE * 2) + 2) / 3 * 4 + 1];
+        if (key) {
+            unsigned char raw[MATRIX_SIZE];
+            char          b64[((MATRIX_SIZE) + 2) / 3 * 4 + 1];
             int           raw_len = 0;
             int           b64_len;
 
             for (int i = 47; i >= 0; i--) {
                 int idx = (msm / net_metering_period - i + 96) % 96;
-                int val = matrix[idx % MATRIX_SIZE];
-                if (i == 0 && has_live)
-                    val = is_additive ? val + live_val : live_val;
+                int slot = idx % MATRIX_SIZE;
 
                 if (is_net) {
-                    if (val > 511)  val = 511;
-                    if (val < -512) val = -512;
-                    raw[raw_len++] = (unsigned char)(val & 0xFF);
-                    raw[raw_len++] = (unsigned char)((val >> 8) & 0xFF);
-                } else {
-                    if (val > 127) val = 127;
-                    if (val < 0)   val = 0;
-                    raw[raw_len++] = (unsigned char)val;
+                    if (i == 0 && has_live) {
+                        int val = net_live;
+                        if (val > 300)  val = 300;
+                        if (val < -150) val = -150;
+                        raw[raw_len++] = (unsigned char)((val + 150) / 2);
+                    } else {
+                        raw[raw_len++] = net_graph_matrix[slot];
+                    }
+                } else if (is_chginv) {
+                    int chg_v = charger_c_matrix[slot];
+                    int inv_v = inverter_matrix[slot];
+                    int combined;
+                    if (i == 0 && has_live) {
+                        chg_v = chg_live;
+                        inv_v = inv_live;
+                    }
+                    if (chg_v > 0)      combined = chg_v;
+                    else if (inv_v > 0) combined = -inv_v;
+                    else                combined = 0;
+                    if (combined > 127)  combined = 127;
+                    if (combined < -127) combined = -127;
+                    raw[raw_len++] = (unsigned char)((signed char)combined);
                 }
             }
 
