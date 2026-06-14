@@ -23,17 +23,7 @@ static int current_charger_c_accum = 0;
 static int current_inverter_accum = 0;
 static int sample_count_30s = 0;
 
-static int old_export_energy = 0;
-static int old_real_consumption = 0;
-static int net_energy_equivalent = 0;
-static int old_output = 0;
-static int update_number = 0;
-int adjust_net_energy = 50;
-int save_to_flash_flag = 0;
 int solar_available = 0;
-static int estimated_energy_start = 0;
-static int last_run_calc = 0;
-int output_index = 0;
 
 int estimated_energy_period = 0;
 
@@ -41,27 +31,11 @@ int estimated_energy_period = 0;
 static int target_export = 20;
 static int target_power = 100;
 
-// Initialize temp variables
-int total_net_consumption = 0;
-int total_net_export = 0;
-int total_consumption = 0;
-int total_export = 0;
-int current_hour_consumption = 0;
-
-int minutes_since_midnight = 0;
-int check_interval = 0;
-int check_time_estimate = 59;
-
 #define dump_load_relay_number 6
 #define charger_c_ip 21
 #define net_metering_period 15
 
-// The array where we store the power state for each of these devices
-int last_dump_load_relay[dump_load_relay_number] = {2, 2, 2, 2, 2, 2};
 static int dump_load_relay[dump_load_relay_number] = {0};
-static int dump_load_relay_timer[dump_load_relay_number] = {0};
-static int dump_load_relay_ip[dump_load_relay_number] = {23, 22, 29, 24, 27, charger_c_ip};
-int cmd_ctrl = dump_load_relay_number;
 
 static int last_matrix_index = -1; 
 int charger_c_auto = 1;
@@ -70,7 +44,6 @@ int charger_c_auto = 1;
 
 #include "../new_cfg.h"
 #include "../new_pins.h"
-#include "../cJSON/cJSON.h"
 #include "../hal/hal_flashVars.h"
 #include "../logging/logging.h"
 #include "../mqtt/new_mqtt.h"
@@ -85,21 +58,16 @@ int charger_c_auto = 1;
 
 int stat_updatesSkipped = 0;
 int stat_updatesSent = 0;
-char ip[3];
 
-static byte min_reset = 0;
 static float net_energy = 0;
 static float real_export = 0;
 static float real_consumption = 0;
 
 // Variables for the solar dump load timer
-static byte time_hour_reset = 0;
-static byte time_min_reset = 0;
 static byte old_time = 0;
 #define dump_load_hysteresis 1 
 #define max_export -3300
 
-int lastsync = 0;                 
 byte check_time = 0;                    
 byte check_hour = 0;                    
               
@@ -129,15 +97,6 @@ struct {
 }; 
 
 float lastReadingFrequency = NAN;
-portTickType energyCounterStamp;
-
-bool energyCounterStatsEnable = false;
-int energyCounterSampleCount = 60;
-int energyCounterSampleInterval = 60;
-float *energyCounterMinutes = NULL;
-portTickType energyCounterMinutesStamp;
-long energyCounterMinutesIndex;
-bool energyCounterStatsJSONEnable = false;
 
 int actual_mday = -1;
 float lastSavedEnergyCounterValue = 0.0f;
@@ -222,19 +181,6 @@ commandResult_t BL09XX_ResetEnergyCounter(const void *context, const char *cmd, 
     {
         sensors[OBK_GENERATION_TOTAL].lastReading = 0.0;
         sensors[OBK_CONSUMPTION_TOTAL].lastReading = 0.0;
-        energyCounterStamp = xTaskGetTickCount();
-        if (energyCounterStatsEnable == true)
-        {
-            if (energyCounterMinutes != NULL)
-            {
-                for(i = 0; i < energyCounterSampleCount; i++)
-                {
-                    energyCounterMinutes[i] = 0.0;
-                }
-            }
-            energyCounterMinutesStamp = xTaskGetTickCount();
-            energyCounterMinutesIndex = 0;
-        }
         for(i = OBK_CONSUMPTION__DAILY_FIRST; i <= OBK_CONSUMPTION__DAILY_LAST; i++)
         {
             sensors[i].lastReading = 0.0;
@@ -242,7 +188,6 @@ commandResult_t BL09XX_ResetEnergyCounter(const void *context, const char *cmd, 
     } else {
         value = atof(args);
         sensors[OBK_CONSUMPTION_TOTAL].lastReading = value;
-        energyCounterStamp = xTaskGetTickCount();
     }
     ConsumptionResetTime = (time_t)NTP_GetCurrentTime();
 #if WINDOWS
@@ -311,68 +256,6 @@ commandResult_t BL09XX_SetTargetExport(const void *context, const char *cmd, con
 commandResult_t BL09XX_ToggleAuto(const void *context, const char *cmd, const char *args, int cmdFlags)
 {
     charger_c_auto = !charger_c_auto;
-    return CMD_RES_OK;
-}
-
-commandResult_t BL09XX_SetupEnergyStatistic(const void *context, const char *cmd, const char *args, int cmdFlags)
-{
-    int enable, sample_time, sample_count, json_enable;
-    Tokenizer_TokenizeString(args,0);
-    if (Tokenizer_CheckArgsCountAndPrintWarning(cmd, 3)) {
-        return CMD_RES_NOT_ENOUGH_ARGUMENTS;
-    }
-
-    enable = Tokenizer_GetArgInteger(0);
-    sample_time = Tokenizer_GetArgInteger(1);
-    sample_count = Tokenizer_GetArgInteger(2);
-    if (Tokenizer_GetArgsCount() >= 4)
-        json_enable = Tokenizer_GetArgInteger(3);
-    else
-        json_enable = 0;
-
-    if (sample_time <10) sample_time = 10;
-    if (sample_time >900) sample_time = 900;
-    if (sample_count < 10) sample_count = 10;
-    if (sample_count > 180) sample_count = 180;   
-
-    if (enable != 0)
-    {
-        energyCounterStatsEnable = true;
-        if (energyCounterSampleCount != sample_count)
-        {
-            if (energyCounterMinutes != NULL)
-                os_free(energyCounterMinutes);
-            energyCounterMinutes = NULL;
-            energyCounterSampleCount = sample_count;
-        }
-        if (energyCounterSampleInterval != sample_time)
-        {
-            energyCounterSampleInterval = sample_time;
-            if (energyCounterMinutes != NULL)
-                memset(energyCounterMinutes, 0, energyCounterSampleCount*sizeof(float));
-        }
-        if (energyCounterMinutes == NULL)
-        {
-            energyCounterMinutes = (float*)os_malloc(sample_count*sizeof(float));
-            if (energyCounterMinutes != NULL)
-            {
-                memset(energyCounterMinutes, 0, energyCounterSampleCount*sizeof(float));
-            }
-        }
-        energyCounterMinutesStamp = xTaskGetTickCount();
-        energyCounterMinutesIndex = 0;
-    } else {
-        energyCounterStatsEnable = false;
-        if (energyCounterMinutes != NULL)
-        {
-            os_free(energyCounterMinutes);
-            energyCounterMinutes = NULL;
-        }
-        energyCounterSampleCount = sample_count;
-        energyCounterSampleInterval = sample_time;
-    }
-
-    energyCounterStatsJSONEnable = (json_enable != 0) ? true : false; 
     return CMD_RES_OK;
 }
 
@@ -455,12 +338,6 @@ float BL_ChangeEnergyUnitIfNeeded(float Wh) {
 void BL_ProcessUpdate(float voltage, float current, float power, float frequency, float energyWh) {
     int i;
     int xPassedTicks;
-    float energy_counter_data = 0;
-              
-    cJSON* root;
-    cJSON* stats;
-    char *msg;
-    portTickType interval;
     time_t ntpTime;
     struct tm *ltm;
     char datetime[64];
@@ -514,6 +391,18 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 if (net_val < -512) net_val = -512;
                 net_matrix[last_matrix_index] = net_val;
 
+                // Rolling last-hour net metering total: sum of the 4 most
+                // recent 15-minute net values (this one plus the previous 3).
+                {
+                    int lh_sum = 0;
+                    int lh_idx = last_matrix_index;
+                    for (int lh_k = 0; lh_k < 4; lh_k++) {
+                        lh_sum += net_matrix[lh_idx];
+                        lh_idx = (lh_idx - 1 + MATRIX_SIZE) % MATRIX_SIZE;
+                    }
+                    sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading = lh_sum;
+                }
+
                 // Write averages for the interval, clamped to 0..127 so the
                 // graph payload can be packed as a single byte each.
                 chg_val = sample_count_30s ? (current_charger_c_accum / sample_count_30s) : 0;
@@ -554,8 +443,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 real_export = 0;
                 real_consumption = 0;
                 net_energy = 0;
-                energyCounterMinutesIndex = 0;
-                lastsync = 0; 
                 
                 consumption_matrix[current_matrix_index] = 0;
                 export_matrix[current_matrix_index] = 0;
@@ -573,9 +460,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
 
         if (!(check_time == old_time))
         {
-            min_reset = 1;
             old_time = check_time;
-            lastsync++;
         }
                                                          
         net_energy = (real_consumption - real_export);                               
@@ -600,15 +485,8 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             
             // 1. Predict total Wh accumulated by the end of the 15-minute period
             estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
-            
-            // 2. Extrapolate immediate equivalent energy
-            if (min_in_block > 0) {
-                net_energy_equivalent = (int)((float)net_energy * (15.0f / min_in_block));                                               
-            } else {
-                net_energy_equivalent = (int)net_energy; 
-            }
 
-            // 3. Update Base Solar State
+            // 2. Update Base Solar State
             if (net_energy < -((float)target_export + 10.0f)) {
                 solar_available = 1;
             } else if (net_energy > 10.0f) {
@@ -712,90 +590,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         }
     }
 
-    if (energyCounterStatsEnable == true)
-    {
-        interval = energyCounterSampleInterval;
-        interval *= (1000 / portTICK_PERIOD_MS); 
-        if ((xTaskGetTickCount() - energyCounterMinutesStamp) >= interval)
-        {
-            if (energyCounterMinutes != NULL) {
-                sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading = 0;
-                for(int j = 0; j < energyCounterSampleCount; j++) {
-                    sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading  += energyCounterMinutes[j];
-                }
-            }
-            mark_energy_dirty();
-            if ((energyCounterStatsJSONEnable == true) && (MQTT_IsReady() == true))
-            {
-                root = cJSON_CreateObject();
-                cJSON_AddNumberToObject(root, "uptime", g_secondsElapsed);
-                cJSON_AddNumberToObject(root, "consumption_total", BL_ChangeEnergyUnitIfNeeded(DRV_GetReading(OBK_CONSUMPTION_TOTAL)));
-                cJSON_AddNumberToObject(root, "consumption_last_hour", BL_ChangeEnergyUnitIfNeeded(DRV_GetReading(OBK_CONSUMPTION_LAST_HOUR)));
-                cJSON_AddNumberToObject(root, "consumption_stat_index", energyCounterMinutesIndex);
-                cJSON_AddNumberToObject(root, "consumption_sample_count", energyCounterSampleCount);
-                cJSON_AddNumberToObject(root, "consumption_sampling_period", energyCounterSampleInterval);
-                if(NTP_IsTimeSynced() == true)
-                {
-                    cJSON_AddNumberToObject(root, "consumption_today", BL_ChangeEnergyUnitIfNeeded(DRV_GetReading(OBK_CONSUMPTION_TODAY)));
-                    cJSON_AddNumberToObject(root, "consumption_yesterday", BL_ChangeEnergyUnitIfNeeded(DRV_GetReading(OBK_CONSUMPTION_YESTERDAY)));
-                    ltm = gmtime(&ConsumptionResetTime);
-                    if (NTP_GetTimesZoneOfsSeconds()>0)
-                    {
-                        snprintf(datetime,sizeof(datetime), "%04i-%02i-%02iT%02i:%02i+%02i:%02i",
-                                 ltm->tm_year+1900, ltm->tm_mon+1, ltm->tm_mday, ltm->tm_hour, ltm->tm_min,
-                                 NTP_GetTimesZoneOfsSeconds()/3600, (NTP_GetTimesZoneOfsSeconds()/60) % 60);
-                    } else {
-                        snprintf(datetime, sizeof(datetime), "%04i-%02i-%02iT%02i:%02i-%02i:%02i",
-                                 ltm->tm_year+1900, ltm->tm_mon+1, ltm->tm_mday, ltm->tm_hour, ltm->tm_min,
-                                 abs(NTP_GetTimesZoneOfsSeconds()/3600), (abs(NTP_GetTimesZoneOfsSeconds())/60) % 60);
-                    }
-                    cJSON_AddStringToObject(root, "consumption_clear_date", datetime);
-                }
-
-                if (energyCounterMinutes != NULL)
-                {
-                    stats = cJSON_CreateArray();
-                    for(int k = 0; k < energyCounterSampleCount; k++)
-                    {
-                        cJSON_AddItemToArray(stats, cJSON_CreateNumber(energyCounterMinutes[k]));
-                    }
-                    cJSON_AddItemToObject(root, "consumption_samples", stats);
-                }
-
-                if(NTP_IsTimeSynced() == true)
-                {
-                    stats = cJSON_CreateArray();
-                    for(int m = OBK_CONSUMPTION__DAILY_FIRST; m <= OBK_CONSUMPTION__DAILY_LAST; m++)
-                    {
-                        cJSON_AddItemToArray(stats, cJSON_CreateNumber(DRV_GetReading(m)));
-                    }
-                    cJSON_AddItemToObject(root, "consumption_daily", stats);
-                }
-
-                msg = cJSON_PrintUnformatted(root);
-                cJSON_Delete(root);
-
-                MQTT_PublishMain_StringString("consumption_stats", msg, 0);
-                stat_updatesSent++;
-                os_free(msg);
-            }
-
-            if (energyCounterMinutes != NULL)
-            {
-                for (int n=energyCounterSampleCount-1; n>0; n--)
-                {
-                    energyCounterMinutes[n] = energyCounterMinutes[n-1];   
-                }
-                energyCounterMinutes[0] = 0.0;
-            }
-            energyCounterMinutesStamp = xTaskGetTickCount();
-            energyCounterMinutesIndex++;
-        }
-
-        if (energyCounterMinutes != NULL)
-            energyCounterMinutes[0] += energy_counter_data;
-    }
-
     for(i = OBK__FIRST; i <= OBK__LAST; i++)
     {
         diff = sensors[i].lastSentValue - sensors[i].lastReading;
@@ -871,24 +665,6 @@ void BL_Shared_Init(void)
         sensors[i].noChangeFrame = 0;
         sensors[i].lastReading = 0;
     }
-    energyCounterStamp = xTaskGetTickCount(); 
-
-    if (energyCounterStatsEnable == true)
-    {
-        if (energyCounterMinutes == NULL)
-        {
-            energyCounterMinutes = (float*)os_malloc(energyCounterSampleCount*sizeof(float));
-        }
-        if (energyCounterMinutes != NULL)
-        {
-            for(i = 0; i < energyCounterSampleCount; i++)
-            {
-                energyCounterMinutes[i] = 0.0;
-            }   
-        }
-        energyCounterMinutesStamp = xTaskGetTickCount();
-        energyCounterMinutesIndex = 0;
-    }
 
     addLogAdv(LOG_INFO, LOG_FEATURE_ENERGYMETER, "Read ENERGYMETER status values. sizeof(ENERGY_METERING_DATA)=%d\n", sizeof(ENERGY_METERING_DATA));
 
@@ -911,7 +687,6 @@ void BL_Shared_Init(void)
     CMD_RegisterCommand("ToggleAuto", BL09XX_ToggleAuto, NULL);
     CMD_RegisterCommand("SetTargetPower", BL09XX_SetTargetPower, NULL);
     CMD_RegisterCommand("SetTargetExport", BL09XX_SetTargetExport, NULL);
-    CMD_RegisterCommand("SetupEnergyStats", BL09XX_SetupEnergyStatistic, NULL);
     CMD_RegisterCommand("VCPPublishThreshold", BL09XX_VCPPublishThreshold, NULL);
     CMD_RegisterCommand("VCPPrecision", BL09XX_VCPPrecision, NULL);
     CMD_RegisterCommand("VCPPublishIntervals", BL09XX_VCPPublishIntervals, NULL);
