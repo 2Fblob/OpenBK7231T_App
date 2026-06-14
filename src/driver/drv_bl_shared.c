@@ -3,6 +3,7 @@
 #include <stdlib.h>   // atof, abs
 #include <stdio.h>    // snprintf
 #include <string.h>   // memset, strlen
+#include "dash_frontend.h"
 
 // Charger C mapping constants
 #define CHARGER_MIN_PWM   10       // lowest useful duty for the supply
