@@ -1251,7 +1251,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "  setV('d-bal', d.bal);   setC('d-bal', d.bal_cls);"
         "  setV('d-est', d.est);   setC('d-est', d.est_cls);"
         "  setV('c-v',   d.chg_v); setS('c-v',   d.chg_c);"
-        "  setV('c-chg', (d.dmp >= 18 && d.dmp <= 100) ? 'Charging: ' + d.dmp + '%' : '');"
+        "  setV('c-chg', (d.dmp >= 18 && d.dmp <= 100) ? 'Charging' : '');"
         "  if (d.clk !== lastClk) { setV('d-clk', d.clk); lastClk = d.clk; }"
         "  if (d.t_pwr >= 18) setV('sld-pwr', d.t_pwr);"
         "  setV('lbl-pwr', d.t_pwr); setV('sld-exp', d.t_exp); setV('lbl-exp', d.t_exp);"
