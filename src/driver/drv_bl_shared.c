@@ -978,33 +978,67 @@ int http_fn_api_dash(http_request_t *request) {
     }
 
     // ---- ENERGY TOTALS (req=energy) ----
+    // Packed binary layout (19 bytes), little-endian, base64-encoded:
+    //   byte 0:     pf   (uint8,  value*100, 0.00-1.00)
+    //   bytes 1-4:  econs (uint32, kWh*100)  -- lifetime total consumption
+    //   bytes 5-8:  egen  (uint32, kWh*100)  -- lifetime total generation
+    //   bytes 9-10: clh    (uint16, kWh*100) -- last hour
+    //   bytes 11-12:ctoday (uint16, kWh*100)
+    //   bytes 13-14:cyest  (uint16, kWh*100)
+    //   bytes 15-16:c2d    (uint16, kWh*100)
+    //   bytes 17-18:c3d    (uint16, kWh*100)
+    // The browser divides by 100 and appends " kWh" itself.
     else if (strncmp(req_param, "req=energy", 10) == 0 && has_ntp) {
-        B("\"pf\":\"%.*f\","
-          "\"econs\":\"%.*f kWh\","
-          "\"egen\":\"%.*f kWh\","
-          "\"clh\":\"%.*f Wh\","
-          "\"ctoday\":\"%.*f Wh\","
-          "\"cyest\":\"%.*f Wh\","
-          "\"c2d\":\"%.*f Wh\","
-          "\"c3d\":\"%.*f Wh\","
-          "\"ev\":%d",
-          sensors[OBK_POWER_FACTOR].rounding_decimals,
-              sensors[OBK_POWER_FACTOR].lastReading,
-          sensors[OBK_CONSUMPTION_TOTAL].rounding_decimals,
-              0.001 * sensors[OBK_CONSUMPTION_TOTAL].lastReading,
-          sensors[OBK_GENERATION_TOTAL].rounding_decimals,
-              0.001 * sensors[OBK_GENERATION_TOTAL].lastReading,
-          sensors[OBK_CONSUMPTION_LAST_HOUR].rounding_decimals,
-              sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading,
-          sensors[OBK_CONSUMPTION_TODAY].rounding_decimals,
-              sensors[OBK_CONSUMPTION_TODAY].lastReading,
-          sensors[OBK_CONSUMPTION_YESTERDAY].rounding_decimals,
-              sensors[OBK_CONSUMPTION_YESTERDAY].lastReading,
-          sensors[OBK_CONSUMPTION_2_DAYS_AGO].rounding_decimals,
-              sensors[OBK_CONSUMPTION_2_DAYS_AGO].lastReading,
-          sensors[OBK_CONSUMPTION_3_DAYS_AGO].rounding_decimals,
-              sensors[OBK_CONSUMPTION_3_DAYS_AGO].lastReading,
-          energy_version);
+        unsigned char raw[19];
+        char          b64[((19 + 2) / 3) * 4 + 1];
+        int           b64_len;
+
+        float pf_v     = sensors[OBK_POWER_FACTOR].lastReading;
+        unsigned long econs_v  = (unsigned long)(0.1 * sensors[OBK_CONSUMPTION_TOTAL].lastReading + 0.5f);
+        unsigned long egen_v   = (unsigned long)(0.1 * sensors[OBK_GENERATION_TOTAL].lastReading + 0.5f);
+        unsigned int  clh_v    = (unsigned int)(0.1 * sensors[OBK_CONSUMPTION_LAST_HOUR].lastReading + 0.5f);
+        unsigned int  ctoday_v = (unsigned int)(0.1 * sensors[OBK_CONSUMPTION_TODAY].lastReading + 0.5f);
+        unsigned int  cyest_v  = (unsigned int)(0.1 * sensors[OBK_CONSUMPTION_YESTERDAY].lastReading + 0.5f);
+        unsigned int  c2d_v    = (unsigned int)(0.1 * sensors[OBK_CONSUMPTION_2_DAYS_AGO].lastReading + 0.5f);
+        unsigned int  c3d_v    = (unsigned int)(0.1 * sensors[OBK_CONSUMPTION_3_DAYS_AGO].lastReading + 0.5f);
+
+        int pf_byte = (int)(pf_v * 100.0f + 0.5f);
+        if (pf_byte > 255) pf_byte = 255;
+        if (pf_byte < 0)   pf_byte = 0;
+
+        if (clh_v    > 0xFFFF) clh_v    = 0xFFFF;
+        if (ctoday_v > 0xFFFF) ctoday_v = 0xFFFF;
+        if (cyest_v  > 0xFFFF) cyest_v  = 0xFFFF;
+        if (c2d_v    > 0xFFFF) c2d_v    = 0xFFFF;
+        if (c3d_v    > 0xFFFF) c3d_v    = 0xFFFF;
+
+        raw[0] = (unsigned char)pf_byte;
+
+        raw[1] = (unsigned char)(econs_v & 0xFF);
+        raw[2] = (unsigned char)((econs_v >> 8) & 0xFF);
+        raw[3] = (unsigned char)((econs_v >> 16) & 0xFF);
+        raw[4] = (unsigned char)((econs_v >> 24) & 0xFF);
+
+        raw[5] = (unsigned char)(egen_v & 0xFF);
+        raw[6] = (unsigned char)((egen_v >> 8) & 0xFF);
+        raw[7] = (unsigned char)((egen_v >> 16) & 0xFF);
+        raw[8] = (unsigned char)((egen_v >> 24) & 0xFF);
+
+        raw[9]  = (unsigned char)(clh_v & 0xFF);
+        raw[10] = (unsigned char)((clh_v >> 8) & 0xFF);
+        raw[11] = (unsigned char)(ctoday_v & 0xFF);
+        raw[12] = (unsigned char)((ctoday_v >> 8) & 0xFF);
+        raw[13] = (unsigned char)(cyest_v & 0xFF);
+        raw[14] = (unsigned char)((cyest_v >> 8) & 0xFF);
+        raw[15] = (unsigned char)(c2d_v & 0xFF);
+        raw[16] = (unsigned char)((c2d_v >> 8) & 0xFF);
+        raw[17] = (unsigned char)(c3d_v & 0xFF);
+        raw[18] = (unsigned char)((c3d_v >> 8) & 0xFF);
+
+        b64_len = base64_encode(raw, sizeof(raw), b64);
+        b64[b64_len] = '\0';
+
+        B("\"e\":\"%s\",\"ev\":%d", b64, energy_version);
     }
 
     // ---- GRAPH ARRAYS (req=net | req=chg | req=inv) ----
