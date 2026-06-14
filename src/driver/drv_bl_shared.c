@@ -81,6 +81,7 @@ int charger_c_auto = 1;
 #include "../cmnds/cmd_public.h" //for enum EventCode
 #include <math.h>
 #include <time.h>
+#include "rtos_pub.h" // for rtos_delay_milliseconds() - used as a watchdog-yield point in long routines
 
 int stat_updatesSkipped = 0;
 int stat_updatesSent = 0;
@@ -482,6 +483,92 @@ float BL_ChangeEnergyUnitIfNeeded(float Wh) {
     return Wh;
 }
 
+// ====================================================================
+// PER-SENSOR CHANGE DETECTION / MQTT PUBLISH
+// ====================================================================
+// Pulled out of BL_ProcessUpdate so this ~60-line block (14 sensors,
+// each potentially doing an event-handler dispatch and an MQTT
+// publish) is its own scope, and so we have a clear place to yield to
+// the watchdog around the only blocking I/O in this section - the
+// MQTT publish calls. Rate-limiting (changeSendThreshold /
+// changeDoNotSendMinFrames / changeSendAlwaysFrames) is unchanged.
+static void BL_PublishSensorChanges(void)
+{
+    struct tm *ltm;
+    char datetime[64];
+    float diff;
+
+    for (int i = OBK__FIRST; i <= OBK__LAST; i++)
+    {
+        diff = sensors[i].lastSentValue - sensors[i].lastReading;
+        if ( ((fabsf(diff) > sensors[i].changeSendThreshold) &&
+              (sensors[i].noChangeFrame >= changeDoNotSendMinFrames)) ||
+            (sensors[i].noChangeFrame >= changeSendAlwaysFrames) )
+        {
+            enum EventCode eventChangeCode;
+            sensors[i].noChangeFrame = 0;
+
+            switch (i) {
+            case OBK_VOLTAGE:                                   eventChangeCode = CMD_EVENT_CHANGE_VOLTAGE;                       break;
+            case OBK_CURRENT:                                   eventChangeCode = CMD_EVENT_CHANGE_CURRENT;                       break;
+            case OBK_POWER:                                     eventChangeCode = CMD_EVENT_CHANGE_POWER;                         break;
+            case OBK_CONSUMPTION_TOTAL:                         eventChangeCode = CMD_EVENT_CHANGE_CONSUMPTION_TOTAL;             break;
+            case OBK_GENERATION_TOTAL:                          eventChangeCode = CMD_EVENT_CHANGE_GENERATION_TOTAL;              break;
+            case OBK_CONSUMPTION_LAST_HOUR:                     eventChangeCode = CMD_EVENT_CHANGE_CONSUMPTION_LAST_HOUR;         break;
+            default:                                            eventChangeCode = CMD_EVENT_NONE;                                 break;
+            }
+            switch (eventChangeCode) {
+            case CMD_EVENT_NONE:
+                break;
+            case CMD_EVENT_CHANGE_CURRENT: 
+            {
+                int prev_mA = sensors[i].lastSentValue * 1000;
+                int now_mA = sensors[i].lastReading * 1000;
+                EventHandlers_ProcessVariableChange_Integer(eventChangeCode, prev_mA,now_mA);
+                break;
+            }
+            default:
+                EventHandlers_ProcessVariableChange_Integer(eventChangeCode, sensors[i].lastSentValue, sensors[i].lastReading);
+                break;
+            }
+
+            if (MQTT_IsReady() == true)
+            {
+                sensors[i].lastSentValue = sensors[i].lastReading;
+                if (i == OBK_CONSUMPTION_CLEAR_DATE) {
+                    sensors[i].lastReading = ConsumptionResetTime; 
+                    ltm = gmtime(&ConsumptionResetTime);
+                    if (NTP_GetTimesZoneOfsSeconds()>0)
+                    {
+                        snprintf(datetime, sizeof(datetime), "%04i-%02i-%02iT%02i:%02i+%02i:%02i",
+                                 ltm->tm_year+1900, ltm->tm_mon+1, ltm->tm_mday, ltm->tm_hour, ltm->tm_min,
+                                 NTP_GetTimesZoneOfsSeconds()/3600, (NTP_GetTimesZoneOfsSeconds()/60) % 60);
+                    } else {
+                        snprintf(datetime, sizeof(datetime), "%04i-%02i-%02iT%02i:%02i-%02i:%02i",
+                                 ltm->tm_year+1900, ltm->tm_mon+1, ltm->tm_mday, ltm->tm_hour, ltm->tm_min,
+                                 abs(NTP_GetTimesZoneOfsSeconds()/3600), (abs(NTP_GetTimesZoneOfsSeconds())/60) % 60);
+                    }
+                    MQTT_PublishMain_StringString(sensors[i].names.name_mqtt, datetime, 0);
+                } else { 
+                    float val = sensors[i].lastReading;
+                    if (sensors[i].names.units == UNIT_WH) val = BL_ChangeEnergyUnitIfNeeded(val);
+                    MQTT_PublishMain_StringFloat(sensors[i].names.name_mqtt, val, sensors[i].rounding_decimals, 0);
+                }
+                stat_updatesSent++;
+
+                // Yield right after each publish - this loop can fire
+                // an MQTT publish for several sensors back-to-back in
+                // the same call, and the publish call is the only
+                // blocking I/O in this loop.
+                rtos_delay_milliseconds(5);
+            }
+        } else {
+            sensors[i].noChangeFrame++;
+            stat_updatesSkipped++;
+        }
+    }
+}
+
 void BL_ProcessUpdate(float voltage, float current, float power, float frequency, float energyWh) {
     int i;
     int xPassedTicks;
@@ -496,7 +583,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     time_t ntpTime;
     struct tm *ltm;
     char datetime[64];
-    float diff;
 
     // Defensive: if either accumulator was ever poisoned (NaN/Inf) by a
     // bad sample, clear it now rather than letting it keep propagating
@@ -571,6 +657,12 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 savetoflash = 1;
             }
         }
+
+        // Yield here: the block above is the heaviest fixed-cost
+        // section in this function (rewrites 5 matrices), and only
+        // runs once per 15 minutes - cheap insurance against it
+        // landing right before something else expensive.
+        rtos_delay_milliseconds(5);
 
         if (!(check_time == old_time))
         {
@@ -662,9 +754,33 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 
                 dump_load_relay[5] = persistent_state;
 
-                // Send Commands via process loop
-                snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
-                CMD_ExecuteCommand(fallback_cmd, 0);
+                // Only hit the charger controller's HTTP API when the
+                // commanded state actually changes. This previously
+                // fired unconditionally every 30s regardless of
+                // whether dump_load_relay[5] had changed - i.e. once
+                // per control tick for the entire life of the device,
+                // even sending a value the charger already has. Near
+                // zero net power, persistent_state never changes after
+                // the first tick, so this now sends nothing further;
+                // at high |power| (import or export) it sends roughly
+                // as often as the PI loop above actually changes its
+                // output - bounded by how often the real state needs
+                // to change, not by a fixed timer.
+                if (dump_load_relay[5] != last_dump_load_relay[5]) {
+                    // Fresh watchdog window immediately before the one
+                    // blocking network call in this function. If the
+                    // charger device is slow to respond - e.g. because
+                    // this very command is asking it to switch/ramp
+                    // under load - this maximizes the time available
+                    // for CMD_ExecuteCommand to return before any
+                    // watchdog governing this task would fire.
+                    rtos_delay_milliseconds(5);
+
+                    snprintf(fallback_cmd, sizeof(fallback_cmd), "SendGet http://192.168.8.%d/cm?cmnd=Channel3%%20%d", charger_c_ip, dump_load_relay[5]);
+                    CMD_ExecuteCommand(fallback_cmd, 0);
+
+                    last_dump_load_relay[5] = dump_load_relay[5];
+                }
             } // END OF AUTO BLOCK
         }
     } 
@@ -767,6 +883,12 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         }
     }
 
+    // Yield before the (optional) energy-stats block below, which can
+    // build and MQTT-publish a JSON array of up to ~180 samples plus
+    // daily history - by far the largest variable-cost block in this
+    // function when energyCounterStatsJSONEnable is on.
+    rtos_delay_milliseconds(5);
+
     if (energyCounterStatsEnable == true)
     {
         interval = energyCounterSampleInterval;
@@ -851,69 +973,12 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             energyCounterMinutes[0] += energy_counter_data;
     }
 
-    for(i = OBK__FIRST; i <= OBK__LAST; i++)
-    {
-        diff = sensors[i].lastSentValue - sensors[i].lastReading;
-        if ( ((fabsf(diff) > sensors[i].changeSendThreshold) &&
-              (sensors[i].noChangeFrame >= changeDoNotSendMinFrames)) ||
-            (sensors[i].noChangeFrame >= changeSendAlwaysFrames) )
-        {
-            enum EventCode eventChangeCode;
-            sensors[i].noChangeFrame = 0;
-
-            switch (i) {
-            case OBK_VOLTAGE:                                   eventChangeCode = CMD_EVENT_CHANGE_VOLTAGE;                       break;
-            case OBK_CURRENT:                                   eventChangeCode = CMD_EVENT_CHANGE_CURRENT;                       break;
-            case OBK_POWER:                                     eventChangeCode = CMD_EVENT_CHANGE_POWER;                         break;
-            case OBK_CONSUMPTION_TOTAL:                         eventChangeCode = CMD_EVENT_CHANGE_CONSUMPTION_TOTAL;             break;
-            case OBK_GENERATION_TOTAL:                          eventChangeCode = CMD_EVENT_CHANGE_GENERATION_TOTAL;              break;
-            case OBK_CONSUMPTION_LAST_HOUR:                     eventChangeCode = CMD_EVENT_CHANGE_CONSUMPTION_LAST_HOUR;         break;
-            default:                                            eventChangeCode = CMD_EVENT_NONE;                                 break;
-            }
-            switch (eventChangeCode) {
-            case CMD_EVENT_NONE:
-                break;
-            case CMD_EVENT_CHANGE_CURRENT: 
-            {
-                int prev_mA = sensors[i].lastSentValue * 1000;
-                int now_mA = sensors[i].lastReading * 1000;
-                EventHandlers_ProcessVariableChange_Integer(eventChangeCode, prev_mA,now_mA);
-                break;
-            }
-            default:
-                EventHandlers_ProcessVariableChange_Integer(eventChangeCode, sensors[i].lastSentValue, sensors[i].lastReading);
-                break;
-            }
-
-            if (MQTT_IsReady() == true)
-            {
-                sensors[i].lastSentValue = sensors[i].lastReading;
-                if (i == OBK_CONSUMPTION_CLEAR_DATE) {
-                    sensors[i].lastReading = ConsumptionResetTime; 
-                    ltm = gmtime(&ConsumptionResetTime);
-                    if (NTP_GetTimesZoneOfsSeconds()>0)
-                    {
-                        snprintf(datetime, sizeof(datetime), "%04i-%02i-%02iT%02i:%02i+%02i:%02i",
-                                 ltm->tm_year+1900, ltm->tm_mon+1, ltm->tm_mday, ltm->tm_hour, ltm->tm_min,
-                                 NTP_GetTimesZoneOfsSeconds()/3600, (NTP_GetTimesZoneOfsSeconds()/60) % 60);
-                    } else {
-                        snprintf(datetime, sizeof(datetime), "%04i-%02i-%02iT%02i:%02i-%02i:%02i",
-                                 ltm->tm_year+1900, ltm->tm_mon+1, ltm->tm_mday, ltm->tm_hour, ltm->tm_min,
-                                 abs(NTP_GetTimesZoneOfsSeconds()/3600), (abs(NTP_GetTimesZoneOfsSeconds())/60) % 60);
-                    }
-                    MQTT_PublishMain_StringString(sensors[i].names.name_mqtt, datetime, 0);
-                } else { 
-                    float val = sensors[i].lastReading;
-                    if (sensors[i].names.units == UNIT_WH) val = BL_ChangeEnergyUnitIfNeeded(val);
-                    MQTT_PublishMain_StringFloat(sensors[i].names.name_mqtt, val, sensors[i].rounding_decimals, 0);
-                }
-                stat_updatesSent++;
-            }
-        } else {
-            sensors[i].noChangeFrame++;
-            stat_updatesSkipped++;
-        }
-    }       
+    // Per-sensor change detection + MQTT publish (extracted above into
+    // BL_PublishSensorChanges, which yields to the watchdog around its
+    // own publish calls).
+    rtos_delay_milliseconds(5);
+    BL_PublishSensorChanges();
+    rtos_delay_milliseconds(5);
 
     if (((((sensors[OBK_CONSUMPTION_TOTAL].lastReading - lastSavedEnergyCounterValue) >= changeSavedThresholdEnergy) ||
            ((xTaskGetTickCount() - lastConsumptionSaveStamp) >= (6 * 3600 * 1000 / portTICK_PERIOD_MS)) || 
@@ -1125,6 +1190,7 @@ int http_fn_api_dash(http_request_t *request) {
 
     B("}");
     buf[pos] = '\0';
+    rtos_delay_milliseconds(5);
     poststr(request, buf);
     poststr(request, NULL);
 
@@ -1132,15 +1198,9 @@ int http_fn_api_dash(http_request_t *request) {
     return 0;
 }
 
-#include "rtos_pub.h" // Required for rtos_delay_milliseconds
-
 // ====================================================================
 // OPTIMIZED DASHBOARD FRONTEND (Sequential State Machine Javascript)
 // Includes Apple Full-Screen Web App Settings
-// iOS 5 Safari compatible (legacy -webkit-box flexbox fallback,
-// vh fallback, box-sizing prefix) while still rendering correctly
-// on modern browsers (Chrome/Firefox/modern Safari use the
-// unprefixed flex/box-sizing/vh declarations, which win the cascade)
 // ====================================================================
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
@@ -1154,35 +1214,38 @@ int http_fn_custom_dash(http_request_t *request) {
         "<meta name='apple-mobile-web-app-status-bar-style' content='black-translucent'>"
         "<title>My Dashboard</title>"
         "<style>"
-        "html,body{height:100%;margin:0;background:#000;}"
-        "#dash-container{max-width:1200px;width:100%;margin:0 auto;min-height:100%;min-height:100vh;background:#121212;padding:10px 20px 20px;-webkit-box-sizing:border-box;box-sizing:border-box;font-family:-apple-system,sans-serif;color:#eee;position:relative;}"
-        ".top-stats{display:-webkit-box;-webkit-box-orient:horizontal;-webkit-box-align:center;-webkit-box-pack:justify;display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between;-webkit-align-items:center;align-items:center;background:#222;padding:18px;border-radius:8px;text-align:center;margin-top:15px;width:100%;-webkit-box-sizing:border-box;box-sizing:border-box;white-space:nowrap;}"
-        ".top-stats div{display:-webkit-box;-webkit-box-orient:vertical;-webkit-box-align:stretch;-webkit-box-pack:center;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-justify-content:center;justify-content:center;margin:0 10px;}"
+        "body{margin:0;background:#000;display:-webkit-flex;display:flex;-webkit-justify-content:center;justify-content:center;}"
+        "#dash-container{max-width:1200px;width:100%;min-height:100vh;background:#121212;padding:10px 20px 20px;box-sizing:border-box;font-family:-apple-system,sans-serif;color:#eee;position:relative;}"
+        ".top-stats{display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between;-webkit-align-items:center;align-items:center;background:#222;padding:18px;border-radius:8px;text-align:center;margin-top:15px;width:100%;box-sizing:border-box;white-space:nowrap;}"
+        ".top-stats div{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-justify-content:center;justify-content:center;margin:0 10px;}"
         ".top-stats label{color:#888;font-size:20px;text-transform:uppercase;margin-bottom:6px;display:block;}"
         ".top-stats b{font-size:38px;font-weight:600;}"
         ".c-exp{color:#4caf50;}.c-imp{color:#f44336;}"
-        ".dash-row{display:-webkit-box;-webkit-box-orient:horizontal;-webkit-box-align:stretch;display:-webkit-flex;display:flex;margin-top:15px;-webkit-align-items:stretch;align-items:stretch;}"
-        ".left-col{-webkit-box-flex:0;-webkit-flex:0 0 230px;flex:0 0 230px;width:230px;background:#222;padding:10px;border-radius:8px;overflow-y:auto;margin-right:15px;-webkit-box-sizing:border-box;box-sizing:border-box;}"
-        ".right-side{-webkit-box-flex:1;-webkit-flex:1;flex:1;display:-webkit-box;-webkit-box-orient:vertical;-webkit-box-align:stretch;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;min-width:0;}"
-        ".top-row{display:-webkit-box;-webkit-box-orient:horizontal;-webkit-box-align:stretch;display:-webkit-flex;display:flex;height:400px;-webkit-align-items:stretch;align-items:stretch;}"
+        ".dash-row{display:-webkit-flex;display:flex;margin-top:15px;-webkit-align-items:stretch;align-items:stretch;}"
+        ".left-col{-webkit-flex:0 0 230px;flex:0 0 230px;width:230px;background:#222;padding:10px;border-radius:8px;overflow-y:auto;margin-right:15px;box-sizing:border-box;}"
+        ".right-side{-webkit-flex:1;flex:1;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;min-width:0;}"
+        ".top-row{display:-webkit-flex;display:flex;height:400px;-webkit-align-items:stretch;align-items:stretch;}"
         ".sens-tbl{width:100%;font-size:14px;border-collapse:collapse;}"
         ".sens-tbl td{padding:5px 0;border-bottom:1px solid #333;font-weight:normal;}"
         ".sens-tbl td:last-child{font-weight:bold;text-align:right;}"
         ".sens-grp-lbl{font-size:12px;color:#888;text-transform:uppercase;margin:14px 0 8px;}"
-        ".graph-col{-webkit-box-flex:1;-webkit-flex:1;flex:1;background:#222;padding:15px;border-radius:8px;display:-webkit-box;-webkit-box-orient:horizontal;-webkit-box-align:center;-webkit-box-pack:center;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;-webkit-box-sizing:border-box;box-sizing:border-box;margin-right:15px;overflow:hidden;}"
+    );
+    rtos_delay_milliseconds(5);
+    poststr(request,
+        ".graph-col{-webkit-flex:1;flex:1;background:#222;padding:15px;border-radius:8px;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;box-sizing:border-box;margin-right:15px;overflow:hidden;}"
         "canvas{width:100%;max-width:592px;height:auto;display:block;margin:0 auto;}"
-        ".right-col{-webkit-box-flex:0;-webkit-flex:0 0 240px;flex:0 0 240px;width:240px;background:#222;padding:20px;border-radius:8px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-box-align:stretch;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-box-sizing:border-box;box-sizing:border-box;}"
+        ".right-col{-webkit-flex:0 0 240px;flex:0 0 240px;width:240px;background:#222;padding:20px;border-radius:8px;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;box-sizing:border-box;}"
         ".btn-tgl{width:100%;height:50px;border:none;color:#fff;border-radius:6px;font-weight:bold;cursor:pointer;font-size:16px;margin-bottom:12px;display:block;}"
         ".sld-v-block{margin-top:10px;width:100%;}"
         ".sld-v-block label{display:block;font-size:11px;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;}"
-        ".bottom-clk-row{background:#222;border-radius:8px;padding:10px 25px;margin-top:15px;display:-webkit-box;-webkit-box-orient:horizontal;-webkit-box-align:center;-webkit-box-pack:center;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;-webkit-box-sizing:border-box;box-sizing:border-box;width:100%;}"
-        ".clk-text-wrap{display:-webkit-box;-webkit-box-orient:vertical;-webkit-box-align:start;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:flex-start;align-items:flex-start;margin-left:20px;text-align:left;}"
+        ".bottom-clk-row{background:#222;border-radius:8px;padding:10px 25px;margin-top:15px;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;box-sizing:border-box;width:100%;}"
+        ".clk-text-wrap{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:flex-start;align-items:flex-start;margin-left:20px;text-align:left;}"
         "#d-clk{font-size:120px;font-weight:bold;color:#09F;font-family:monospace;line-height:1;letter-spacing:-3px;}"
         "#d-day{font-size:26px;font-weight:600;color:#eee;text-transform:uppercase;font-family:sans-serif;letter-spacing:2px;margin-bottom:2px;}"
         "#d-date{font-size:16px;color:#888;font-family:sans-serif;}"
         ".close-btn{position:absolute;top:10px;right:15px;font-size:16px;color:#666;cursor:pointer;z-index:10;}"
         ".sep-lbl{font-size:12px;color:#888;margin-bottom:8px;text-transform:uppercase;}"
-        ".leg-row{display:-webkit-box;-webkit-box-orient:horizontal;-webkit-box-align:center;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;margin-bottom:10px;}"
+        ".leg-row{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;margin-bottom:10px;}"
         ".leg-swatch{display:inline-block;width:18px;height:4px;margin-right:12px;}"
         ".param-lbl{font-size:12px;color:#888;text-transform:uppercase;margin-top:10px;margin-bottom:5px;}"
         "#c-chg{display:block;font-size:14px;font-weight:normal;color:#4caf50;margin-top:4px;}"
@@ -1314,7 +1377,9 @@ int http_fn_custom_dash(http_request_t *request) {
         "  if(c)c.style.background=(dmp>18)?'#4caf50':((dmp>=10&&dmp<=18)?'#8bc34a':'#555');"
         "  if(m){m.innerHTML=(auto===1)?'AUTO':'MANUAL';m.style.background=(auto===1)?'#09F':'#f44336';}"
         "}"
-
+    );
+    rtos_delay_milliseconds(5);
+    poststr(request,
         "function applyCore(d) {"
         "  setV('d-va',  d.va);"
         "  setV('d-pwr', d.pwr);   setC('d-pwr', d.pwr_cls);"
@@ -1346,7 +1411,9 @@ int http_fn_custom_dash(http_request_t *request) {
         "  if (d.inv) state_inv = d.inv;"
         "  renderGraph();"
         "}"
-
+    );
+    rtos_delay_milliseconds(5);
+    poststr(request,
         "function runCycle() {"
         "  if (busy) return;"
         "  busy = true;"
@@ -1396,7 +1463,9 @@ int http_fn_custom_dash(http_request_t *request) {
         "    });"
         "  });"
         "}"
-
+    );
+    rtos_delay_milliseconds(5);
+    poststr(request,
         "function _buildPath(ctx,p){"
         "ctx.beginPath();ctx.moveTo(p[0].x,p[0].y);"
         "for(var i=0;i<47;i++){"
@@ -1405,7 +1474,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "}"
         "ctx.lineTo(p[47].x,p[47].y);"
         "}"
-
+        
         "function drawSmooth(ctx,arr,baseY,clamp,fill,col,lw){"
         "if(!arr||arr.length===0)return;"
         "var p=[],h,i;"
@@ -1424,7 +1493,9 @@ int http_fn_custom_dash(http_request_t *request) {
         "ctx.beginPath();ctx.arc(p[47].x,p[47].y,lw*1.5,0,2*Math.PI);"
         "ctx.fillStyle=col;ctx.fill();"
         "}"
-
+    );
+    rtos_delay_milliseconds(5);
+    poststr(request,
         "var gridCanvas=null;"
         "function initGrid(){"
         "var gc=document.createElement('canvas');"
@@ -1463,7 +1534,9 @@ int http_fn_custom_dash(http_request_t *request) {
         "ctx.stroke();"
         "gridCanvas=gc;"
         "}"
-
+    );
+    rtos_delay_milliseconds(5);
+    poststr(request,
         "function renderGraph(){"
         "var c=document.getElementById('dynCanvas');"
         "if(!c||!c.getContext)return;"
@@ -1488,7 +1561,6 @@ int http_fn_custom_dash(http_request_t *request) {
         "initGrid(); loadAll(); setInterval(runCycle, 10000);"
         "</script></body></html>"
     );
-   rtos_delay_milliseconds(5);
 
     poststr(request, NULL);
     return 0;
