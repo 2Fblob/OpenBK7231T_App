@@ -156,6 +156,49 @@ int changeDoNotSendMinFrames = 20;
 int energy_version = 0;
 void mark_energy_dirty(void) { energy_version++; }
 
+// ====================================================================
+// SAFETY HELPERS
+// ====================================================================
+// A single BL_ProcessUpdate() sample should only ever represent a tiny
+// fraction of a Wh (sub-second to few-second deltas). If the metering
+// chip ever hands back a glitched/garbage sample (NaN, Inf, or some
+// huge finite value from a misread register), reject it here so it
+// can never poison real_consumption / real_export. Without this, one
+// bad sample turns those float accumulators into NaN/Inf for the rest
+// of the current 15-minute window (NaN + x = NaN, Inf + 0 = Inf).
+static inline float sanitize_energy_sample(float wh)
+{
+    if (isnan(wh) || isinf(wh)) return 0.0f;
+    if (wh > 100.0f || wh < -100.0f) return 0.0f;
+    return wh;
+}
+
+// (int)f is undefined behaviour in C if f is NaN/Inf or outside the
+// range of int. In practice on ARM/VFP this commonly "saturates" to
+// exactly +-2147483648 (an 11-digit number) - which is precisely the
+// kind of value that can blow past a fixed-size JSON buffer further
+// down the line. Saturate explicitly and predictably instead.
+static inline int safe_int(float f)
+{
+    if (isnan(f) || isinf(f)) return 0;
+    if (f >  2000000000.0f) return  2000000000;
+    if (f < -2000000000.0f) return -2000000000;
+    return (int)f;
+}
+
+// safe_int() already keeps individual values within +-2e9, but adding
+// two such values together (e.g. a stored matrix slot + the "live"
+// reading) can still overflow a 32-bit int. Do the addition in 64-bit
+// and clamp back down so the JSON output is always a bounded, finite
+// number of digits.
+static inline int safe_int_add(int a, int b)
+{
+    long long sum = (long long)a + (long long)b;
+    if (sum >  2000000000LL) return  2000000000;
+    if (sum < -2000000000LL) return -2000000000;
+    return (int)sum;
+}
+
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 {
     // Dashboard migrated to standalone JSON architecture on /dash
@@ -358,6 +401,13 @@ commandResult_t BL09XX_VCPPrecision(const void *context, const char *cmd, const 
 
     for (i = 0; i < Tokenizer_GetArgsCount(); i++) {
         int val = Tokenizer_GetArgInteger(i);
+        // rounding_decimals is used directly as the precision in "%.*f".
+        // An unbounded/garbage value here (e.g. a typo'd large argument)
+        // would make a single field expand to hundreds of characters and
+        // blow the fixed-size JSON buffer in http_fn_api_dash. Clamp to a
+        // sane display range.
+        if (val < 0) val = 0;
+        if (val > 6) val = 6;
         switch(i) {
         case 0: sensors[OBK_VOLTAGE].rounding_decimals = val; break;
         case 1: sensors[OBK_CURRENT].rounding_decimals = val; break;
@@ -448,6 +498,12 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     char datetime[64];
     float diff;
 
+    // Defensive: if either accumulator was ever poisoned (NaN/Inf) by a
+    // bad sample, clear it now rather than letting it keep propagating
+    // into net_energy / matrices / JSON output every call.
+    if (isnan(real_consumption) || isinf(real_consumption)) real_consumption = 0.0f;
+    if (isnan(real_export)      || isinf(real_export))      real_export      = 0.0f;
+
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced())
     {                                          
         check_time = NTP_GetMinute();
@@ -483,9 +539,9 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             }
 
             if (current_matrix_index != last_matrix_index) {
-                consumption_matrix[last_matrix_index] = (int)real_consumption;
-                export_matrix[last_matrix_index] = (int)real_export;
-                net_matrix[last_matrix_index] = (int)real_consumption - (int)real_export;
+                consumption_matrix[last_matrix_index] = safe_int(real_consumption);
+                export_matrix[last_matrix_index] = safe_int(real_export);
+                net_matrix[last_matrix_index] = safe_int(real_consumption) - safe_int(real_export);
 
                 // Write averages for the interval
                 charger_c_matrix[last_matrix_index] = sample_count_30s ? (current_charger_c_accum / sample_count_30s) : 0;
@@ -544,13 +600,13 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             if (check_time_estimate_mins <= 0) check_time_estimate_mins = 1;
             
             // 1. Predict total Wh accumulated by the end of the 15-minute period
-            estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
+            estimated_energy_period = safe_int(net_energy) + (safe_int(sensors[OBK_POWER].lastReading) * check_time_estimate_mins) / 60;
             
             // 2. Extrapolate immediate equivalent energy
             if (min_in_block > 0) {
-                net_energy_equivalent = (int)((float)net_energy * (15.0f / min_in_block));                                               
+                net_energy_equivalent = safe_int((float)net_energy * (15.0f / min_in_block));
             } else {
-                net_energy_equivalent = (int)net_energy; 
+                net_energy_equivalent = safe_int(net_energy);
             }
 
             // 3. Update Base Solar State
@@ -631,7 +687,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     sensors[OBK_CURRENT].lastReading = current;
     sensors[OBK_POWER].lastReading = power;
     sensors[OBK_POWER_APPARENT].lastReading = sensors[OBK_VOLTAGE].lastReading * sensors[OBK_CURRENT].lastReading;
-    sensors[OBK_POWER_REACTIVE].lastReading = ((int)net_energy);
+    sensors[OBK_POWER_REACTIVE].lastReading = safe_int(net_energy);
     sensors[OBK_POWER_FACTOR].lastReading = (sensors[OBK_POWER_APPARENT].lastReading == 0 ? 1 : sensors[OBK_POWER].lastReading / sensors[OBK_POWER_APPARENT].lastReading);
 
     lastReadingFrequency = frequency;
@@ -645,15 +701,20 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     } 
     else
     {
-        if ((int)power>0)
+        // Reject NaN/Inf/implausible single-sample energy deltas before
+        // they can poison real_consumption / real_export (see
+        // sanitize_energy_sample for why this matters).
+        float energyWh_clean = sanitize_energy_sample(energyWh);
+
+        if (power > 0.0f)
         {
-            real_consumption += energyWh;
+            real_consumption += energyWh_clean;
         }
         else
         {
             if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
             {
-                real_export += energyWh;
+                real_export += energyWh_clean;
             }
         }
     }
@@ -956,7 +1017,12 @@ int http_fn_api_dash(http_request_t *request) {
     int  pos     = 0;
     int  has_ntp = CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced();
 
-#define B(...) pos += snprintf(buf + pos, sizeof(buf) - pos, __VA_ARGS__)
+#define B(...) do { \
+        int _avail = ((int)sizeof(buf) > pos) ? (int)sizeof(buf) - pos : 0; \
+        int _n = snprintf(buf + pos, (size_t)_avail, __VA_ARGS__); \
+        if (_n > 0) pos += _n; \
+        if (pos > (int)sizeof(buf) - 1) pos = (int)sizeof(buf) - 1; \
+    } while (0)
 
     B("{");
 
@@ -1032,7 +1098,7 @@ int http_fn_api_dash(http_request_t *request) {
 
         if (strncmp(req_param, "req=net", 7) == 0) {
             key    = "net"; matrix = net_matrix;
-            live_val    = (int)(real_consumption - real_export);
+            live_val    = safe_int(real_consumption - real_export);
             has_live    = 1; is_additive = 1;
         } else if (strncmp(req_param, "req=chg", 7) == 0) {
             key    = "chg"; matrix = charger_c_matrix;
@@ -1050,7 +1116,7 @@ int http_fn_api_dash(http_request_t *request) {
                 int idx = (msm / net_metering_period - i + 96) % 96;
                 int val = matrix[idx % MATRIX_SIZE];
                 if (i == 0 && has_live)
-                    val = is_additive ? val + live_val : live_val;
+                    val = is_additive ? safe_int_add(val, live_val) : live_val;
                 B("%d%s", val, i == 0 ? "" : ",");
             }
             B("]");
@@ -1071,6 +1137,10 @@ int http_fn_api_dash(http_request_t *request) {
 // ====================================================================
 // OPTIMIZED DASHBOARD FRONTEND (Sequential State Machine Javascript)
 // Includes Apple Full-Screen Web App Settings
+// iOS 5 Safari compatible (legacy -webkit-box flexbox fallback,
+// vh fallback, box-sizing prefix) while still rendering correctly
+// on modern browsers (Chrome/Firefox/modern Safari use the
+// unprefixed flex/box-sizing/vh declarations, which win the cascade)
 // ====================================================================
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
@@ -1084,35 +1154,35 @@ int http_fn_custom_dash(http_request_t *request) {
         "<meta name='apple-mobile-web-app-status-bar-style' content='black-translucent'>"
         "<title>My Dashboard</title>"
         "<style>"
-        "body{margin:0;background:#000;display:-webkit-flex;display:flex;-webkit-justify-content:center;justify-content:center;}"
-        "#dash-container{max-width:1200px;width:100%;min-height:100vh;background:#121212;padding:10px 20px 20px;box-sizing:border-box;font-family:-apple-system,sans-serif;color:#eee;position:relative;}"
-        ".top-stats{display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between;-webkit-align-items:center;align-items:center;background:#222;padding:18px;border-radius:8px;text-align:center;margin-top:15px;width:100%;box-sizing:border-box;white-space:nowrap;}"
-        ".top-stats div{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-justify-content:center;justify-content:center;margin:0 10px;}"
+        "html,body{height:100%;margin:0;background:#000;}"
+        "#dash-container{max-width:1200px;width:100%;margin:0 auto;min-height:100%;min-height:100vh;background:#121212;padding:10px 20px 20px;-webkit-box-sizing:border-box;box-sizing:border-box;font-family:-apple-system,sans-serif;color:#eee;position:relative;}"
+        ".top-stats{display:-webkit-box;-webkit-box-orient:horizontal;-webkit-box-align:center;-webkit-box-pack:justify;display:-webkit-flex;display:flex;-webkit-justify-content:space-between;justify-content:space-between;-webkit-align-items:center;align-items:center;background:#222;padding:18px;border-radius:8px;text-align:center;margin-top:15px;width:100%;-webkit-box-sizing:border-box;box-sizing:border-box;white-space:nowrap;}"
+        ".top-stats div{display:-webkit-box;-webkit-box-orient:vertical;-webkit-box-align:stretch;-webkit-box-pack:center;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-justify-content:center;justify-content:center;margin:0 10px;}"
         ".top-stats label{color:#888;font-size:20px;text-transform:uppercase;margin-bottom:6px;display:block;}"
         ".top-stats b{font-size:38px;font-weight:600;}"
         ".c-exp{color:#4caf50;}.c-imp{color:#f44336;}"
-        ".dash-row{display:-webkit-flex;display:flex;margin-top:15px;-webkit-align-items:stretch;align-items:stretch;}"
-        ".left-col{-webkit-flex:0 0 230px;flex:0 0 230px;width:230px;background:#222;padding:10px;border-radius:8px;overflow-y:auto;margin-right:15px;box-sizing:border-box;}"
-        ".right-side{-webkit-flex:1;flex:1;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;min-width:0;}"
-        ".top-row{display:-webkit-flex;display:flex;height:400px;-webkit-align-items:stretch;align-items:stretch;}"
+        ".dash-row{display:-webkit-box;-webkit-box-orient:horizontal;-webkit-box-align:stretch;display:-webkit-flex;display:flex;margin-top:15px;-webkit-align-items:stretch;align-items:stretch;}"
+        ".left-col{-webkit-box-flex:0;-webkit-flex:0 0 230px;flex:0 0 230px;width:230px;background:#222;padding:10px;border-radius:8px;overflow-y:auto;margin-right:15px;-webkit-box-sizing:border-box;box-sizing:border-box;}"
+        ".right-side{-webkit-box-flex:1;-webkit-flex:1;flex:1;display:-webkit-box;-webkit-box-orient:vertical;-webkit-box-align:stretch;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;min-width:0;}"
+        ".top-row{display:-webkit-box;-webkit-box-orient:horizontal;-webkit-box-align:stretch;display:-webkit-flex;display:flex;height:400px;-webkit-align-items:stretch;align-items:stretch;}"
         ".sens-tbl{width:100%;font-size:14px;border-collapse:collapse;}"
         ".sens-tbl td{padding:5px 0;border-bottom:1px solid #333;font-weight:normal;}"
         ".sens-tbl td:last-child{font-weight:bold;text-align:right;}"
         ".sens-grp-lbl{font-size:12px;color:#888;text-transform:uppercase;margin:14px 0 8px;}"
-        ".graph-col{-webkit-flex:1;flex:1;background:#222;padding:15px;border-radius:8px;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;box-sizing:border-box;margin-right:15px;overflow:hidden;}"
+        ".graph-col{-webkit-box-flex:1;-webkit-flex:1;flex:1;background:#222;padding:15px;border-radius:8px;display:-webkit-box;-webkit-box-orient:horizontal;-webkit-box-align:center;-webkit-box-pack:center;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;-webkit-box-sizing:border-box;box-sizing:border-box;margin-right:15px;overflow:hidden;}"
         "canvas{width:100%;max-width:592px;height:auto;display:block;margin:0 auto;}"
-        ".right-col{-webkit-flex:0 0 240px;flex:0 0 240px;width:240px;background:#222;padding:20px;border-radius:8px;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;box-sizing:border-box;}"
+        ".right-col{-webkit-box-flex:0;-webkit-flex:0 0 240px;flex:0 0 240px;width:240px;background:#222;padding:20px;border-radius:8px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-box-align:stretch;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-box-sizing:border-box;box-sizing:border-box;}"
         ".btn-tgl{width:100%;height:50px;border:none;color:#fff;border-radius:6px;font-weight:bold;cursor:pointer;font-size:16px;margin-bottom:12px;display:block;}"
         ".sld-v-block{margin-top:10px;width:100%;}"
         ".sld-v-block label{display:block;font-size:11px;color:#888;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;}"
-        ".bottom-clk-row{background:#222;border-radius:8px;padding:10px 25px;margin-top:15px;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;box-sizing:border-box;width:100%;}"
-        ".clk-text-wrap{display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:flex-start;align-items:flex-start;margin-left:20px;text-align:left;}"
+        ".bottom-clk-row{background:#222;border-radius:8px;padding:10px 25px;margin-top:15px;display:-webkit-box;-webkit-box-orient:horizontal;-webkit-box-align:center;-webkit-box-pack:center;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;-webkit-box-sizing:border-box;box-sizing:border-box;width:100%;}"
+        ".clk-text-wrap{display:-webkit-box;-webkit-box-orient:vertical;-webkit-box-align:start;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:flex-start;align-items:flex-start;margin-left:20px;text-align:left;}"
         "#d-clk{font-size:120px;font-weight:bold;color:#09F;font-family:monospace;line-height:1;letter-spacing:-3px;}"
         "#d-day{font-size:26px;font-weight:600;color:#eee;text-transform:uppercase;font-family:sans-serif;letter-spacing:2px;margin-bottom:2px;}"
         "#d-date{font-size:16px;color:#888;font-family:sans-serif;}"
         ".close-btn{position:absolute;top:10px;right:15px;font-size:16px;color:#666;cursor:pointer;z-index:10;}"
         ".sep-lbl{font-size:12px;color:#888;margin-bottom:8px;text-transform:uppercase;}"
-        ".leg-row{display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;margin-bottom:10px;}"
+        ".leg-row{display:-webkit-box;-webkit-box-orient:horizontal;-webkit-box-align:center;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;margin-bottom:10px;}"
         ".leg-swatch{display:inline-block;width:18px;height:4px;margin-right:12px;}"
         ".param-lbl{font-size:12px;color:#888;text-transform:uppercase;margin-top:10px;margin-bottom:5px;}"
         "#c-chg{display:block;font-size:14px;font-weight:normal;color:#4caf50;margin-top:4px;}"
@@ -1335,7 +1405,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "}"
         "ctx.lineTo(p[47].x,p[47].y);"
         "}"
-        
+
         "function drawSmooth(ctx,arr,baseY,clamp,fill,col,lw){"
         "if(!arr||arr.length===0)return;"
         "var p=[],h,i;"
