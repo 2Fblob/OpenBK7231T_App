@@ -16,7 +16,7 @@
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
 
-    // --- CHUNK 1: Header & CSS ---
+    // --- CHUNK 1a: Header & CSS (part 1) ---
     poststr(request,
         "<!DOCTYPE html><html><head>"
         "<meta charset='utf-8'>"
@@ -40,6 +40,11 @@ int http_fn_custom_dash(http_request_t *request) {
         ".sens-tbl td{padding:5px 0;border-bottom:1px solid #333;font-weight:normal;}"
         ".sens-tbl td:last-child{font-weight:bold;text-align:right;}"
         ".sens-grp-lbl{font-size:12px;color:#888;text-transform:uppercase;margin:14px 0 8px;}"
+    );
+    rtos_delay_milliseconds(1);
+
+    // --- CHUNK 1b: Header & CSS (part 2) ---
+    poststr(request,
         ".graph-col{-webkit-box-flex:1;-webkit-flex:1;flex:1;background:#222;padding:15px;border-radius:8px;display:-webkit-box;-webkit-box-orient:horizontal;-webkit-box-align:center;-webkit-box-pack:center;display:-webkit-flex;display:flex;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;-webkit-box-sizing:border-box;box-sizing:border-box;margin-right:15px;overflow:hidden;}"
         "canvas{width:100%;max-width:592px;height:auto;display:block;margin:0 auto;}"
         ".right-col{-webkit-box-flex:0;-webkit-flex:0 0 240px;flex:0 0 240px;width:240px;background:#222;padding:20px;border-radius:8px;display:-webkit-box;-webkit-box-orient:vertical;-webkit-box-align:stretch;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-box-sizing:border-box;box-sizing:border-box;}"
@@ -50,6 +55,11 @@ int http_fn_custom_dash(http_request_t *request) {
         ".clk-text-wrap{display:-webkit-box;-webkit-box-orient:vertical;-webkit-box-align:start;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:flex-start;align-items:flex-start;margin-left:20px;text-align:left;}"
         "#d-clk{font-size:120px;font-weight:bold;color:#09F;font-family:monospace;line-height:1;letter-spacing:-3px;}"
         "#d-day{font-size:26px;font-weight:600;color:#eee;text-transform:uppercase;font-family:sans-serif;letter-spacing:2px;margin-bottom:2px;}"
+    );
+    rtos_delay_milliseconds(1);
+
+    // --- CHUNK 1c: Header & CSS (part 3) ---
+    poststr(request,
         "#d-date{font-size:16px;color:#888;font-family:sans-serif;}"
         ".close-btn{position:absolute;top:10px;right:15px;font-size:16px;color:#666;cursor:pointer;z-index:10;}"
         ".sep-lbl{font-size:12px;color:#888;margin-bottom:8px;text-transform:uppercase;}"
@@ -59,7 +69,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "#c-chg{display:block;font-size:14px;font-weight:normal;color:#4caf50;margin-top:4px;}"
         "</style></head><body>"
     );
-    rtos_delay_milliseconds(5);
+    rtos_delay_milliseconds(1);
 
     // --- CHUNK 2: Core Layout Structure ---
     poststr(request,
@@ -72,7 +82,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "<div id='d-chg-box'><label id='c-lbl'>ESS Status:</label><b id='c-v'>--</b><span id='c-chg'></span></div>"
         "</div>"
     );
-    rtos_delay_milliseconds(5);
+    rtos_delay_milliseconds(1);
 
     // --- CHUNK 3a: Left column (Sensor Data + Energy Totals + Consumption Details + Graph Legend)
         poststr(request,
@@ -105,7 +115,7 @@ int http_fn_custom_dash(http_request_t *request) {
             "<div class='right-side'>"
             "<div class='top-row'>"
         );
-        rtos_delay_milliseconds(5);
+        rtos_delay_milliseconds(1);
 
         // --- CHUNK 3b: Graph column, right column ("ESS System Modes")
         poststr(request,
@@ -137,9 +147,9 @@ int http_fn_custom_dash(http_request_t *request) {
             "</div>"
             "</div>"
         );
-        rtos_delay_milliseconds(5);
+        rtos_delay_milliseconds(1);
 
-    // --- CHUNK 6: Sequential State Machine Javascript ---
+    // --- CHUNK 6a: State machine JS (vars, helpers, polling logic) ---
     poststr(request,
         "<script>"
         "var busy        = false;"
@@ -200,19 +210,28 @@ int http_fn_custom_dash(http_request_t *request) {
         "  setV('d-date', MOS[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear());"
         "}"
 
-        "function applyEnergy(d) {"
-        "  setV('d-pf',     d.pf);     setV('d-econs',  d.econs);"
-        "  setV('d-egen',   d.egen);   setV('d-clh',    d.clh);"
-        "  setV('d-ctoday', d.ctoday); setV('d-cyest',  d.cyest);"
-        "  setV('d-c2d',    d.c2d);    setV('d-c3d',    d.c3d);"
-        "  lastEv      = d.ev;"
-        "  lastEnergyT = Date.now();"
-        "}"
-
         "function _b64toBytes(s){"
         "var bin=atob(s),len=bin.length,out=new Uint8Array(len);"
         "for(var i=0;i<len;i++)out[i]=bin.charCodeAt(i);"
         "return out;"
+        "}"
+
+        "function _u16(b,o){return b[o]|(b[o+1]<<8);}"
+        "function _u32(b,o){return (b[o]|(b[o+1]<<8)|(b[o+2]<<16)|(b[o+3]<<24))>>>0;}"
+        "function _kwh(v){return (v/100).toFixed(2)+' kWh';}"
+
+        "function applyEnergy(d) {"
+        "  var b=_b64toBytes(d.e);"
+        "  setV('d-pf',     (b[0]/100).toFixed(2));"
+        "  setV('d-econs',  _kwh(_u32(b,1)));"
+        "  setV('d-egen',   _kwh(_u32(b,5)));"
+        "  setV('d-clh',    _kwh(_u16(b,9)));"
+        "  setV('d-ctoday', _kwh(_u16(b,11)));"
+        "  setV('d-cyest',  _kwh(_u16(b,13)));"
+        "  setV('d-c2d',    _kwh(_u16(b,15)));"
+        "  setV('d-c3d',    _kwh(_u16(b,17)));"
+        "  lastEv      = d.ev;"
+        "  lastEnergyT = Date.now();"
         "}"
 
         "function _decodeU8(s){"
@@ -287,7 +306,13 @@ int http_fn_custom_dash(http_request_t *request) {
         "    });"
         "  });"
         "}"
+        "</script>"
+    );
+    rtos_delay_milliseconds(1);
 
+    // --- CHUNK 6b: Graph drawing JS + init/start ---
+    poststr(request,
+        "<script>"
         "function _buildPath(ctx,p){"
         "ctx.beginPath();ctx.moveTo(p[0].x,p[0].y);"
         "for(var i=0;i<47;i++){"
@@ -379,7 +404,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "initGrid(); loadAll(); setInterval(runCycle, 10000);"
         "</script></body></html>"
     );
-   rtos_delay_milliseconds(5);
+   rtos_delay_milliseconds(1);
 
 poststr(request, NULL);
     return 0;
