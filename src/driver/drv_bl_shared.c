@@ -1188,7 +1188,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "#c-chg{display:block;font-size:14px;font-weight:normal;color:#4caf50;margin-top:4px;}"
         "</style></head><body>"
     );
-    rtos_delay_milliseconds(1);
+    rtos_delay_milliseconds(5);
 
     // --- CHUNK 2: Core Layout Structure ---
     poststr(request,
@@ -1201,7 +1201,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "<div id='d-chg-box'><label id='c-lbl'>ESS Status:</label><b id='c-v'>--</b><span id='c-chg'></span></div>"
         "</div>"
     );
-    rtos_delay_milliseconds(1);
+    rtos_delay_milliseconds(5);
 
     // --- CHUNK 3a: Left column (Sensor Data + Energy Totals + Consumption Details + Graph Legend)
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) {
@@ -1235,7 +1235,7 @@ int http_fn_custom_dash(http_request_t *request) {
             "<div class='right-side'>"
             "<div class='top-row'>"
         );
-        rtos_delay_milliseconds(1);
+        rtos_delay_milliseconds(5);
 
         // --- CHUNK 3b: Graph column, right column ("ESS System Modes")
         poststr(request,
@@ -1267,7 +1267,7 @@ int http_fn_custom_dash(http_request_t *request) {
             "</div>"
             "</div>"
         );
-        rtos_delay_milliseconds(1);
+        rtos_delay_milliseconds(5);
     }
 
     // --- CHUNK 6: Sequential State Machine Javascript ---
@@ -1488,6 +1488,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "initGrid(); loadAll(); setInterval(runCycle, 10000);"
         "</script></body></html>"
     );
+   rtos_delay_milliseconds(5);
 
     poststr(request, NULL);
     return 0;
