@@ -156,6 +156,49 @@ int changeDoNotSendMinFrames = 20;
 int energy_version = 0;
 void mark_energy_dirty(void) { energy_version++; }
 
+// ====================================================================
+// SAFETY HELPERS
+// ====================================================================
+// A single BL_ProcessUpdate() sample should only ever represent a tiny
+// fraction of a Wh (sub-second to few-second deltas). If the metering
+// chip ever hands back a glitched/garbage sample (NaN, Inf, or some
+// huge finite value from a misread register), reject it here so it
+// can never poison real_consumption / real_export. Without this, one
+// bad sample turns those float accumulators into NaN/Inf for the rest
+// of the current 15-minute window (NaN + x = NaN, Inf + 0 = Inf).
+static inline float sanitize_energy_sample(float wh)
+{
+    if (isnan(wh) || isinf(wh)) return 0.0f;
+    if (wh > 100.0f || wh < -100.0f) return 0.0f;
+    return wh;
+}
+
+// (int)f is undefined behaviour in C if f is NaN/Inf or outside the
+// range of int. In practice on ARM/VFP this commonly "saturates" to
+// exactly +-2147483648 (an 11-digit number) - which is precisely the
+// kind of value that can blow past a fixed-size JSON buffer further
+// down the line. Saturate explicitly and predictably instead.
+static inline int safe_int(float f)
+{
+    if (isnan(f) || isinf(f)) return 0;
+    if (f >  2000000000.0f) return  2000000000;
+    if (f < -2000000000.0f) return -2000000000;
+    return (int)f;
+}
+
+// safe_int() already keeps individual values within +-2e9, but adding
+// two such values together (e.g. a stored matrix slot + the "live"
+// reading) can still overflow a 32-bit int. Do the addition in 64-bit
+// and clamp back down so the JSON output is always a bounded, finite
+// number of digits.
+static inline int safe_int_add(int a, int b)
+{
+    long long sum = (long long)a + (long long)b;
+    if (sum >  2000000000LL) return  2000000000;
+    if (sum < -2000000000LL) return -2000000000;
+    return (int)sum;
+}
+
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 {
     // Dashboard migrated to standalone JSON architecture on /dash
@@ -358,6 +401,13 @@ commandResult_t BL09XX_VCPPrecision(const void *context, const char *cmd, const 
 
     for (i = 0; i < Tokenizer_GetArgsCount(); i++) {
         int val = Tokenizer_GetArgInteger(i);
+        // rounding_decimals is used directly as the precision in "%.*f".
+        // An unbounded/garbage value here (e.g. a typo'd large argument)
+        // would make a single field expand to hundreds of characters and
+        // blow the fixed-size JSON buffer in http_fn_api_dash. Clamp to a
+        // sane display range.
+        if (val < 0) val = 0;
+        if (val > 6) val = 6;
         switch(i) {
         case 0: sensors[OBK_VOLTAGE].rounding_decimals = val; break;
         case 1: sensors[OBK_CURRENT].rounding_decimals = val; break;
@@ -448,6 +498,12 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     char datetime[64];
     float diff;
 
+    // Defensive: if either accumulator was ever poisoned (NaN/Inf) by a
+    // bad sample, clear it now rather than letting it keep propagating
+    // into net_energy / matrices / JSON output every call.
+    if (isnan(real_consumption) || isinf(real_consumption)) real_consumption = 0.0f;
+    if (isnan(real_export)      || isinf(real_export))      real_export      = 0.0f;
+
     if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced())
     {                                          
         check_time = NTP_GetMinute();
@@ -483,9 +539,9 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             }
 
             if (current_matrix_index != last_matrix_index) {
-                consumption_matrix[last_matrix_index] = (int)real_consumption;
-                export_matrix[last_matrix_index] = (int)real_export;
-                net_matrix[last_matrix_index] = (int)real_consumption - (int)real_export;
+                consumption_matrix[last_matrix_index] = safe_int(real_consumption);
+                export_matrix[last_matrix_index] = safe_int(real_export);
+                net_matrix[last_matrix_index] = safe_int(real_consumption) - safe_int(real_export);
 
                 // Write averages for the interval
                 charger_c_matrix[last_matrix_index] = sample_count_30s ? (current_charger_c_accum / sample_count_30s) : 0;
@@ -544,13 +600,13 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             if (check_time_estimate_mins <= 0) check_time_estimate_mins = 1;
             
             // 1. Predict total Wh accumulated by the end of the 15-minute period
-            estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
+            estimated_energy_period = safe_int(net_energy) + (safe_int(sensors[OBK_POWER].lastReading) * check_time_estimate_mins) / 60;
             
             // 2. Extrapolate immediate equivalent energy
             if (min_in_block > 0) {
-                net_energy_equivalent = (int)((float)net_energy * (15.0f / min_in_block));                                               
+                net_energy_equivalent = safe_int((float)net_energy * (15.0f / min_in_block));
             } else {
-                net_energy_equivalent = (int)net_energy; 
+                net_energy_equivalent = safe_int(net_energy);
             }
 
             // 3. Update Base Solar State
@@ -631,7 +687,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     sensors[OBK_CURRENT].lastReading = current;
     sensors[OBK_POWER].lastReading = power;
     sensors[OBK_POWER_APPARENT].lastReading = sensors[OBK_VOLTAGE].lastReading * sensors[OBK_CURRENT].lastReading;
-    sensors[OBK_POWER_REACTIVE].lastReading = ((int)net_energy);
+    sensors[OBK_POWER_REACTIVE].lastReading = safe_int(net_energy);
     sensors[OBK_POWER_FACTOR].lastReading = (sensors[OBK_POWER_APPARENT].lastReading == 0 ? 1 : sensors[OBK_POWER].lastReading / sensors[OBK_POWER_APPARENT].lastReading);
 
     lastReadingFrequency = frequency;
@@ -645,15 +701,20 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     } 
     else
     {
-        if ((int)power>0)
+        // Reject NaN/Inf/implausible single-sample energy deltas before
+        // they can poison real_consumption / real_export (see
+        // sanitize_energy_sample for why this matters).
+        float energyWh_clean = sanitize_energy_sample(energyWh);
+
+        if (power > 0.0f)
         {
-            real_consumption += energyWh;
+            real_consumption += energyWh_clean;
         }
         else
         {
             if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
             {
-                real_export += energyWh;
+                real_export += energyWh_clean;
             }
         }
     }
@@ -956,7 +1017,12 @@ int http_fn_api_dash(http_request_t *request) {
     int  pos     = 0;
     int  has_ntp = CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced();
 
-#define B(...) pos += snprintf(buf + pos, sizeof(buf) - pos, __VA_ARGS__)
+#define B(...) do { \
+        int _avail = ((int)sizeof(buf) > pos) ? (int)sizeof(buf) - pos : 0; \
+        int _n = snprintf(buf + pos, (size_t)_avail, __VA_ARGS__); \
+        if (_n > 0) pos += _n; \
+        if (pos > (int)sizeof(buf) - 1) pos = (int)sizeof(buf) - 1; \
+    } while (0)
 
     B("{");
 
@@ -1032,7 +1098,7 @@ int http_fn_api_dash(http_request_t *request) {
 
         if (strncmp(req_param, "req=net", 7) == 0) {
             key    = "net"; matrix = net_matrix;
-            live_val    = (int)(real_consumption - real_export);
+            live_val    = safe_int(real_consumption - real_export);
             has_live    = 1; is_additive = 1;
         } else if (strncmp(req_param, "req=chg", 7) == 0) {
             key    = "chg"; matrix = charger_c_matrix;
@@ -1050,7 +1116,7 @@ int http_fn_api_dash(http_request_t *request) {
                 int idx = (msm / net_metering_period - i + 96) % 96;
                 int val = matrix[idx % MATRIX_SIZE];
                 if (i == 0 && has_live)
-                    val = is_additive ? val + live_val : live_val;
+                    val = is_additive ? safe_int_add(val, live_val) : live_val;
                 B("%d%s", val, i == 0 ? "" : ",");
             }
             B("]");
