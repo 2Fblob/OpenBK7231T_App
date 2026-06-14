@@ -1068,6 +1068,3 @@ int http_fn_api_dash(http_request_t *request) {
 
 // old javascript would go here
 
-    poststr(request, NULL);
-    return 0;
-}
