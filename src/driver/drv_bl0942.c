@@ -78,28 +78,57 @@ static void ScaleAndUpdate(bl0942_data_t *data) {
     float energyWh = 0;
     energyWh = fabsf(PwrCal_ScalePowerOnly(data->cf_cnt)) * 1638.4f * 256.0f / 3600.0f;
 
-    // Rolling window average for power (10 samples)
-    #define POWER_WINDOW_SIZE 10
-    static float powerWindow[POWER_WINDOW_SIZE] = {0};
-    static int   powerWindowIndex = 0;
-    static int   powerWindowCount = 0;
-
-    // Apply sign before storing in the window
+    // Apply sign convention
     float signedPower = CFG_HasFlag(OBK_FLAG_POWER_INVERT_AC) ? (-1.0f * power) : power;
 
-    // Insert the new signed sample into the circular buffer
-    powerWindow[powerWindowIndex] = signedPower;
-    powerWindowIndex = (powerWindowIndex + 1) % POWER_WINDOW_SIZE;
-    if (powerWindowCount < POWER_WINDOW_SIZE)
-        powerWindowCount++;
+    // ====================================================================
+    // ACCUMULATE-AND-AVERAGE OVER 10 SECONDS
+    //
+    // BL_ProcessUpdate() (in drv_bl_shared.c) does a fair amount of work
+    // every time it's called - sensor change detection, event dispatch,
+    // MQTT publish checks, etc. Calling it once per second means all of
+    // that runs every second, which competes with command/button handling
+    // on the same task and makes the UI feel laggy at higher power.
+    //
+    // Instead, we accumulate readings every second here (cheap - just a
+    // few float additions) and only call BL_ProcessUpdate() once every
+    // 10 seconds, passing the averaged voltage/current/power and the
+    // SUM of energyWh over that window (so cumulative energy totals are
+    // unaffected - same total, just delivered in 10s chunks instead of
+    // 1s chunks).
+    // ====================================================================
+    #define SAMPLES_PER_UPDATE 10
 
-    // Compute the average over however many samples we have so far
-    float powerSum = 0.0f;
-    for (int i = 0; i < powerWindowCount; i++)
-        powerSum += powerWindow[i];
-    float averagedPower = powerSum / powerWindowCount;
+    static int   sampleCount = 0;
+    static float voltageAccum = 0.0f;
+    static float currentAccum = 0.0f;
+    static float powerAccum = 0.0f;
+    static float energyAccum = 0.0f;
+    static float lastFrequency = NAN;
 
-    BL_ProcessUpdate(voltage, current, averagedPower, frequency, energyWh);
+    voltageAccum += voltage;
+    currentAccum += current;
+    powerAccum   += signedPower;
+    energyAccum  += energyWh;
+    lastFrequency = frequency;
+    sampleCount++;
+
+    if (sampleCount < SAMPLES_PER_UPDATE) {
+        return;
+    }
+
+    float avgVoltage = voltageAccum / sampleCount;
+    float avgCurrent = currentAccum / sampleCount;
+    float avgPower   = powerAccum   / sampleCount;
+    float totalEnergyWh = energyAccum;
+
+    BL_ProcessUpdate(avgVoltage, avgCurrent, avgPower, lastFrequency, totalEnergyWh);
+
+    voltageAccum = 0.0f;
+    currentAccum = 0.0f;
+    powerAccum = 0.0f;
+    energyAccum = 0.0f;
+    sampleCount = 0;
 }
 
 static int UART_TryToGetNextPacket(void) {
