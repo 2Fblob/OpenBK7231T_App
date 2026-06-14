@@ -358,4 +358,6 @@ int http_fn_custom_dash(http_request_t *request) {
     );
    rtos_delay_milliseconds(5);
 
-
+poststr(request, NULL);
+    return 0;
+}
