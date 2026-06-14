@@ -2,6 +2,10 @@
 #include "dash_frontend.h"
 #include "rtos_pub.h" // Required for rtos_delay_milliseconds
 
+// Serves the dashboard page (HTML/CSS/JS) at /dash.
+// Data is fetched client-side from /api_dash, implemented in
+// drv_bl_shared.c (see http_fn_api_dash).
+
 // ====================================================================
 // OPTIMIZED DASHBOARD FRONTEND (Sequential State Machine Javascript)
 // Includes Apple Full-Screen Web App Settings
