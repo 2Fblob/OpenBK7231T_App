@@ -155,6 +155,40 @@ int changeDoNotSendMinFrames = 20;
 int energy_version = 0;
 void mark_energy_dirty(void) { energy_version++; }
 
+// ====================================================================
+// MINIMAL BASE64 ENCODER (for compact graph payloads)
+// ====================================================================
+static const char b64_table[] =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// Encodes `len` bytes from `in` into base64 chars written to `out`
+// (NOT null-terminated). Returns number of chars written.
+// out must have space for ((len + 2) / 3) * 4 bytes.
+static int base64_encode(const unsigned char *in, int len, char *out) {
+    int i, o = 0;
+    for (i = 0; i + 3 <= len; i += 3) {
+        unsigned int v = (in[i] << 16) | (in[i+1] << 8) | in[i+2];
+        out[o++] = b64_table[(v >> 18) & 0x3F];
+        out[o++] = b64_table[(v >> 12) & 0x3F];
+        out[o++] = b64_table[(v >> 6)  & 0x3F];
+        out[o++] = b64_table[v & 0x3F];
+    }
+    if (len - i == 1) {
+        unsigned int v = in[i] << 16;
+        out[o++] = b64_table[(v >> 18) & 0x3F];
+        out[o++] = b64_table[(v >> 12) & 0x3F];
+        out[o++] = '=';
+        out[o++] = '=';
+    } else if (len - i == 2) {
+        unsigned int v = (in[i] << 16) | (in[i+1] << 8);
+        out[o++] = b64_table[(v >> 18) & 0x3F];
+        out[o++] = b64_table[(v >> 12) & 0x3F];
+        out[o++] = b64_table[(v >> 6)  & 0x3F];
+        out[o++] = '=';
+    }
+    return o;
+}
+
 void BL09XX_AppendInformationToHTTPIndexPage(http_request_t *request)
 {
     // Dashboard migrated to standalone JSON architecture on /dash
@@ -468,14 +502,28 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
 
             if (current_matrix_index != last_matrix_index) {
                 float period_net;
+                int net_val, chg_val, inv_val;
 
                 consumption_matrix[last_matrix_index] = (int)real_consumption;
                 export_matrix[last_matrix_index] = (int)real_export;
-                net_matrix[last_matrix_index] = (int)real_consumption - (int)real_export;
 
-                // Write averages for the interval
-                charger_c_matrix[last_matrix_index] = sample_count_30s ? (current_charger_c_accum / sample_count_30s) : 0;
-                inverter_matrix[last_matrix_index] = sample_count_30s ? (current_inverter_accum / sample_count_30s) : 0;
+                // Clamp to signed 10-bit range (-512..511) before storing so
+                // the graph payload can be packed as int16 without overflow.
+                net_val = (int)real_consumption - (int)real_export;
+                if (net_val > 511)  net_val = 511;
+                if (net_val < -512) net_val = -512;
+                net_matrix[last_matrix_index] = net_val;
+
+                // Write averages for the interval, clamped to 0..127 so the
+                // graph payload can be packed as a single byte each.
+                chg_val = sample_count_30s ? (current_charger_c_accum / sample_count_30s) : 0;
+                inv_val = sample_count_30s ? (current_inverter_accum / sample_count_30s) : 0;
+                if (chg_val > 127) chg_val = 127;
+                if (chg_val < 0)   chg_val = 0;
+                if (inv_val > 127) inv_val = 127;
+                if (inv_val < 0)   inv_val = 0;
+                charger_c_matrix[last_matrix_index] = chg_val;
+                inverter_matrix[last_matrix_index] = inv_val;
 
                 // Process Net Metering for the interval, then save once
                 period_net = real_consumption - real_export;
@@ -960,14 +1008,19 @@ int http_fn_api_dash(http_request_t *request) {
     }
 
     // ---- GRAPH ARRAYS (req=net | req=chg | req=inv) ----
+    // Sent as base64 of packed binary: "chg"/"inv" are 1 byte per sample
+    // (uint8, clamped 0..127), "net" is 2 bytes per sample (int16,
+    // clamped -512..511, little-endian). Values are clamped here as a
+    // final safety net even though the matrices are pre-clamped on write.
     else if (has_ntp && req_param) {
         unsigned int msm      = NTP_GetHour() * 60 + NTP_GetMinute();
         const char  *key      = NULL;
         int         *matrix   = NULL;
         int          is_additive = 0, has_live = 0, live_val = 0;
+        int          is_net   = 0;
 
         if (strncmp(req_param, "req=net", 7) == 0) {
-            key    = "net"; matrix = net_matrix;
+            key    = "net"; matrix = net_matrix; is_net = 1;
             live_val    = (int)(real_consumption - real_export);
             has_live    = 1; is_additive = 1;
         } else if (strncmp(req_param, "req=chg", 7) == 0) {
@@ -981,15 +1034,32 @@ int http_fn_api_dash(http_request_t *request) {
         }
 
         if (key && matrix) {
-            B("\"%s\":[", key);
+            unsigned char raw[MATRIX_SIZE * 2]; // worst case: net @ 2 bytes/sample
+            char          b64[((MATRIX_SIZE * 2) + 2) / 3 * 4 + 1];
+            int           raw_len = 0;
+            int           b64_len;
+
             for (int i = 47; i >= 0; i--) {
                 int idx = (msm / net_metering_period - i + 96) % 96;
                 int val = matrix[idx % MATRIX_SIZE];
                 if (i == 0 && has_live)
                     val = is_additive ? val + live_val : live_val;
-                B("%d%s", val, i == 0 ? "" : ",");
+
+                if (is_net) {
+                    if (val > 511)  val = 511;
+                    if (val < -512) val = -512;
+                    raw[raw_len++] = (unsigned char)(val & 0xFF);
+                    raw[raw_len++] = (unsigned char)((val >> 8) & 0xFF);
+                } else {
+                    if (val > 127) val = 127;
+                    if (val < 0)   val = 0;
+                    raw[raw_len++] = (unsigned char)val;
+                }
             }
-            B("]");
+
+            b64_len = base64_encode(raw, raw_len, b64);
+            b64[b64_len] = '\0';
+            B("\"%s\":\"%s\"", key, b64);
         }
     }
 
