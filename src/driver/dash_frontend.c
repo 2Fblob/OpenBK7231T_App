@@ -1,4 +1,3 @@
-
 #include "dash_frontend.h"
 #include "rtos_pub.h" // Required for rtos_delay_milliseconds
 
@@ -210,10 +209,32 @@ int http_fn_custom_dash(http_request_t *request) {
         "  lastEnergyT = Date.now();"
         "}"
 
+        "function _b64toBytes(s){"
+        "var bin=atob(s),len=bin.length,out=new Uint8Array(len);"
+        "for(var i=0;i<len;i++)out[i]=bin.charCodeAt(i);"
+        "return out;"
+        "}"
+
+        "function _decodeU8(s){"
+        "var b=_b64toBytes(s),out=new Array(b.length);"
+        "for(var i=0;i<b.length;i++)out[i]=b[i];"
+        "return out;"
+        "}"
+
+        "function _decodeI16(s){"
+        "var b=_b64toBytes(s),n=b.length>>1,out=new Array(n);"
+        "for(var i=0;i<n;i++){"
+        "var v=b[i*2]|(b[i*2+1]<<8);"
+        "if(v&0x8000)v-=0x10000;"
+        "out[i]=v;"
+        "}"
+        "return out;"
+        "}"
+
         "function applyGraph(d) {"
-        "  if (d.net) state_net = d.net;"
-        "  if (d.chg) state_chg = d.chg;"
-        "  if (d.inv) state_inv = d.inv;"
+        "  if (d.net) state_net = _decodeI16(d.net);"
+        "  if (d.chg) state_chg = _decodeU8(d.chg);"
+        "  if (d.inv) state_inv = _decodeU8(d.inv);"
         "  renderGraph();"
         "}"
 
