@@ -87,7 +87,6 @@ int stat_updatesSkipped = 0;
 int stat_updatesSent = 0;
 char ip[3];
 
-static byte savetoflash = 0;
 static byte min_reset = 0;
 static float net_energy = 0;
 static float real_export = 0;
@@ -143,7 +142,6 @@ bool energyCounterStatsJSONEnable = false;
 int actual_mday = -1;
 float lastSavedEnergyCounterValue = 0.0f;
 float lastSavedGenerationCounterValue = 0.0f;
-float changeSavedThresholdEnergy = 500.0f;
 long ConsumptionSaveCounter = 0;
 portTickType lastConsumptionSaveStamp;
 time_t ConsumptionResetTime = 0;
@@ -221,6 +219,8 @@ commandResult_t BL09XX_ResetEnergyCounter(const void *context, const char *cmd, 
     if (ota_progress()==-1)
 #endif
     { 
+        lastSavedEnergyCounterValue = sensors[OBK_CONSUMPTION_TOTAL].lastReading;
+        lastSavedGenerationCounterValue = sensors[OBK_GENERATION_TOTAL].lastReading;
         BL09XX_SaveEmeteringStatistics();
         lastConsumptionSaveStamp = xTaskGetTickCount();
     }
@@ -395,21 +395,6 @@ commandResult_t BL09XX_VCPPublishThreshold(const void *context, const char *cmd,
     return CMD_RES_OK;
 }
 
-commandResult_t BL09XX_SetupConsumptionThreshold(const void *context, const char *cmd, const char *args, int cmdFlags)
-{
-    float threshold;
-    Tokenizer_TokenizeString(args,0);
-    if (Tokenizer_CheckArgsCountAndPrintWarning(cmd, 1)) { return CMD_RES_NOT_ENOUGH_ARGUMENTS; }
-    
-    threshold = atof(Tokenizer_GetArg(0)); 
-    if (threshold<1.0f) threshold = 1.0f;
-    if (threshold>1000.0f) threshold = 1000.0f;
-    
-    changeSavedThresholdEnergy = threshold;
-    addLogAdv(LOG_INFO, LOG_FEATURE_ENERGYMETER, "ConsumptionThreshold: %1.1f", changeSavedThresholdEnergy);
-    return CMD_RES_OK;
-}
-
 bool Channel_AreAllRelaysOpen() {
     int i, role, ch;
     for (i = 0; i < PLATFORM_GPIO_MAX; i++) {
@@ -437,8 +422,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     int i;
     int xPassedTicks;
     float energy_counter_data = 0;
-    float period_net = 0;
-    int process_net_stats = 0;
               
     cJSON* root;
     cJSON* stats;
@@ -449,7 +432,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     char datetime[64];
     float diff;
 
-    if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE) && NTP_IsTimeSynced())
+    if (NTP_IsTimeSynced())
     {                                          
         check_time = NTP_GetMinute();
         check_hour = NTP_GetHour();
@@ -484,6 +467,8 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             }
 
             if (current_matrix_index != last_matrix_index) {
+                float period_net;
+
                 consumption_matrix[last_matrix_index] = (int)real_consumption;
                 export_matrix[last_matrix_index] = (int)real_export;
                 net_matrix[last_matrix_index] = (int)real_consumption - (int)real_export;
@@ -492,11 +477,32 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 charger_c_matrix[last_matrix_index] = sample_count_30s ? (current_charger_c_accum / sample_count_30s) : 0;
                 inverter_matrix[last_matrix_index] = sample_count_30s ? (current_inverter_accum / sample_count_30s) : 0;
 
-                // Process Net Metering for the interval
+                // Process Net Metering for the interval, then save once
                 period_net = real_consumption - real_export;
-                process_net_stats = 1;
-                //HAL_FlashVars_SaveTotalConsumption(sensors[OBK_CONSUMPTION_TOTAL].lastReading);
-                BL09XX_SaveEmeteringStatistics();
+                if (period_net > 0) {
+                    sensors[OBK_CONSUMPTION_TOTAL].lastReading += period_net;
+                    sensors[OBK_CONSUMPTION_TODAY].lastReading += period_net;
+                } else if (period_net < 0) {
+                    sensors[OBK_GENERATION_TOTAL].lastReading += (-period_net);
+                }
+                mark_energy_dirty();
+
+                // Single save point for the whole module: right before the
+                // 15-minute accumulators are reset below.
+#if WINDOWS
+#elif PLATFORM_BL602
+#elif PLATFORM_W600 || PLATFORM_W800
+#elif PLATFORM_XR809
+#elif PLATFORM_BK7231N || PLATFORM_BK7231T
+                if (ota_progress() == -1)
+#endif
+                {
+                    lastSavedEnergyCounterValue = sensors[OBK_CONSUMPTION_TOTAL].lastReading;
+                    lastSavedGenerationCounterValue = sensors[OBK_GENERATION_TOTAL].lastReading;
+                    BL09XX_SaveEmeteringStatistics();
+                    lastConsumptionSaveStamp = xTaskGetTickCount();
+                }
+
                 real_export = 0;
                 real_consumption = 0;
                 net_energy = 0;
@@ -514,7 +520,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 sample_count_30s = 0;
 
                 last_matrix_index = current_matrix_index;
-                savetoflash = 1;
             }
         }
 
@@ -624,26 +629,18 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
 
     lastReadingFrequency = frequency;
 // --------------------------------------
-    float energy = 0;
-    if (power > 0.0f)
+    if ((int)power > 0)
+    {
         real_consumption += energyWh;
-    else
-        real_export += energyWh;
-//---------------------------------------
-              
-    if (process_net_stats == 1) {
-        if (period_net > 0) {
-            sensors[OBK_CONSUMPTION_TOTAL].lastReading += period_net;
-            sensors[OBK_CONSUMPTION_TODAY].lastReading += period_net;
-            energy_counter_data = period_net;
-        } else if (period_net < 0) {
-            sensors[OBK_GENERATION_TOTAL].lastReading += (-period_net);
-            energy_counter_data = period_net;
-        }
-        mark_energy_dirty();
     }
-
-    
+    else
+    {
+        if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
+        {
+            real_export += energyWh;
+        }
+    }
+//---------------------------------------
 
     if (NTP_IsTimeSynced()) {
         ntpTime = (time_t)NTP_GetCurrentTime();
@@ -663,18 +660,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             sensors[OBK_CONSUMPTION_TODAY].lastReading = 0.0;
             actual_mday = ltm->tm_mday;
             mark_energy_dirty();
-
-#if WINDOWS
-#elif PLATFORM_BL602
-#elif PLATFORM_W600 || PLATFORM_W800
-#elif PLATFORM_XR809
-#elif PLATFORM_BK7231N || PLATFORM_BK7231T
-            if (ota_progress()==-1)
-#endif
-            {
-                BL09XX_SaveEmeteringStatistics();
-                lastConsumptionSaveStamp = xTaskGetTickCount();
-            }
+            // Persistence for this rollover happens on the next 15-minute save.
         }
     }
 
@@ -825,27 +811,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             stat_updatesSkipped++;
         }
     }       
-
-    if (((((sensors[OBK_CONSUMPTION_TOTAL].lastReading - lastSavedEnergyCounterValue) >= changeSavedThresholdEnergy) ||
-           ((xTaskGetTickCount() - lastConsumptionSaveStamp) >= (6 * 3600 * 1000 / portTICK_PERIOD_MS)) || 
-       ((sensors[OBK_GENERATION_TOTAL].lastReading - lastSavedGenerationCounterValue) >= changeSavedThresholdEnergy)) && (!(CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))))||(savetoflash == 1))
-    {
-
-    savetoflash = 0;
-#if WINDOWS
-#elif PLATFORM_BL602
-#elif PLATFORM_W600 || PLATFORM_W800
-#elif PLATFORM_XR809
-#elif PLATFORM_BK7231N || PLATFORM_BK7231T
-        if (ota_progress() == -1)
-#endif
-        {
-            lastSavedEnergyCounterValue = sensors[OBK_CONSUMPTION_TOTAL].lastReading;
-            lastSavedGenerationCounterValue = sensors[OBK_GENERATION_TOTAL].lastReading;
-            BL09XX_SaveEmeteringStatistics();
-            lastConsumptionSaveStamp = xTaskGetTickCount();
-        }
-    }
 }
 
 void BL_Shared_Init(void)
@@ -899,7 +864,6 @@ void BL_Shared_Init(void)
     CMD_RegisterCommand("SetTargetPower", BL09XX_SetTargetPower, NULL);
     CMD_RegisterCommand("SetTargetExport", BL09XX_SetTargetExport, NULL);
     CMD_RegisterCommand("SetupEnergyStats", BL09XX_SetupEnergyStatistic, NULL);
-    CMD_RegisterCommand("ConsumptionThreshold", BL09XX_SetupConsumptionThreshold, NULL);
     CMD_RegisterCommand("VCPPublishThreshold", BL09XX_VCPPublishThreshold, NULL);
     CMD_RegisterCommand("VCPPrecision", BL09XX_VCPPrecision, NULL);
     CMD_RegisterCommand("VCPPublishIntervals", BL09XX_VCPPublishIntervals, NULL);
@@ -1038,5 +1002,6 @@ int http_fn_api_dash(http_request_t *request) {
     return 0;
 }
 
-// old javascript would go here
-
+// Dashboard HTML/CSS/JS frontend has been moved to dash_frontend.c
+// (see http_fn_custom_dash). This file only serves the JSON data
+// via http_fn_api_dash, consumed by that frontend's polling JS.
