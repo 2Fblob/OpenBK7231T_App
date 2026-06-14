@@ -1,3 +1,5 @@
+
+#include "dash_frontend.h"
 #include "rtos_pub.h" // Required for rtos_delay_milliseconds
 
 // ====================================================================
