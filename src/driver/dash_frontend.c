@@ -101,7 +101,7 @@ int http_fn_custom_dash(http_request_t *request) {
             "</div>"
             "<div class='right-side'>"
             "<div class='top-row'>"
-        ;
+        );
         rtos_delay_milliseconds(5);
 
         // --- CHUNK 3b: Graph column, right column ("ESS System Modes")
@@ -135,7 +135,6 @@ int http_fn_custom_dash(http_request_t *request) {
             "</div>"
         );
         rtos_delay_milliseconds(5);
-    }
 
     // --- CHUNK 6: Sequential State Machine Javascript ---
     poststr(request,
