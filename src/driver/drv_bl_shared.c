@@ -98,6 +98,11 @@ struct {
 
 float lastReadingFrequency = NAN;
 
+// Debug: highest BL_ProcessUpdate execution time (ms) seen since last read.
+// Overwritten only when a higher value is measured; reset to 0 once read
+// (see http_fn_api_dash) so each reporting window shows its own peak.
+unsigned int debug_maxProcessUpdate_ms = 0;
+
 int actual_mday = -1;
 float lastSavedEnergyCounterValue = 0.0f;
 float lastSavedGenerationCounterValue = 0.0f;
@@ -342,6 +347,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     struct tm *ltm;
     char datetime[64];
     float diff;
+    portTickType debug_startTick = xTaskGetTickCount();
 
     if (NTP_IsTimeSynced())
     {                                          
@@ -653,6 +659,16 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             stat_updatesSkipped++;
         }
     }       
+
+    // Debug: track the worst-case execution time of this function.
+    // Only overwritten if higher than the current value; reset to 0
+    // externally once read (see http_fn_api_dash).
+    {
+        unsigned int debug_elapsed_ms = (xTaskGetTickCount() - debug_startTick) * portTICK_PERIOD_MS;
+        if (debug_elapsed_ms > debug_maxProcessUpdate_ms) {
+            debug_maxProcessUpdate_ms = debug_elapsed_ms;
+        }
+    }
 }
 
 void BL_Shared_Init(void)
@@ -744,10 +760,13 @@ int http_fn_api_dash(http_request_t *request) {
 
         B("\"dmp\":%d,\"auto\":%d,"
           "\"t_pwr\":%d,\"t_exp\":%d,"
-          "\"clk\":\"%02d:%02d\"",
+          "\"clk\":\"%02d:%02d\","
+          "\"dbg_ms\":%u",
           dmp, charger_c_auto,
           target_power, target_export,
-          NTP_GetHour(), NTP_GetMinute());
+          NTP_GetHour(), NTP_GetMinute(),
+          debug_maxProcessUpdate_ms);
+        debug_maxProcessUpdate_ms = 0;
 
         if (has_ntp) B(",\"ev\":%d", energy_version);
     }
