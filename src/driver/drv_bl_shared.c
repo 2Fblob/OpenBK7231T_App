@@ -495,7 +495,8 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 // Process Net Metering for the interval
                 period_net = real_consumption - real_export;
                 process_net_stats = 1;
-
+                //HAL_FlashVars_SaveTotalConsumption(sensors[OBK_CONSUMPTION_TOTAL].lastReading);
+                BL09XX_SaveEmeteringStatistics();
                 real_export = 0;
                 real_consumption = 0;
                 net_energy = 0;
@@ -614,20 +615,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         }
     } 
 
-    if (!CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE)) 
-    {
-        if (power < 0.0f) power = 0.0f;
-        if (voltage < 0.0f) voltage = 0.0f;
-        if (current < 0.0f) current = 0.0f;
-    }
-    if (CFG_HasFlag(OBK_FLAG_POWER_FORCE_ZERO_IF_RELAYS_OPEN))
-    {
-        if (Channel_AreAllRelaysOpen()) {
-            power = 0;
-            current = 0;
-        }
-    }
-
     sensors[OBK_VOLTAGE].lastReading = voltage;
     sensors[OBK_CURRENT].lastReading = current;
     sensors[OBK_POWER].lastReading = power;
@@ -636,28 +623,13 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     sensors[OBK_POWER_FACTOR].lastReading = (sensors[OBK_POWER_APPARENT].lastReading == 0 ? 1 : sensors[OBK_POWER].lastReading / sensors[OBK_POWER_APPARENT].lastReading);
 
     lastReadingFrequency = frequency;
-
+// --------------------------------------
     float energy = 0;
-    if (isnan(energyWh)) {
-        xPassedTicks = (int)(xTaskGetTickCount() - energyCounterStamp);
-        if (xPassedTicks <= 0)
-            xPassedTicks = 1;
-        energy = xPassedTicks * power / (3600000.0f / portTICK_PERIOD_MS);
-    } 
+    if (power > 0.0f)
+        real_consumption += energyWh;
     else
-    {
-        if ((int)power>0)
-        {
-            real_consumption += energyWh;
-        }
-        else
-        {
-            if (CFG_HasFlag(OBK_FLAG_POWER_ALLOW_NEGATIVE))
-            {
-                real_export += energyWh;
-            }
-        }
-    }
+        real_export += energyWh;
+//---------------------------------------
               
     if (process_net_stats == 1) {
         if (period_net > 0) {
@@ -671,8 +643,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
         mark_energy_dirty();
     }
 
-    energyCounterStamp = xTaskGetTickCount();
-    HAL_FlashVars_SaveTotalConsumption(sensors[OBK_CONSUMPTION_TOTAL].lastReading);
+    
 
     if (NTP_IsTimeSynced()) {
         ntpTime = (time_t)NTP_GetCurrentTime();
