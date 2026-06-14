@@ -1070,6 +1070,7 @@ int http_fn_api_dash(http_request_t *request) {
 
 // ====================================================================
 // OPTIMIZED DASHBOARD FRONTEND (Sequential State Machine Javascript)
+// Includes Apple Full-Screen Web App Settings
 // ====================================================================
 int http_fn_custom_dash(http_request_t *request) {
     http_setup(request, "text/html");
@@ -1079,7 +1080,9 @@ int http_fn_custom_dash(http_request_t *request) {
         "<!DOCTYPE html><html><head>"
         "<meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
-        "<title>Solar Dashboard</title>"
+        "<meta name='apple-mobile-web-app-capable' content='yes'>"
+        "<meta name='apple-mobile-web-app-status-bar-style' content='black-translucent'>"
+        "<title>My Dashboard</title>"
         "<style>"
         "body{margin:0;background:#000;display:-webkit-flex;display:flex;-webkit-justify-content:center;justify-content:center;}"
         "#dash-container{max-width:1200px;width:100%;min-height:100vh;background:#121212;padding:10px 20px 20px;box-sizing:border-box;font-family:-apple-system,sans-serif;color:#eee;position:relative;}"
