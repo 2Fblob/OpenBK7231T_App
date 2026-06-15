@@ -753,6 +753,14 @@ void BL_Shared_Init(void)
         sensors[i].lastReading = 0;
     }
 
+    // net_graph_matrix encodes Wh as (val+150)/2, so a raw 0 (the default
+    // zero-init) decodes to -150 Wh, not 0 Wh. Initialize every slot to
+    // the byte that represents 0 Wh so an empty history shows a flat
+    // zero line instead of a full -150 Wh plateau.
+    for (i = 0; i < MATRIX_SIZE; i++) {
+        net_graph_matrix[i] = (unsigned char)((0 + 150) / 2);
+    }
+
     addLogAdv(LOG_INFO, LOG_FEATURE_ENERGYMETER, "Read ENERGYMETER status values. sizeof(ENERGY_METERING_DATA)=%d\n", sizeof(ENERGY_METERING_DATA));
 
     HAL_GetEnergyMeterStatus(&data);
