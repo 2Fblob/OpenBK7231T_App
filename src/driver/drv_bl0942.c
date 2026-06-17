@@ -74,9 +74,41 @@ static void ScaleAndUpdate(bl0942_data_t *data) {
     float voltage, current, power;
     PwrCal_Scale(data->v_rms, data->i_rms, data->watt, &voltage, &current,
                  &power);
-    float frequency = 2 * 500000.0f / data->freq;
+
+    // Guard power against a non-finite/absurd reading (it feeds (int)power
+    // downstream). Hold the last good value rather than letting NaN/inf or
+    // a wild spike propagate. Voltage/current are display-only and bounded
+    // by the chip's RMS registers, so they don't need the same treatment.
+    #define BL0942_MAX_SANE_POWER_W 30000.0f
+    static float lastGoodPower = 0.0f;
+    if (!isfinite(power) || power > BL0942_MAX_SANE_POWER_W || power < -BL0942_MAX_SANE_POWER_W) {
+        power = lastGoodPower;
+    } else {
+        lastGoodPower = power;
+    }
+    // data->freq can read 0 on a glitched/failed register read; avoid a
+    // divide-by-zero (which would yield inf/NaN). Report 0 Hz instead.
+    float frequency = (data->freq != 0) ? (2 * 500000.0f / data->freq) : 0.0f;
     float energyWh = 0;
     energyWh = fabsf(PwrCal_ScalePowerOnly(data->cf_cnt)) * 1638.4f * 256.0f / 3600.0f;
+
+    // Glitch guard: cf_cnt is normally reset on every read, so energyWh
+    // represents the energy of a single ~1s sample - a small value. If a
+    // read is missed/corrupted (more likely under high power, where the
+    // counter climbs fast), the raw value can come back enormous or even
+    // non-finite, which later poisons the float->int casts downstream and
+    // can crash. If this sample is not finite or exceeds a physically
+    // impossible per-sample energy, discard it and reuse the last known
+    // good value instead of zero (zero would dip the running total).
+    #define BL0942_MAX_SANE_ENERGY_WH 50.0f   // ~180kW for 1s; far above any real load
+    static float lastGoodEnergyWh = 0.0f;
+    if (!isfinite(energyWh) || energyWh < 0.0f || energyWh > BL0942_MAX_SANE_ENERGY_WH) {
+        ADDLOG_WARN(LOG_FEATURE_ENERGYMETER,
+                    "BL0942 energyWh glitch (%f), holding last good value\n", energyWh);
+        energyWh = lastGoodEnergyWh;
+    } else {
+        lastGoodEnergyWh = energyWh;
+    }
 
     // Apply sign convention
     float signedPower = CFG_HasFlag(OBK_FLAG_POWER_INVERT_AC) ? (-1.0f * power) : power;
