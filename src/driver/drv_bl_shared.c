@@ -241,7 +241,7 @@ commandResult_t BL09XX_ResetEnergyCounter(const void *context, const char *cmd, 
     { 
         lastSavedEnergyCounterValue = sensors[OBK_CONSUMPTION_TOTAL].lastReading;
         lastSavedGenerationCounterValue = sensors[OBK_GENERATION_TOTAL].lastReading;
-        BL09XX_SaveEmeteringStatistics();
+        //BL09XX_SaveEmeteringStatistics();
         lastConsumptionSaveStamp = xTaskGetTickCount();
     }
     mark_energy_dirty();
@@ -501,7 +501,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 {
                     lastSavedEnergyCounterValue = sensors[OBK_CONSUMPTION_TOTAL].lastReading;
                     lastSavedGenerationCounterValue = sensors[OBK_GENERATION_TOTAL].lastReading;
-                    BL09XX_SaveEmeteringStatistics();
+                    //BL09XX_SaveEmeteringStatistics();
                     lastConsumptionSaveStamp = xTaskGetTickCount();
                 }
 
