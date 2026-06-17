@@ -134,10 +134,28 @@ static int safe_int(double v) {
     return (int)v;
 }
 
-// Debug: highest BL_ProcessUpdate execution time (ms) seen since last read.
-// Overwritten only when a higher value is measured; reset to 0 once read
-// (see http_fn_api_dash) so each reporting window shows its own peak.
-unsigned int debug_maxProcessUpdate_ms = 0;
+// ====================================================================
+// INSTANTANEOUS POWER (rolling 10-sample average derived from Wh delta)
+// ====================================================================
+// Each BL_ProcessUpdate call receives the Wh accumulated since the last
+// call. Dividing by the elapsed time gives an instantaneous wattage that
+// is independent of the meter's reported power field. Signed: positive =
+// import (consumption), negative = export. The 10-sample rolling average
+// smooths out per-call jitter without introducing significant lag.
+#define INST_POWER_SAMPLES 10
+static float         inst_power_buf[INST_POWER_SAMPLES] = {0};
+static int           inst_power_idx   = 0;
+static int           inst_power_count = 0;
+static float         calc_power_w     = 0.0f;
+
+// ====================================================================
+// LOOP INTERVAL MEASUREMENT
+// ====================================================================
+// Tracks the wall-clock time between successive BL_ProcessUpdate calls.
+// Replaces the old worst-case execution-time metric with a value that
+// tells us the actual cadence at which the meter pushes readings.
+static portTickType  last_processupdate_tick = 0;
+static unsigned int  loop_interval_ms        = 0;
 
 int actual_mday = -1;
 float lastSavedEnergyCounterValue = 0.0f;
@@ -383,7 +401,52 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     struct tm *ltm;
     char datetime[64];
     float diff;
-    portTickType debug_startTick = xTaskGetTickCount();
+
+    // Capture tick at the very top of the function. This timestamp is used
+    // for two purposes:
+    //   1. loop_interval_ms  – the wall-clock gap between successive calls
+    //      (replaces the old worst-case execution-time metric).
+    //   2. Instantaneous power – Wh delta / elapsed time → Watts.
+    portTickType now_tick = xTaskGetTickCount();
+
+    // ====================================================================
+    // LOOP INTERVAL + INSTANTANEOUS POWER CALCULATION
+    // ====================================================================
+    // Both calculations are gated on having a previous timestamp to diff
+    // against, so they're silently skipped on the very first call.
+    if (last_processupdate_tick != 0)
+    {
+        // Time between this call and the previous one, in milliseconds.
+        loop_interval_ms = (unsigned int)(
+            (now_tick - last_processupdate_tick) * portTICK_PERIOD_MS);
+
+        // Instantaneous power derived from the Wh the meter accumulated
+        // over that same interval. Guard against zero elapsed time and
+        // non-finite energyWh (stray meter glitch).
+        if (loop_interval_ms > 0 && isfinite(energyWh))
+        {
+            float delta_s = loop_interval_ms / 1000.0f;
+
+            // Convert Wh → W over the interval, then apply sign:
+            //   power > 0  →  import  (positive)
+            //   power <= 0 →  export  (negative)
+            float inst_w = (energyWh / delta_s) * 3600.0f;
+            if (power <= 0.0f) inst_w = -inst_w;
+
+            // Push into the rolling 10-sample buffer and recompute average.
+            inst_power_buf[inst_power_idx] = inst_w;
+            inst_power_idx = (inst_power_idx + 1) % INST_POWER_SAMPLES;
+            if (inst_power_count < INST_POWER_SAMPLES) inst_power_count++;
+
+            {
+                float sum = 0.0f;
+                int k;
+                for (k = 0; k < inst_power_count; k++) sum += inst_power_buf[k];
+                calc_power_w = sum / (float)inst_power_count;
+            }
+        }
+    }
+    last_processupdate_tick = now_tick;
 
     if (NTP_IsTimeSynced())
     {                                          
@@ -748,16 +811,6 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             stat_updatesSkipped++;
         }
     }       
-
-    // Debug: track the worst-case execution time of this function.
-    // Only overwritten if higher than the current value; reset to 0
-    // externally once read (see http_fn_api_dash).
-    {
-        unsigned int debug_elapsed_ms = (xTaskGetTickCount() - debug_startTick) * portTICK_PERIOD_MS;
-        if (debug_elapsed_ms > debug_maxProcessUpdate_ms) {
-            debug_maxProcessUpdate_ms = debug_elapsed_ms;
-        }
-    }
 }
 
 void BL_Shared_Init(void)
@@ -839,6 +892,8 @@ int http_fn_api_dash(http_request_t *request) {
         B("\"va\":\"%.0fV / %.2fA\","
           "\"pwr\":\"%.0f W\","
           "\"pwr_cls\":\"%s\","
+          "\"calc_pwr\":\"%.0f W\","
+          "\"calc_pwr_cls\":\"%s\","
           "\"bal\":\"%.0f Wh\","
           "\"bal_cls\":\"%s\","
           "\"est\":\"%i Wh\","
@@ -846,6 +901,8 @@ int http_fn_api_dash(http_request_t *request) {
           sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading,
           sensors[OBK_POWER].lastReading,
           sensors[OBK_POWER].lastReading          < 0 ? "c-exp" : "c-imp",
+          calc_power_w,
+          calc_power_w                            < 0.0f ? "c-exp" : "c-imp",
           sensors[OBK_POWER_REACTIVE].lastReading,
           sensors[OBK_POWER_REACTIVE].lastReading  < 0 ? "c-exp" : "c-imp",
           estimated_energy_period,
@@ -858,12 +915,11 @@ int http_fn_api_dash(http_request_t *request) {
         B("\"dmp\":%d,\"auto\":%d,"
           "\"t_pwr\":%d,\"t_exp\":%d,"
           "\"clk\":\"%02d:%02d\","
-          "\"dbg_ms\":%u",
+          "\"loop_ms\":%u",
           dmp, charger_c_auto,
           target_power, target_export,
           NTP_GetHour(), NTP_GetMinute(),
-          debug_maxProcessUpdate_ms);
-        debug_maxProcessUpdate_ms = 0;
+          loop_interval_ms);
 
         if (has_ntp) B(",\"ev\":%d", energy_version);
     }
