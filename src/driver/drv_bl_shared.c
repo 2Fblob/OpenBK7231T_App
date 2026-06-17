@@ -122,6 +122,18 @@ struct {
 
 float lastReadingFrequency = NAN;
 
+// Crash-proof float->int conversion. Casting a non-finite (NaN/inf) or
+// out-of-range float to int is undefined behaviour on ARM and can fault.
+// Any energy/power value that ever goes bad (e.g. a stray meter glitch)
+// would otherwise crash at one of the (int) cast sites below. This clamps
+// to a wide but safe integer window and maps non-finite values to 0.
+static int safe_int(double v) {
+    if (!isfinite(v)) return 0;
+    if (v >  1000000000.0) return  1000000000;
+    if (v < -1000000000.0) return -1000000000;
+    return (int)v;
+}
+
 // Debug: highest BL_ProcessUpdate execution time (ms) seen since last read.
 // Overwritten only when a higher value is measured; reset to 0 once read
 // (see http_fn_api_dash) so each reporting window shows its own peak.
@@ -411,8 +423,8 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 float period_net;
                 int chg_val, inv_val;
 
-                consumption_matrix[last_matrix_index] = (int)real_consumption;
-                export_matrix[last_matrix_index] = (int)real_export;
+                consumption_matrix[last_matrix_index] = safe_int(real_consumption);
+                export_matrix[last_matrix_index] = safe_int(real_export);
 
                 // Full-precision net Wh for this period (includes decimals).
                 period_net = real_consumption - real_export;
@@ -434,7 +446,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
                 // here so the graph stays readable), then pack as
                 // (val+150)/2 -> single byte 0..225.
                 {
-                    int graph_val = (int)period_net;
+                    int graph_val = safe_int(period_net);
                     if (graph_val > 300)  graph_val = 300;
                     if (graph_val < -150) graph_val = -150;
                     net_graph_matrix[last_matrix_index] = (unsigned char)((graph_val + 150) / 2);
@@ -550,7 +562,7 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
             if (check_time_estimate_mins <= 0) check_time_estimate_mins = 1;
 
             // 1. Predict total Wh accumulated by the end of the 15-minute period
-            estimated_energy_period = (int)net_energy + ((int)sensors[OBK_POWER].lastReading * check_time_estimate_mins) / 60;
+            estimated_energy_period = safe_int(net_energy) + (safe_int(sensors[OBK_POWER].lastReading) * check_time_estimate_mins) / 60;
 
             // 2. Update Base Solar State
             if (net_energy < -((float)target_export + 10.0f)) {
@@ -627,12 +639,18 @@ void BL_ProcessUpdate(float voltage, float current, float power, float frequency
     sensors[OBK_CURRENT].lastReading = current;
     sensors[OBK_POWER].lastReading = power;
     sensors[OBK_POWER_APPARENT].lastReading = sensors[OBK_VOLTAGE].lastReading * sensors[OBK_CURRENT].lastReading;
-    sensors[OBK_POWER_REACTIVE].lastReading = ((int)net_energy);
+    sensors[OBK_POWER_REACTIVE].lastReading = (safe_int(net_energy));
     sensors[OBK_POWER_FACTOR].lastReading = (sensors[OBK_POWER_APPARENT].lastReading == 0 ? 1 : sensors[OBK_POWER].lastReading / sensors[OBK_POWER_APPARENT].lastReading);
 
     lastReadingFrequency = frequency;
 // --------------------------------------
-    if ((int)power > 0)
+    // Final backstop: even though the BL0942 driver guards energyWh at the
+    // source, never let a non-finite value into the period accumulators
+    // (they feed the lifetime totals, which would be permanently poisoned).
+    if (!isfinite(energyWh)) {
+        energyWh = 0.0f;
+    }
+    if (safe_int(power) > 0)
     {
         real_consumption += energyWh;
     }
@@ -875,7 +893,7 @@ int http_fn_api_dash(http_request_t *request) {
         unsigned int  c2d_v    = (unsigned int)(0.1 * sensors[OBK_CONSUMPTION_2_DAYS_AGO].lastReading + 0.5f);
         unsigned int  c3d_v    = (unsigned int)(0.1 * sensors[OBK_CONSUMPTION_3_DAYS_AGO].lastReading + 0.5f);
 
-        int pf_byte = (int)(pf_v * 100.0f + 0.5f);
+        int pf_byte = safe_int(pf_v * 100.0f + 0.5f);
         if (pf_byte > 255) pf_byte = 255;
         if (pf_byte < 0)   pf_byte = 0;
 
@@ -933,7 +951,7 @@ int http_fn_api_dash(http_request_t *request) {
 
         if (strncmp(req_param, "req=net", 7) == 0) {
             key = "net"; is_net = 1;
-            net_live = (int)(real_consumption - real_export);
+            net_live = safe_int(real_consumption - real_export);
             has_live = 1;
         } else if (strncmp(req_param, "req=chginv", 10) == 0) {
             key = "chginv"; is_chginv = 1;
