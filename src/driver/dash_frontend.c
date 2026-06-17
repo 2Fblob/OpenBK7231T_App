@@ -225,7 +225,7 @@ int http_fn_custom_dash(http_request_t *request) {
         "  var hntp  =b[22]&1;"
         "  setV('d-va', volt.toFixed(0)+'V / '+curr.toFixed(2)+'A');"
         "  var pe=document.getElementById('d-pwr');"
-        "  if(pe)pe.innerHTML='<span class="'+(pwr<0?'c-exp':'c-imp')+'">'+ pwr +' W<\/span> \/ <span class="'+(cpwr<0?'c-exp':'c-imp')+'">'+ cpwr +' W<\/span>';"
+        "  if(pe)pe.innerHTML='<span class=\"'+(pwr<0?'c-exp':'c-imp')+'\">'+pwr+' W</span> / <span class=\"'+(cpwr<0?'c-exp':'c-imp')+'\">'+cpwr+' W</span>';"
         "  setV('d-bal',bal+' Wh'); setC('d-bal',bal<0?'c-exp':'c-imp');"
         "  setV('d-est',est+' Wh'); setC('d-est',est<0?'c-exp':'c-imp');"
         "  var chg_v,chg_c;"
