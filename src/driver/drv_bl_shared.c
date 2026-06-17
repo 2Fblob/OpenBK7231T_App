@@ -886,42 +886,74 @@ int http_fn_api_dash(http_request_t *request) {
     B("{");
 
     // ---- CORE (default or req=core) ----
+    // Packed binary layout (23 bytes), little-endian, base64-encoded:
+    //   bytes 0-1:  voltage   (uint16 ×10,  e.g. 2303 = 230.3 V)
+    //   bytes 2-3:  current   (uint16 ×100, e.g. 1500 = 15.00 A)
+    //   bytes 4-5:  power     (int16, whole W, signed)
+    //   bytes 6-7:  calc_pwr  (int16, whole W, signed)
+    //   bytes 8-9:  bal       (int16, whole Wh, signed)
+    //   bytes 10-11:est       (int16, whole Wh, signed)
+    //   byte  12:   dmp       (uint8, 0/5/18..100)
+    //   byte  13:   auto      (uint8, 0 or 1)
+    //   byte  14:   t_pwr     (uint8, 0..100)
+    //   byte  15:   t_exp     (uint8, 0..100)
+    //   byte  16:   clk_h     (uint8, 0..23)
+    //   byte  17:   clk_m     (uint8, 0..59)
+    //   bytes 18-19:loop_ms   (uint16, ms between BL_ProcessUpdate calls)
+    //   bytes 20-21:ev        (uint16, energy version counter)
+    //   byte  22:   flags     (uint8, bit0 = has_ntp)
+    // chg_v/chg_c/pwr_cls/bal_cls/est_cls are all derived client-side from
+    // the values themselves, saving further bytes.
     if (!req_param || strncmp(req_param, "req=core", 8) == 0) {
-        int dmp = dump_load_relay[5];
+        unsigned char raw[23];
+        char          b64[((23 + 2) / 3) * 4 + 1];
+        int           b64_len;
+        int           dmp = dump_load_relay[5];
 
-        B("\"va\":\"%.0fV / %.2fA\","
-          "\"pwr\":\"%.0f W\","
-          "\"pwr_cls\":\"%s\","
-          "\"calc_pwr\":\"%.0f W\","
-          "\"calc_pwr_cls\":\"%s\","
-          "\"bal\":\"%.0f Wh\","
-          "\"bal_cls\":\"%s\","
-          "\"est\":\"%i Wh\","
-          "\"est_cls\":\"%s\",",
-          sensors[OBK_VOLTAGE].lastReading, sensors[OBK_CURRENT].lastReading,
-          sensors[OBK_POWER].lastReading,
-          sensors[OBK_POWER].lastReading          < 0 ? "c-exp" : "c-imp",
-          calc_power_w,
-          calc_power_w                            < 0.0f ? "c-exp" : "c-imp",
-          sensors[OBK_POWER_REACTIVE].lastReading,
-          sensors[OBK_POWER_REACTIVE].lastReading  < 0 ? "c-exp" : "c-imp",
-          estimated_energy_period,
-          estimated_energy_period                  < 0 ? "c-exp" : "c-imp");
+        unsigned int volt_v  = (unsigned int)(sensors[OBK_VOLTAGE].lastReading * 10.0f  + 0.5f);
+        unsigned int curr_v  = (unsigned int)(sensors[OBK_CURRENT].lastReading * 100.0f + 0.5f);
+        int          pwr_v   = safe_int(sensors[OBK_POWER].lastReading);
+        int          cpwr_v  = safe_int(calc_power_w);
+        int          bal_v   = safe_int(sensors[OBK_POWER_REACTIVE].lastReading);
+        int          est_v   = estimated_energy_period;
+        unsigned int lms_v   = loop_interval_ms;
+        unsigned int ev_v    = (unsigned int)(energy_version & 0xFFFF);
 
-        if      (dmp == 0) B("\"chg_v\":\"Idle\",\"chg_c\":\"#888\",");
-        else if (dmp == 5) B("\"chg_v\":\"Battery\",\"chg_c\":\"#4caf50\",");
-        else               B("\"chg_v\":\"%d%%\",\"chg_c\":\"#0099FF\",", dmp);
+        if (volt_v > 0xFFFF) volt_v = 0xFFFF;
+        if (curr_v > 0xFFFF) curr_v = 0xFFFF;
+        if (pwr_v  >  32767) pwr_v  =  32767; if (pwr_v  < -32768) pwr_v  = -32768;
+        if (cpwr_v >  32767) cpwr_v =  32767; if (cpwr_v < -32768) cpwr_v = -32768;
+        if (bal_v  >  32767) bal_v  =  32767; if (bal_v  < -32768) bal_v  = -32768;
+        if (est_v  >  32767) est_v  =  32767; if (est_v  < -32768) est_v  = -32768;
+        if (lms_v  > 0xFFFF) lms_v  = 0xFFFF;
 
-        B("\"dmp\":%d,\"auto\":%d,"
-          "\"t_pwr\":%d,\"t_exp\":%d,"
-          "\"clk\":\"%02d:%02d\","
-          "\"loop_ms\":%u",
-          dmp, charger_c_auto,
-          target_power, target_export,
-          NTP_GetHour(), NTP_GetMinute(),
-          loop_interval_ms);
+        raw[0]  = (unsigned char)(volt_v  & 0xFF);
+        raw[1]  = (unsigned char)((volt_v  >> 8) & 0xFF);
+        raw[2]  = (unsigned char)(curr_v  & 0xFF);
+        raw[3]  = (unsigned char)((curr_v  >> 8) & 0xFF);
+        raw[4]  = (unsigned char)((unsigned short)pwr_v   & 0xFF);
+        raw[5]  = (unsigned char)(((unsigned short)pwr_v  >> 8) & 0xFF);
+        raw[6]  = (unsigned char)((unsigned short)cpwr_v  & 0xFF);
+        raw[7]  = (unsigned char)(((unsigned short)cpwr_v >> 8) & 0xFF);
+        raw[8]  = (unsigned char)((unsigned short)bal_v   & 0xFF);
+        raw[9]  = (unsigned char)(((unsigned short)bal_v  >> 8) & 0xFF);
+        raw[10] = (unsigned char)((unsigned short)est_v   & 0xFF);
+        raw[11] = (unsigned char)(((unsigned short)est_v  >> 8) & 0xFF);
+        raw[12] = (unsigned char)(dmp < 0 ? 0 : dmp > 255 ? 255 : dmp);
+        raw[13] = (unsigned char)(charger_c_auto ? 1 : 0);
+        raw[14] = (unsigned char)(target_power  < 0 ? 0 : target_power  > 255 ? 255 : target_power);
+        raw[15] = (unsigned char)(target_export < 0 ? 0 : target_export > 255 ? 255 : target_export);
+        raw[16] = (unsigned char)NTP_GetHour();
+        raw[17] = (unsigned char)NTP_GetMinute();
+        raw[18] = (unsigned char)(lms_v  & 0xFF);
+        raw[19] = (unsigned char)((lms_v  >> 8) & 0xFF);
+        raw[20] = (unsigned char)(ev_v   & 0xFF);
+        raw[21] = (unsigned char)((ev_v   >> 8) & 0xFF);
+        raw[22] = (unsigned char)(has_ntp ? 1 : 0);
 
-        if (has_ntp) B(",\"ev\":%d", energy_version);
+        b64_len = base64_encode(raw, sizeof(raw), b64);
+        b64[b64_len] = '\0';
+        B("\"c\":\"%s\"", b64);
     }
 
     // ---- ENERGY TOTALS (req=energy) ----
