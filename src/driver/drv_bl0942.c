@@ -116,7 +116,7 @@ static void ScaleAndUpdate(bl0942_data_t *data) {
     // ====================================================================
     // 10-SECOND TICK LOGIC (INSTANTANEOUS SENSORS + ACCUMULATED ENERGY)
     // ====================================================================
-    #define SAMPLES_PER_UPDATE 10
+    #define SAMPLES_PER_UPDATE 5
 
     static int   sampleCount = 0;
     static float energyAccum = 0.0f;
