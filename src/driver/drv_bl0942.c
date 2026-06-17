@@ -114,51 +114,28 @@ static void ScaleAndUpdate(bl0942_data_t *data) {
     float signedPower = CFG_HasFlag(OBK_FLAG_POWER_INVERT_AC) ? (-1.0f * power) : power;
 
     // ====================================================================
-    // ACCUMULATE-AND-AVERAGE OVER 10 SECONDS
-    //
-    // BL_ProcessUpdate() (in drv_bl_shared.c) does a fair amount of work
-    // every time it's called - sensor change detection, event dispatch,
-    // MQTT publish checks, etc. Calling it once per second means all of
-    // that runs every second, which competes with command/button handling
-    // on the same task and makes the UI feel laggy at higher power.
-    //
-    // Instead, we accumulate readings every second here (cheap - just a
-    // few float additions) and only call BL_ProcessUpdate() once every
-    // 10 seconds, passing the averaged voltage/current/power and the
-    // SUM of energyWh over that window (so cumulative energy totals are
-    // unaffected - same total, just delivered in 10s chunks instead of
-    // 1s chunks).
+    // 10-SECOND TICK LOGIC (INSTANTANEOUS SENSORS + ACCUMULATED ENERGY)
     // ====================================================================
     #define SAMPLES_PER_UPDATE 10
 
     static int   sampleCount = 0;
-    static float voltageAccum = 0.0f;
-    static float currentAccum = 0.0f;
-    static float powerAccum = 0.0f;
     static float energyAccum = 0.0f;
-    static float lastFrequency = NAN;
 
-    voltageAccum += voltage;
-    currentAccum += current;
-    powerAccum   += signedPower;
-    energyAccum  += energyWh;
-    lastFrequency = frequency;
+    // Energy must always be summed so consumption data is not lost between updates
+    energyAccum += energyWh;
     sampleCount++;
 
     if (sampleCount < SAMPLES_PER_UPDATE) {
-        return;
+        return; // Do nothing else until the 10th call
     }
 
-    float avgVoltage = voltageAccum / sampleCount;
-    float avgCurrent = currentAccum / sampleCount;
-    float avgPower   = powerAccum   / sampleCount;
+    // On the 10th call, pass instantaneous readings from THIS exact sample,
+    // alongside the total energy accumulated over the last 10 samples.
     float totalEnergyWh = energyAccum;
 
-    BL_ProcessUpdate(avgVoltage, avgCurrent, avgPower, lastFrequency, totalEnergyWh);
+    BL_ProcessUpdate(voltage, current, signedPower, frequency, totalEnergyWh);
 
-    voltageAccum = 0.0f;
-    currentAccum = 0.0f;
-    powerAccum = 0.0f;
+    // Reset counters for the next 10-second window
     energyAccum = 0.0f;
     sampleCount = 0;
 }
