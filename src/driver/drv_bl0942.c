@@ -114,51 +114,25 @@ static void ScaleAndUpdate(bl0942_data_t *data) {
     float signedPower = CFG_HasFlag(OBK_FLAG_POWER_INVERT_AC) ? (-1.0f * power) : power;
 
     // ====================================================================
-    // ACCUMULATE-AND-AVERAGE OVER 10 SECONDS
-    //
-    // BL_ProcessUpdate() (in drv_bl_shared.c) does a fair amount of work
-    // every time it's called - sensor change detection, event dispatch,
-    // MQTT publish checks, etc. Calling it once per second means all of
-    // that runs every second, which competes with command/button handling
-    // on the same task and makes the UI feel laggy at higher power.
-    //
-    // Instead, we accumulate readings every second here (cheap - just a
-    // few float additions) and only call BL_ProcessUpdate() once every
-    // 10 seconds, passing the averaged voltage/current/power and the
-    // SUM of energyWh over that window (so cumulative energy totals are
-    // unaffected - same total, just delivered in 10s chunks instead of
-    // 1s chunks).
+    // ACCUMULATE ENERGY OVER 10 SECONDS, REPORT INSTANTANEOUS V/I/P
     // ====================================================================
     #define SAMPLES_PER_UPDATE 10
 
     static int   sampleCount = 0;
-    static float voltageAccum = 0.0f;
-    static float currentAccum = 0.0f;
-    static float powerAccum = 0.0f;
     static float energyAccum = 0.0f;
-    static float lastFrequency = NAN;
 
-    voltageAccum += voltage;
-    currentAccum += current;
-    powerAccum   += signedPower;
     energyAccum  += energyWh;
-    lastFrequency = frequency;
     sampleCount++;
 
     if (sampleCount < SAMPLES_PER_UPDATE) {
         return;
     }
 
-    float avgVoltage = voltageAccum / sampleCount;
-    float avgCurrent = currentAccum / sampleCount;
-    float avgPower   = powerAccum   / sampleCount;
     float totalEnergyWh = energyAccum;
 
-    BL_ProcessUpdate(avgVoltage, avgCurrent, avgPower, lastFrequency, totalEnergyWh);
+    // Pass instantaneous values for voltage, current, and power instead of averaging
+    BL_ProcessUpdate(voltage, current, signedPower, frequency, totalEnergyWh);
 
-    voltageAccum = 0.0f;
-    currentAccum = 0.0f;
-    powerAccum = 0.0f;
     energyAccum = 0.0f;
     sampleCount = 0;
 }
@@ -305,7 +279,8 @@ static void Init(void) {
 void BL0942_UART_Init(void) {
 	Init();
 
-	bl0942_baudRate = Tokenizer_GetArgIntegerDefault(1, 4800);
+    // Hard set at 4800 for debugging purposes, overriding tokenized arguments
+	bl0942_baudRate = 4800; // Tokenizer_GetArgIntegerDefault(1, 4800);
 
 	UART_InitUART(bl0942_baudRate, 0);
 	UART_InitReceiveRingBuffer(BL0942_UART_RECEIVE_BUFFER_SIZE);
