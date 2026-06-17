@@ -11,7 +11,7 @@
 #include "drv_spi.h"
 #include "drv_uart.h"
 
-static unsigned short bl0942_baudRate = 4800;
+static unsigned short bl0942_baudRate = 19200;
 
 #define BL0942_UART_RECEIVE_BUFFER_SIZE 256
 #define BL0942_UART_ADDR 0 // 0 - 3
@@ -280,7 +280,7 @@ void BL0942_UART_Init(void) {
 	Init();
 
     // Hard set at 4800 for debugging purposes, overriding tokenized arguments
-	bl0942_baudRate = 4800; // Tokenizer_GetArgIntegerDefault(1, 4800);
+	bl0942_baudRate = 19200; // Tokenizer_GetArgIntegerDefault(1, 4800);
 
 	UART_InitUART(bl0942_baudRate, 0);
 	UART_InitReceiveRingBuffer(BL0942_UART_RECEIVE_BUFFER_SIZE);
