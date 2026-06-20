@@ -1,5 +1,7 @@
 #include "dash_frontend.h"
 #include "rtos_pub.h" // Required for rtos_delay_milliseconds
+#include "dash_gz.h"  // pre-gzipped /dash page (g_dashGz / DASH_GZ_LEN)
+#include <string.h>   // strstr
 
 // Serves the dashboard page (HTML/CSS/JS) at /dash.
 // Data is fetched client-side from /api_dash, implemented in
@@ -14,6 +16,20 @@
 // unprefixed flex/box-sizing/vh declarations, which win the cascade)
 // ====================================================================
 int http_fn_custom_dash(http_request_t *request) {
+    // Serve the pre-gzipped dashboard when the client accepts gzip (every
+    // browser, incl. iOS Safari, does). Cached for a day so each browser
+    // fetches it once. Falls through to the uncompressed page if not accepted.
+    if (request->received != NULL && strstr(request->received, "gzip") != NULL) {
+        poststr(request, "HTTP/1.1 200 OK\r\n");
+        poststr(request, "Content-Type: text/html\r\n");
+        poststr(request, "Content-Encoding: gzip\r\n");
+        poststr(request, "Cache-Control: max-age=86400\r\n");
+        poststr(request, "Connection: close\r\n");
+        poststr(request, "\r\n");
+        postany(request, (const char*)g_dashGz, DASH_GZ_LEN);
+        poststr(request, NULL);
+        return 0;
+    }
     http_setup(request, "text/html");
 
     // --- CHUNK 1a: Header & CSS (part 1) ---
